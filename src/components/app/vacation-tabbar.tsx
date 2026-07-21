@@ -1,5 +1,13 @@
 "use client";
 
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+} from "react";
+
 export const vacationTabs = [
   { id: "urlaub", label: "Urlaub", short: "Urlaub" },
   { id: "spots", label: "Spots", short: "Spots" },
@@ -65,6 +73,8 @@ function TabGlyph({ id }: { id: VacationTabId }) {
   }
 }
 
+type SliderBox = { x: number; y: number; w: number; h: number };
+
 export function VacationTabBar({
   active,
   onChange,
@@ -72,25 +82,96 @@ export function VacationTabBar({
   active: VacationTabId;
   onChange: (id: VacationTabId) => void;
 }) {
+  const shellRef = useRef<HTMLDivElement>(null);
+  const btnRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  const [slider, setSlider] = useState<SliderBox | null>(null);
+  const [ready, setReady] = useState(false);
+
+  const measure = useCallback(() => {
+    const shell = shellRef.current;
+    const index = vacationTabs.findIndex((tab) => tab.id === active);
+    const btn = btnRefs.current[index];
+    if (!shell || !btn) return;
+
+    const shellRect = shell.getBoundingClientRect();
+    const btnRect = btn.getBoundingClientRect();
+    // Inset the highlight slightly so it reads as a floating thumb inside glass.
+    const insetX = 4;
+    const insetY = 4;
+    setSlider({
+      x: btnRect.left - shellRect.left + insetX,
+      y: btnRect.top - shellRect.top + insetY,
+      w: Math.max(0, btnRect.width - insetX * 2),
+      h: Math.max(0, btnRect.height - insetY * 2),
+    });
+    setReady(true);
+  }, [active]);
+
+  useLayoutEffect(() => {
+    measure();
+  }, [measure]);
+
+  useEffect(() => {
+    const shell = shellRef.current;
+    if (!shell) return;
+
+    const onResize = () => measure();
+    window.addEventListener("resize", onResize);
+
+    const ro =
+      typeof ResizeObserver !== "undefined"
+        ? new ResizeObserver(onResize)
+        : null;
+    ro?.observe(shell);
+    for (const btn of btnRefs.current) {
+      if (btn) ro?.observe(btn);
+    }
+
+    return () => {
+      window.removeEventListener("resize", onResize);
+      ro?.disconnect();
+    };
+  }, [measure]);
+
   return (
-    <nav className="app-tabbar tabbar" aria-label="Urlaub-Navigation">
-      {vacationTabs.map((item) => {
-        const isActive = active === item.id;
-        return (
-          <button
-            key={item.id}
-            type="button"
-            data-active={isActive}
-            aria-current={isActive ? "page" : undefined}
-            onClick={() => onChange(item.id)}
-          >
-            <span className="tab-glyph">
-              <TabGlyph id={item.id} />
-            </span>
-            {item.short}
-          </button>
-        );
-      })}
+    <nav className="app-tabbar" aria-label="Urlaub-Navigation">
+      <div ref={shellRef} className="liquid-tabbar-shell">
+        <div
+          className="liquid-tabbar-slider"
+          data-ready={ready ? "true" : "false"}
+          aria-hidden
+          style={
+            slider
+              ? {
+                  width: slider.w,
+                  height: slider.h,
+                  transform: `translate3d(${slider.x}px, ${slider.y}px, 0)`,
+                }
+              : undefined
+          }
+        />
+        {vacationTabs.map((item, index) => {
+          const isActive = active === item.id;
+          return (
+            <button
+              key={item.id}
+              type="button"
+              ref={(node) => {
+                btnRefs.current[index] = node;
+              }}
+              className="liquid-tabbar-item"
+              data-active={isActive}
+              aria-current={isActive ? "page" : undefined}
+              onClick={() => onChange(item.id)}
+            >
+              <span className="tab-glyph">
+                <TabGlyph id={item.id} />
+              </span>
+              <span className="liquid-tabbar-label">{item.short}</span>
+            </button>
+          );
+        })}
+      </div>
     </nav>
   );
 }
