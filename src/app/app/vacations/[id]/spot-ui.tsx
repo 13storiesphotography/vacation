@@ -9,6 +9,7 @@ import {
 } from "@/lib/spots";
 import type { Database } from "@/lib/database.types";
 import { createSpot, updateSpot, type SpotActionState } from "./spot-actions";
+import { previewMapsCoords } from "./maps-coords-actions";
 import { upsertSpotRating } from "./rating-actions";
 import {
   emptySummary,
@@ -16,6 +17,7 @@ import {
   type SpotRating,
   type SpotRatingSummary,
 } from "@/lib/ratings";
+import { parseLatLngFromMapsUrl } from "@/lib/geo";
 
 type Spot = Database["public"]["Tables"]["spots"]["Row"];
 
@@ -60,6 +62,65 @@ function Stars({
         );
       })}
     </div>
+  );
+}
+
+function MapsUrlField({ defaultValue = "" }: { defaultValue?: string }) {
+  const [url, setUrl] = useState(defaultValue);
+  const [message, setMessage] = useState<string | null>(null);
+  const [ok, setOk] = useState<boolean | null>(null);
+  const [pending, startTransition] = useTransition();
+
+  useEffect(() => {
+    const trimmed = url.trim();
+    if (!trimmed) {
+      setMessage("Position kommt automatisch aus dem Maps-Link.");
+      setOk(null);
+      return;
+    }
+
+    const local = parseLatLngFromMapsUrl(trimmed);
+    if (local) {
+      setOk(true);
+      setMessage(`Position erkannt: ${local.lat.toFixed(5)}, ${local.lng.toFixed(5)}`);
+      return;
+    }
+
+    const handle = window.setTimeout(() => {
+      startTransition(async () => {
+        const result = await previewMapsCoords(trimmed);
+        setOk(result.ok);
+        setMessage(result.message);
+      });
+    }, 400);
+
+    return () => window.clearTimeout(handle);
+  }, [url]);
+
+  return (
+    <label className="mt-3 block text-[13px] font-semibold text-[var(--ink-soft)]">
+      Google Maps Link
+      <input
+        name="maps_url"
+        type="url"
+        required
+        value={url}
+        onChange={(e) => setUrl(e.target.value)}
+        className="mt-1.5 w-full rounded-[12px] border-0 bg-black/5 px-3 py-3 text-[15px] outline-none ring-[var(--fjord)] focus:ring-2"
+        placeholder="https://maps.app.goo.gl/… oder maps.google.com/…"
+      />
+      <span
+        className={`mt-1 block text-[11px] font-medium ${
+          ok === true
+            ? "text-[var(--pine)]"
+            : ok === false
+              ? "text-[var(--danger)]"
+              : "text-[var(--ink-faint)]"
+        }`}
+      >
+        {pending ? "Position wird gelesen…" : (message ?? "")}
+      </span>
+    </label>
   );
 }
 
@@ -112,19 +173,7 @@ function SpotFormFields({
         />
       </label>
 
-      <label className="mt-3 block text-[13px] font-semibold text-[var(--ink-soft)]">
-        Google Maps Link
-        <input
-          name="maps_url"
-          type="url"
-          defaultValue={spot?.maps_url ?? ""}
-          className="mt-1.5 w-full rounded-[12px] border-0 bg-black/5 px-3 py-3 text-[15px] outline-none ring-[var(--fjord)] focus:ring-2"
-          placeholder="https://maps.google.com/..."
-        />
-        <span className="mt-1 block text-[11px] font-medium text-[var(--ink-faint)]">
-          Enthält der Link Koordinaten, werden Lat/Lng automatisch gesetzt.
-        </span>
-      </label>
+      <MapsUrlField defaultValue={spot?.maps_url ?? ""} />
 
       <label className="mt-3 block text-[13px] font-semibold text-[var(--ink-soft)]">
         Buchung / Info Link
@@ -162,27 +211,6 @@ function SpotFormFields({
           </label>
         </>
       )}
-
-      <div className="mt-3 grid grid-cols-2 gap-3">
-        <label className="block text-[13px] font-semibold text-[var(--ink-soft)]">
-          Lat
-          <input
-            name="lat"
-            inputMode="decimal"
-            defaultValue={spot?.lat ?? ""}
-            className="mt-1.5 w-full rounded-[12px] border-0 bg-black/5 px-3 py-3 text-[15px] outline-none ring-[var(--fjord)] focus:ring-2"
-          />
-        </label>
-        <label className="block text-[13px] font-semibold text-[var(--ink-soft)]">
-          Lng
-          <input
-            name="lng"
-            inputMode="decimal"
-            defaultValue={spot?.lng ?? ""}
-            className="mt-1.5 w-full rounded-[12px] border-0 bg-black/5 px-3 py-3 text-[15px] outline-none ring-[var(--fjord)] focus:ring-2"
-          />
-        </label>
-      </div>
 
       <label className="mt-3 block text-[13px] font-semibold text-[var(--ink-soft)]">
         Tags (kommagetrennt)

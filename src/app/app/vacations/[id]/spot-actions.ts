@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { parseLatLngFromMapsUrl } from "@/lib/geo";
+import { extractCoordsFromMapsUrl } from "@/lib/geo";
 import { parseTags, type OvernightCost, type SpotCategory } from "@/lib/spots";
 
 export type SpotActionState = {
@@ -29,7 +29,7 @@ async function requireMember(vacationId: string) {
   return { supabase, user, error: null };
 }
 
-function readSpotFields(formData: FormData) {
+async function readSpotFields(formData: FormData) {
   const name = String(formData.get("name") ?? "").trim();
   const category = String(formData.get("category") ?? "ort") as SpotCategory;
   const description = String(formData.get("description") ?? "").trim();
@@ -39,30 +39,39 @@ function readSpotFields(formData: FormData) {
   const overnightCost = (overnightRaw || null) as OvernightCost | null;
   const priceHint = String(formData.get("price_hint") ?? "").trim();
   const tags = parseTags(String(formData.get("tags") ?? ""));
-  const latRaw = String(formData.get("lat") ?? "").trim();
-  const lngRaw = String(formData.get("lng") ?? "").trim();
-  let lat = latRaw ? Number(latRaw) : null;
-  let lng = lngRaw ? Number(lngRaw) : null;
-  if ((!Number.isFinite(lat) || !Number.isFinite(lng)) && mapsUrl) {
-    const parsed = parseLatLngFromMapsUrl(mapsUrl);
-    if (parsed) {
-      lat = parsed.lat;
-      lng = parsed.lng;
+
+  let lat: number | null = null;
+  let lng: number | null = null;
+  let storedMapsUrl: string | null = mapsUrl || null;
+
+  if (mapsUrl) {
+    const { coords, resolvedUrl } = await extractCoordsFromMapsUrl(mapsUrl);
+    if (!coords) {
+      return {
+        error:
+          "Im Google-Maps-Link steckt keine Position. Ort in Maps öffnen und „Link teilen“ verwenden.",
+      } as const;
     }
+    lat = coords.lat;
+    lng = coords.lng;
+    // Keep the original share link if it's short; still store coords.
+    storedMapsUrl = mapsUrl || resolvedUrl;
   }
 
   return {
-    name,
-    category,
-    description: description || null,
-    maps_url: mapsUrl || null,
-    info_url: infoUrl || null,
-    overnight_cost: category === "stellplatz" ? overnightCost : null,
-    price_hint: category === "stellplatz" ? priceHint || null : null,
-    tags,
-    lat: Number.isFinite(lat) ? lat : null,
-    lng: Number.isFinite(lng) ? lng : null,
-  };
+    fields: {
+      name,
+      category,
+      description: description || null,
+      maps_url: storedMapsUrl,
+      info_url: infoUrl || null,
+      overnight_cost: category === "stellplatz" ? overnightCost : null,
+      price_hint: category === "stellplatz" ? priceHint || null : null,
+      tags,
+      lat,
+      lng,
+    },
+  } as const;
 }
 
 export async function createSpot(
@@ -73,13 +82,17 @@ export async function createSpot(
   const { supabase, user, error } = await requireMember(vacationId);
   if (error || !user) return { error: error ?? "Nicht angemeldet." };
 
-  const fields = readSpotFields(formData);
-  if (!fields.name) return { error: "Name ist Pflicht." };
+  const parsed = await readSpotFields(formData);
+  if ("error" in parsed) return { error: parsed.error };
+  if (!parsed.fields.name) return { error: "Name ist Pflicht." };
+  if (!parsed.fields.maps_url) {
+    return { error: "Google-Maps-Link ist Pflicht — daraus kommt die Position." };
+  }
 
   const { error: insertError } = await supabase.from("spots").insert({
     vacation_id: vacationId,
     created_by: user.id,
-    ...fields,
+    ...parsed.fields,
   });
 
   if (insertError) return { error: insertError.message };
@@ -97,12 +110,16 @@ export async function updateSpot(
   const { supabase, error } = await requireMember(vacationId);
   if (error) return { error };
 
-  const fields = readSpotFields(formData);
-  if (!fields.name) return { error: "Name ist Pflicht." };
+  const parsed = await readSpotFields(formData);
+  if ("error" in parsed) return { error: parsed.error };
+  if (!parsed.fields.name) return { error: "Name ist Pflicht." };
+  if (!parsed.fields.maps_url) {
+    return { error: "Google-Maps-Link ist Pflicht — daraus kommt die Position." };
+  }
 
   const { error: updateError } = await supabase
     .from("spots")
-    .update(fields)
+    .update(parsed.fields)
     .eq("id", spotId)
     .eq("vacation_id", vacationId);
 

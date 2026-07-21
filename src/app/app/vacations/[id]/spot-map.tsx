@@ -186,7 +186,7 @@ export function SpotMap({
             Ohne Kartenposition
           </p>
           <p className="mt-1 text-[12px] text-[var(--ink-faint)]">
-            Lat/Lng eintragen oder einen Google-Maps-Link mit Koordinaten speichern.
+            Spot bearbeiten und einen Google-Maps-Link („Link teilen“) hinterlegen.
           </p>
           <ul className="ios-group mt-2">
             {withoutCoords.map((spot) => (
