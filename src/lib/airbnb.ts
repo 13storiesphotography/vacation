@@ -176,9 +176,11 @@ export async function fetchAirbnbMetadata(
       redirect: "follow",
       headers: {
         "user-agent":
-          "Mozilla/5.0 (compatible; VacationPlaner/1.0; +https://vacation-bice.vercel.app)",
-        accept: "text/html,application/xhtml+xml",
-        "accept-language": "de-DE,de;q=0.9,en;q=0.8",
+          "Mozilla/5.0 (Macintosh; Intel Mac OS X 14_5) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.5 Safari/605.1.15",
+        accept:
+          "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,*/*;q=0.8",
+        "accept-language": "de-DE,de;q=0.9,en-US;q=0.8,en;q=0.7",
+        "cache-control": "no-cache",
       },
       signal: AbortSignal.timeout(12000),
       cache: "no-store",
