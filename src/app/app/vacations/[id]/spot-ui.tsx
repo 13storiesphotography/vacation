@@ -9,17 +9,14 @@ import {
 import type { Database } from "@/lib/database.types";
 import { createClient } from "@/lib/supabase/client";
 import { createSpot, updateSpot, type SpotActionState } from "./spot-actions";
-import { previewMapsCoords } from "./maps-coords-actions";
-import { previewAirbnbListing } from "./airbnb-actions";
+import { previewSmartLink, type SmartLinkResult } from "./smart-link-actions";
 import {
   emptySummary,
   type RaterOption,
   type SpotRating,
   type SpotRatingSummary,
 } from "@/lib/ratings";
-import { parseLatLngFromMapsUrl } from "@/lib/geo";
 import { isOvernightCategory } from "@/lib/overnight";
-import { isAirbnbUrl } from "@/lib/airbnb";
 import { CategoryIcon } from "@/components/category-icon";
 
 type Spot = Database["public"]["Tables"]["spots"]["Row"];
@@ -68,72 +65,79 @@ function Stars({
   );
 }
 
-function MapsUrlField({
-  defaultValue = "",
-  required = true,
+function SmartLinkField({
+  value,
+  onChange,
+  onResolved,
 }: {
-  defaultValue?: string;
-  required?: boolean;
+  value: string;
+  onChange: (value: string) => void;
+  onResolved: (result: SmartLinkResult) => void;
 }) {
-  const [url, setUrl] = useState(defaultValue);
   const [remote, setRemote] = useState<{
     ok: boolean | null;
     message: string | null;
-  }>({ ok: null, message: null });
+    providerLabel: string | null;
+  }>({ ok: null, message: null, providerLabel: null });
   const [pending, startTransition] = useTransition();
 
-  const trimmed = url.trim();
-  const local = trimmed ? parseLatLngFromMapsUrl(trimmed) : null;
-  const idleMessage = required
-    ? "Position kommt automatisch aus dem Maps-Link."
-    : "Optional — für die Karte empfohlen, bei Airbnb nicht zwingend.";
-  const ok = !trimmed ? null : local ? true : remote.ok;
-  const message = !trimmed
-    ? idleMessage
-    : local
-      ? `Position erkannt: ${local.lat.toFixed(5)}, ${local.lng.toFixed(5)}`
-      : remote.message;
+  const trimmed = value.trim();
+  const idleMessage =
+    "Einfach Link einfügen — Google Maps, Airbnb, Park4Night, Booking, …";
+  const ok = !trimmed ? null : remote.ok;
+  const message = !trimmed ? idleMessage : remote.message;
+  const providerLabel = !trimmed ? null : remote.providerLabel;
 
   useEffect(() => {
-    if (!trimmed || local) {
-      return;
-    }
-
+    if (!trimmed) return;
     const handle = window.setTimeout(() => {
       startTransition(async () => {
-        const result = await previewMapsCoords(trimmed);
-        setRemote({ ok: result.ok, message: result.message });
+        const result = await previewSmartLink(trimmed);
+        setRemote({
+          ok: result.ok,
+          message: result.message,
+          providerLabel: result.providerLabel,
+        });
+        if (result.ok || result.provider !== "unknown") {
+          onResolved(result);
+        }
       });
-    }, 400);
-
+    }, 420);
     return () => window.clearTimeout(handle);
-  }, [trimmed, local]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [trimmed]);
 
   return (
     <label className="form-label mt-3">
-      Google Maps Link{required ? "" : " (optional)"}
+      Link einfügen
       <input
-        name="maps_url"
         type="url"
-        required={required}
-        value={url}
+        value={value}
         onChange={(e) => {
-          setUrl(e.target.value);
-          setRemote({ ok: null, message: null });
+          onChange(e.target.value);
+          setRemote({ ok: null, message: null, providerLabel: null });
         }}
         className="glass-field mt-1.5 px-3 py-3"
-        placeholder="https://maps.app.goo.gl/… oder maps.google.com/…"
+        placeholder="https://maps.app.goo.gl/… · airbnb.de/rooms/… · park4night.com/…"
+        autoComplete="off"
       />
-      <span
-        className={`mt-1 block text-[11px] font-medium ${
-          ok === true
-            ? "text-[var(--pine)]"
-            : ok === false
-              ? "text-[var(--danger)]"
-              : "text-[var(--ink-faint)]"
-        }`}
-      >
-        {pending ? "Position wird gelesen…" : (message ?? "")}
+      <span className="mt-1.5 flex flex-wrap items-center gap-2">
+        {providerLabel ? (
+          <span className="glass-chip !py-1 !text-[11px]" data-active="true">
+            {providerLabel}
+          </span>
+        ) : null}
+        <span
+          className={`text-[11px] font-medium ${
+            ok === true
+              ? "text-[var(--pine)]"
+              : ok === false
+                ? "text-[var(--danger)]"
+                : "text-[var(--ink-faint)]"
+          }`}
+        >
+          {pending ? "Link wird erkannt…" : (message ?? "")}
+        </span>
       </span>
     </label>
   );
@@ -188,88 +192,6 @@ function SpotThumb({
   );
 }
 
-function ListingUrlField({
-  value,
-  onChange,
-  onAirbnbApplied,
-}: {
-  value: string;
-  onChange: (value: string) => void;
-  onAirbnbApplied: (meta: {
-    title?: string | null;
-    description?: string | null;
-    imageUrl?: string | null;
-    locationHint?: string | null;
-    canonicalUrl?: string;
-  }) => void;
-}) {
-  const [message, setMessage] = useState<string | null>(null);
-  const [ok, setOk] = useState<boolean | null>(null);
-  const [pending, startTransition] = useTransition();
-
-  const trimmed = value.trim();
-  const idleMessage =
-    "Airbnb-Link für Unterkunft — oder park4night / Buchungsseite als Info.";
-  const nonAirbnbMessage = "Als Info-/Buchungslink gespeichert.";
-  const displayOk = !trimmed || !isAirbnbUrl(trimmed) ? null : ok;
-  const displayMessage = !trimmed
-    ? idleMessage
-    : !isAirbnbUrl(trimmed)
-      ? nonAirbnbMessage
-      : message;
-
-  useEffect(() => {
-    if (!trimmed || !isAirbnbUrl(trimmed)) {
-      return;
-    }
-
-    const handle = window.setTimeout(() => {
-      startTransition(async () => {
-        const result = await previewAirbnbListing(trimmed);
-        setOk(result.ok);
-        setMessage(result.message);
-        if (result.ok) {
-          onAirbnbApplied({
-            title: result.title,
-            description: result.description,
-            imageUrl: result.imageUrl,
-            locationHint: result.locationHint,
-            canonicalUrl: result.canonicalUrl ?? trimmed,
-          });
-        }
-      });
-    }, 450);
-
-    return () => window.clearTimeout(handle);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [trimmed]);
-
-  return (
-    <label className="form-label mt-3">
-      Airbnb / Buchungslink
-      <input
-        name="info_url"
-        type="url"
-        value={value}
-        onChange={(e) => onChange(e.target.value)}
-        className="glass-field mt-1.5 px-3 py-3"
-        placeholder="https://www.airbnb.de/rooms/… oder park4night.com/…"
-      />
-      <span
-        className={`mt-1 block text-[11px] font-medium ${
-          displayOk === true
-            ? "text-[var(--pine)]"
-            : displayOk === false
-              ? "text-[var(--danger)]"
-              : "text-[var(--ink-faint)]"
-        }`}
-      >
-        {pending ? "Airbnb wird gelesen…" : (displayMessage ?? "")}
-      </span>
-    </label>
-  );
-}
-
 function SpotFormFields({
   spot,
   showOvernight,
@@ -281,9 +203,17 @@ function SpotFormFields({
   onDescriptionChange,
   imageUrl,
   onImageUrlChange,
+  pasteUrl,
+  onPasteUrlChange,
+  mapsUrl,
+  onMapsUrlChange,
   infoUrl,
   onInfoUrlChange,
-  onAirbnbApplied,
+  overnightCost,
+  onOvernightCostChange,
+  onSmartResolved,
+  detailsOpen,
+  onDetailsOpenChange,
 }: {
   spot?: Spot | null;
   showOvernight: boolean;
@@ -295,26 +225,27 @@ function SpotFormFields({
   onDescriptionChange: (value: string) => void;
   imageUrl: string;
   onImageUrlChange: (value: string) => void;
+  pasteUrl: string;
+  onPasteUrlChange: (value: string) => void;
+  mapsUrl: string;
+  onMapsUrlChange: (value: string) => void;
   infoUrl: string;
   onInfoUrlChange: (value: string) => void;
-  onAirbnbApplied: (meta: {
-    title?: string | null;
-    description?: string | null;
-    imageUrl?: string | null;
-    locationHint?: string | null;
-    canonicalUrl?: string;
-  }) => void;
+  overnightCost: string;
+  onOvernightCostChange: (value: string) => void;
+  onSmartResolved: (result: SmartLinkResult) => void;
+  detailsOpen: boolean;
+  onDetailsOpenChange: (value: boolean) => void;
 }) {
-  const airbnbMode = isAirbnbUrl(infoUrl);
-  const mapsRequired = !airbnbMode;
-
   return (
     <>
-      <ListingUrlField
-        value={infoUrl}
-        onChange={onInfoUrlChange}
-        onAirbnbApplied={onAirbnbApplied}
+      <SmartLinkField
+        value={pasteUrl}
+        onChange={onPasteUrlChange}
+        onResolved={onSmartResolved}
       />
+      <input type="hidden" name="maps_url" value={mapsUrl} />
+      <input type="hidden" name="info_url" value={infoUrl} />
 
       <label className="form-label mt-3">
         Name
@@ -324,7 +255,7 @@ function SpotFormFields({
           value={name}
           onChange={(e) => onNameChange(e.target.value)}
           className="glass-field mt-1.5 px-3 py-3"
-          placeholder="z. B. Airbnb am See oder Stellplatz Söderåsen"
+          placeholder="Wird oft aus dem Link erkannt"
         />
       </label>
 
@@ -344,86 +275,171 @@ function SpotFormFields({
         </select>
       </label>
 
-      <label className="form-label mt-3">
-        Beschreibung
-        <textarea
-          name="description"
-          value={description}
-          onChange={(e) => onDescriptionChange(e.target.value)}
-          className="glass-field mt-1.5 min-h-20 px-3 py-3"
-        />
-      </label>
-
-      <MapsUrlField defaultValue={spot?.maps_url ?? ""} required={mapsRequired} />
-
-      <label className="form-label mt-3">
-        Vorschaubild (optional)
-        {spot?.image_url && !spot.image_manual && !imageUrl ? (
-          <input type="hidden" name="previous_image_url" value={spot.image_url} />
-        ) : null}
-        <input
-          name="image_url"
-          type="url"
-          value={imageUrl}
-          onChange={(e) => onImageUrlChange(e.target.value)}
-          className="glass-field mt-1.5 px-3 py-3"
-          placeholder="https://… (leer = automatisch aus Maps/Airbnb)"
-        />
-        <span className="mt-1 block text-[11px] font-medium text-[var(--ink-faint)]">
-          Bei Airbnb oft automatisch. Sonst Kartenausschnitt zur Position.
+      {(imageUrl || (spot?.image_url && !spot.image_manual)) && (
+        <span className="mt-3 block overflow-hidden rounded-[14px]">
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={imageUrl || spot?.image_url || ""}
+            alt=""
+            className="h-36 w-full object-cover"
+            referrerPolicy="no-referrer"
+          />
         </span>
-        {(imageUrl || (spot?.image_url && !spot.image_manual)) && (
-          <span className="mt-2 block overflow-hidden rounded-[12px]">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={imageUrl || spot?.image_url || ""}
-              alt=""
-              className="h-28 w-full object-cover"
-              referrerPolicy="no-referrer"
-            />
-          </span>
-        )}
-      </label>
-
-      {showOvernight && (
-        <>
-          <label className="form-label mt-3">
-            Übernachtung
-            <select
-              name="overnight_cost"
-              defaultValue={
-                spot?.overnight_cost ?? (airbnbMode ? "kostenpflichtig" : "")
-              }
-              className="glass-field mt-1.5 px-3 py-3"
-            >
-              <option value="">Keine Angabe</option>
-              <option value="frei">Frei</option>
-              <option value="kostenpflichtig">Kostenpflichtig</option>
-            </select>
-          </label>
-          <label className="form-label mt-3">
-            Preis-Hinweis
-            <input
-              name="price_hint"
-              defaultValue={spot?.price_hint ?? ""}
-              className="glass-field mt-1.5 px-3 py-3"
-              placeholder="ab 280 SEK / Nacht"
-            />
-          </label>
-        </>
       )}
 
-      <label className="form-label mt-3">
-        Tags (kommagetrennt)
-        <input
-          name="tags"
-          defaultValue={(spot?.tags ?? []).join(", ")}
-          className="glass-field mt-1.5 px-3 py-3"
-          placeholder="Wald, ruhig, Strom"
-        />
-      </label>
+      <button
+        type="button"
+        className="glass-chip mt-3"
+        aria-expanded={detailsOpen}
+        onClick={() => onDetailsOpenChange(!detailsOpen)}
+      >
+        {detailsOpen ? "Weniger Details" : "Mehr Details"}
+      </button>
+
+      {detailsOpen ? (
+        <div className="mt-3">
+          <label className="form-label">
+            Beschreibung
+            <textarea
+              name="description"
+              value={description}
+              onChange={(e) => onDescriptionChange(e.target.value)}
+              className="glass-field mt-1.5 min-h-20 px-3 py-3"
+            />
+          </label>
+
+          <label className="form-label mt-3">
+            Google Maps Link
+            <input
+              type="url"
+              value={mapsUrl}
+              onChange={(e) => onMapsUrlChange(e.target.value)}
+              className="glass-field mt-1.5 px-3 py-3"
+              placeholder="Optional, wenn schon oben erkannt"
+            />
+          </label>
+
+          <label className="form-label mt-3">
+            Buchungs-/Info-Link
+            <input
+              type="url"
+              value={infoUrl}
+              onChange={(e) => onInfoUrlChange(e.target.value)}
+              className="glass-field mt-1.5 px-3 py-3"
+              placeholder="Airbnb, Park4Night, Booking, …"
+            />
+          </label>
+
+          <label className="form-label mt-3">
+            Vorschaubild-URL
+            {spot?.image_url && !spot.image_manual && !imageUrl ? (
+              <input type="hidden" name="previous_image_url" value={spot.image_url} />
+            ) : null}
+            <input
+              name="image_url"
+              type="url"
+              value={imageUrl}
+              onChange={(e) => onImageUrlChange(e.target.value)}
+              className="glass-field mt-1.5 px-3 py-3"
+              placeholder="Leer = automatisch"
+            />
+          </label>
+
+          {showOvernight && (
+            <>
+              <label className="form-label mt-3">
+                Übernachtung
+                <select
+                  name="overnight_cost"
+                  value={overnightCost}
+                  onChange={(e) => onOvernightCostChange(e.target.value)}
+                  className="glass-field mt-1.5 px-3 py-3"
+                >
+                  <option value="">Keine Angabe</option>
+                  <option value="frei">Frei</option>
+                  <option value="kostenpflichtig">Kostenpflichtig</option>
+                </select>
+              </label>
+              <label className="form-label mt-3">
+                Preis-Hinweis
+                <input
+                  name="price_hint"
+                  defaultValue={spot?.price_hint ?? ""}
+                  className="glass-field mt-1.5 px-3 py-3"
+                  placeholder="ab 280 SEK / Nacht"
+                />
+              </label>
+            </>
+          )}
+
+          <label className="form-label mt-3">
+            Tags (kommagetrennt)
+            <input
+              name="tags"
+              defaultValue={(spot?.tags ?? []).join(", ")}
+              className="glass-field mt-1.5 px-3 py-3"
+              placeholder="Wald, ruhig, Strom"
+            />
+          </label>
+        </div>
+      ) : (
+        <>
+          <input type="hidden" name="description" value={description} />
+          <input type="hidden" name="image_url" value={imageUrl} />
+          {spot?.image_url && !spot.image_manual && !imageUrl ? (
+            <input type="hidden" name="previous_image_url" value={spot.image_url} />
+          ) : null}
+          {showOvernight ? (
+            <input type="hidden" name="overnight_cost" value={overnightCost} />
+          ) : null}
+          {showOvernight ? (
+            <input type="hidden" name="price_hint" value={spot?.price_hint ?? ""} />
+          ) : null}
+          <input type="hidden" name="tags" value={(spot?.tags ?? []).join(", ")} />
+        </>
+      )}
     </>
   );
+}
+
+function applySmartLinkResult(
+  result: SmartLinkResult,
+  options: {
+    fillEmptyOnly?: boolean;
+    currentName?: string;
+    currentDescription?: string;
+    setCategory: (value: SpotCategory) => void;
+    setName: (value: string) => void;
+    setDescription: (value: string) => void;
+    setImageUrl: (value: string) => void;
+    setMapsUrl: (value: string) => void;
+    setInfoUrl: (value: string) => void;
+    setOvernightCost: (value: string) => void;
+    setPasteUrl: (value: string) => void;
+  },
+) {
+  const fillEmptyOnly = options.fillEmptyOnly ?? false;
+  options.setCategory(result.suggestedCategory);
+  options.setPasteUrl(result.mapsUrl || result.infoUrl || "");
+
+  if (result.mapsUrl) options.setMapsUrl(result.mapsUrl);
+  if (result.infoUrl) options.setInfoUrl(result.infoUrl);
+
+  if (result.title) {
+    if (!fillEmptyOnly || !options.currentName?.trim()) {
+      options.setName(result.title);
+    }
+  } else if (result.locationHint && (!fillEmptyOnly || !options.currentName?.trim())) {
+    options.setName(`${result.providerLabel} · ${result.locationHint}`);
+  }
+
+  if (result.description) {
+    if (!fillEmptyOnly || !options.currentDescription?.trim()) {
+      options.setDescription(result.description);
+    }
+  }
+  if (result.imageUrl) options.setImageUrl(result.imageUrl);
+  if (result.overnightCost) options.setOvernightCost(result.overnightCost);
 }
 
 export function CreateSpotForm({
@@ -438,31 +454,23 @@ export function CreateSpotForm({
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [imageUrl, setImageUrl] = useState("");
+  const [pasteUrl, setPasteUrl] = useState("");
+  const [mapsUrl, setMapsUrl] = useState("");
   const [infoUrl, setInfoUrl] = useState("");
+  const [overnightCost, setOvernightCost] = useState("");
+  const [detailsOpen, setDetailsOpen] = useState(false);
 
   useEffect(() => {
     if (state.ok) onCreated();
   }, [state.ok, onCreated]);
 
-  function applyAirbnb(meta: {
-    title?: string | null;
-    description?: string | null;
-    imageUrl?: string | null;
-    locationHint?: string | null;
-    canonicalUrl?: string;
-  }) {
-    setCategory("unterkunft");
-    if (meta.canonicalUrl) setInfoUrl(meta.canonicalUrl);
-    if (meta.title) setName(meta.title);
-    else if (meta.locationHint) setName(`Airbnb · ${meta.locationHint}`);
-    if (meta.description) setDescription(meta.description);
-    if (meta.imageUrl) setImageUrl(meta.imageUrl);
-  }
-
   return (
     <form action={action} className="ios-group mt-3 p-4">
       <input type="hidden" name="vacation_id" value={vacationId} />
       <p className="text-[13px] font-semibold text-[var(--ink-soft)]">Neuen Spot hinzufügen</p>
+      <p className="mt-1 text-[12px] text-[var(--ink-faint)]">
+        Link rein — die App erkennt Quelle und füllt aus, was geht.
+      </p>
       <SpotFormFields
         category={category}
         onCategoryChange={setCategory}
@@ -473,9 +481,28 @@ export function CreateSpotForm({
         onDescriptionChange={setDescription}
         imageUrl={imageUrl}
         onImageUrlChange={setImageUrl}
+        pasteUrl={pasteUrl}
+        onPasteUrlChange={setPasteUrl}
+        mapsUrl={mapsUrl}
+        onMapsUrlChange={setMapsUrl}
         infoUrl={infoUrl}
         onInfoUrlChange={setInfoUrl}
-        onAirbnbApplied={applyAirbnb}
+        overnightCost={overnightCost}
+        onOvernightCostChange={setOvernightCost}
+        detailsOpen={detailsOpen}
+        onDetailsOpenChange={setDetailsOpen}
+        onSmartResolved={(result) =>
+          applySmartLinkResult(result, {
+            setCategory,
+            setName,
+            setDescription,
+            setImageUrl,
+            setMapsUrl,
+            setInfoUrl,
+            setOvernightCost,
+            setPasteUrl,
+          })
+        }
       />
       {state.error && <p className="mt-3 text-[13px] text-[var(--danger)]">{state.error}</p>}
       <button type="submit" className="cta mt-4 w-full" disabled={pending}>
@@ -505,25 +532,15 @@ export function EditSpotForm({
   const [imageUrl, setImageUrl] = useState(
     spot.image_manual ? (spot.image_url ?? "") : "",
   );
+  const [mapsUrl, setMapsUrl] = useState(spot.maps_url ?? "");
   const [infoUrl, setInfoUrl] = useState(spot.info_url ?? "");
+  const [pasteUrl, setPasteUrl] = useState(spot.maps_url || spot.info_url || "");
+  const [overnightCost, setOvernightCost] = useState(spot.overnight_cost ?? "");
+  const [detailsOpen, setDetailsOpen] = useState(false);
 
   useEffect(() => {
     if (state.ok) onDone();
   }, [state.ok, onDone]);
-
-  function applyAirbnb(meta: {
-    title?: string | null;
-    description?: string | null;
-    imageUrl?: string | null;
-    locationHint?: string | null;
-    canonicalUrl?: string;
-  }) {
-    setCategory("unterkunft");
-    if (meta.canonicalUrl) setInfoUrl(meta.canonicalUrl);
-    if (meta.title && (!name.trim() || name === spot.name)) setName(meta.title);
-    if (meta.description && !description.trim()) setDescription(meta.description);
-    if (meta.imageUrl) setImageUrl(meta.imageUrl);
-  }
 
   return (
     <div className="glass-subpanel-flush">
@@ -563,9 +580,31 @@ export function EditSpotForm({
           onDescriptionChange={setDescription}
           imageUrl={imageUrl}
           onImageUrlChange={setImageUrl}
+          pasteUrl={pasteUrl}
+          onPasteUrlChange={setPasteUrl}
+          mapsUrl={mapsUrl}
+          onMapsUrlChange={setMapsUrl}
           infoUrl={infoUrl}
           onInfoUrlChange={setInfoUrl}
-          onAirbnbApplied={applyAirbnb}
+          overnightCost={overnightCost}
+          onOvernightCostChange={setOvernightCost}
+          detailsOpen={detailsOpen}
+          onDetailsOpenChange={setDetailsOpen}
+          onSmartResolved={(result) =>
+            applySmartLinkResult(result, {
+              fillEmptyOnly: true,
+              currentName: name,
+              currentDescription: description,
+              setCategory,
+              setName,
+              setDescription,
+              setImageUrl,
+              setMapsUrl,
+              setInfoUrl,
+              setOvernightCost,
+              setPasteUrl,
+            })
+          }
         />
         {state.error && <p className="mt-3 text-[13px] text-[var(--danger)]">{state.error}</p>}
         <div className="mt-4 flex gap-2">

@@ -25,7 +25,7 @@ npm run dev
 4. Auf der App-URL anmelden → MFA einrichten → Urlaub anlegen.
 5. Weitere Personen nur über **Einladen** im Urlaub.
 6. Optional: **Apple Sign-In** aktivieren (siehe unten) — gleiche E-Mail wie bei der Einladung.
-7. Spots: Airbnb-Link unter **Airbnb / Buchungslink** einfügen → Titel/Bild werden erkannt, Kategorie **Unterkunft / Airbnb**. Danach im Plan als Übernachtung wählbar. Maps-Link bleibt optional für die Karte.
+7. Spots: Beliebigen Link unter **Link einfügen** pasten (Google Maps, Airbnb, Park4Night, Booking, …). Die App erkennt die Quelle und füllt Name, Bild, Kategorie und Position soweit möglich. Danach im Plan als Stop oder Übernachtung nutzbar.
 
 Nach dem Deploy ggf. Migration anwenden:
 
