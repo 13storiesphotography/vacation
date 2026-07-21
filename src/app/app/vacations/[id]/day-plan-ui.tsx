@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useMemo, useState, useTransition } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import type { Database } from "@/lib/database.types";
 import { categoryLabels, type SpotCategory } from "@/lib/spots";
 import { formatDayLabel, type DayPlanWithStops } from "@/lib/day-plans";
@@ -28,8 +28,19 @@ export function DayPlanPanel({
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [pending, startTransition] = useTransition();
+  const [pending, setPending] = useState(false);
   const [adding, setAdding] = useState(false);
+  const [titleDraft, setTitleDraft] = useState("");
+  const [notesDraft, setNotesDraft] = useState("");
+
+  const selectedIdRef = useRef<string | null>(null);
+  const reloadSeq = useRef(0);
+  const actionChain = useRef(Promise.resolve());
+  const pendingCount = useRef(0);
+
+  useEffect(() => {
+    selectedIdRef.current = selectedId;
+  }, [selectedId]);
 
   const spotsById = useMemo(() => {
     const map = new Map<string, Spot>();
@@ -43,7 +54,11 @@ export function DayPlanPanel({
   );
 
   async function reload(preferId?: string | null) {
+    const seq = ++reloadSeq.current;
     const result = await ensureVacationDayPlans(vacation.id);
+    // Ignore outdated responses so an older reload can't overwrite a newer one.
+    if (seq !== reloadSeq.current) return;
+
     if (result.error) {
       setError(result.error);
       setLoading(false);
@@ -66,6 +81,16 @@ export function DayPlanPanel({
 
   const selected = days.find((day) => day.id === selectedId) ?? null;
 
+  useEffect(() => {
+    if (!selected) {
+      setTitleDraft("");
+      setNotesDraft("");
+      return;
+    }
+    setTitleDraft(selected.title ?? "");
+    setNotesDraft(selected.notes ?? "");
+  }, [selected?.id, selected?.title, selected?.notes]);
+
   const availableSpots = useMemo(() => {
     if (!selected) return [];
     const used = new Set(selected.stops.map((stop) => stop.spot_id));
@@ -73,17 +98,43 @@ export function DayPlanPanel({
     return spots.filter((spot) => !used.has(spot.id));
   }, [selected, spots]);
 
-  function run(action: () => Promise<{ error?: string; ok?: boolean }>) {
-    startTransition(async () => {
-      setError(null);
-      const result = await action();
-      if (result.error) {
-        setError(result.error);
-        return;
-      }
-      await reload(selectedId);
-      setAdding(false);
-    });
+  function patchSelectedDay(
+    updater: (day: DayPlanWithStops) => DayPlanWithStops,
+  ) {
+    const id = selectedIdRef.current;
+    if (!id) return;
+    setDays((prev) =>
+      prev.map((day) => (day.id === id ? updater(day) : day)),
+    );
+  }
+
+  function run(
+    action: () => Promise<{ error?: string; ok?: boolean }>,
+    optimistic?: () => void,
+  ) {
+    optimistic?.();
+    pendingCount.current += 1;
+    setPending(true);
+    setError(null);
+
+    actionChain.current = actionChain.current
+      .then(async () => {
+        const result = await action();
+        if (result.error) {
+          setError(result.error);
+          await reload(selectedIdRef.current);
+          return;
+        }
+        await reload(selectedIdRef.current);
+        setAdding(false);
+      })
+      .catch((err: unknown) => {
+        setError(err instanceof Error ? err.message : "Unbekannter Fehler");
+      })
+      .finally(() => {
+        pendingCount.current = Math.max(0, pendingCount.current - 1);
+        if (pendingCount.current === 0) setPending(false);
+      });
   }
 
   if (loading) {
@@ -147,14 +198,15 @@ export function DayPlanPanel({
             <label className="block text-[12px] font-semibold uppercase tracking-wide text-[var(--fjord)]">
               Titel
               <input
-                key={`${selected.id}-title`}
-                defaultValue={selected.title ?? ""}
+                value={titleDraft}
                 disabled={pending}
                 className="mt-1.5 w-full rounded-[12px] border-0 bg-black/5 px-3 py-2.5 text-[15px] font-semibold normal-case tracking-normal text-[var(--ink)] outline-none ring-[var(--fjord)] focus:ring-2"
                 placeholder={`Tag ${days.findIndex((d) => d.id === selected.id) + 1}`}
-                onBlur={(event) => {
-                  const value = event.target.value;
+                onChange={(event) => setTitleDraft(event.target.value)}
+                onBlur={() => {
+                  const value = titleDraft;
                   if ((selected.title ?? "") === value) return;
+                  patchSelectedDay((day) => ({ ...day, title: value.trim() || null }));
                   run(() =>
                     updateDayPlanMeta(vacation.id, selected.id, { title: value }),
                   );
@@ -164,14 +216,18 @@ export function DayPlanPanel({
             <label className="mt-3 block text-[12px] font-semibold uppercase tracking-wide text-[var(--fjord)]">
               Notizen
               <textarea
-                key={`${selected.id}-notes`}
-                defaultValue={selected.notes ?? ""}
+                value={notesDraft}
                 disabled={pending}
                 className="mt-1.5 min-h-20 w-full rounded-[12px] border-0 bg-black/5 px-3 py-2.5 text-[14px] font-normal normal-case tracking-normal text-[var(--ink)] outline-none ring-[var(--fjord)] focus:ring-2"
                 placeholder="Etappe, Fähre, Einkauf…"
-                onBlur={(event) => {
-                  const value = event.target.value;
+                onChange={(event) => setNotesDraft(event.target.value)}
+                onBlur={() => {
+                  const value = notesDraft;
                   if ((selected.notes ?? "") === value) return;
+                  patchSelectedDay((day) => ({
+                    ...day,
+                    notes: value.trim() || null,
+                  }));
                   run(() =>
                     updateDayPlanMeta(vacation.id, selected.id, { notes: value }),
                   );
@@ -186,12 +242,15 @@ export function DayPlanPanel({
                 Übernachtung
               </p>
               <select
-                key={`${selected.id}-overnight`}
                 className="mt-2 w-full rounded-[12px] border-0 bg-black/5 px-3 py-2.5 text-[14px] outline-none ring-[var(--fjord)] focus:ring-2"
                 disabled={pending}
                 value={selected.overnight_spot_id ?? ""}
                 onChange={(event) => {
                   const value = event.target.value || null;
+                  patchSelectedDay((day) => ({
+                    ...day,
+                    overnight_spot_id: value,
+                  }));
                   run(() => setDayOvernight(vacation.id, selected.id, value));
                 }}
               >
@@ -240,7 +299,24 @@ export function DayPlanPanel({
                       className="flex w-full items-center gap-2 border-b border-[var(--separator)] px-3 py-2.5 text-left last:border-0"
                       disabled={pending}
                       onClick={() =>
-                        run(() => addSpotToDay(vacation.id, selected.id, spot.id))
+                        run(
+                          () => addSpotToDay(vacation.id, selected.id, spot.id),
+                          () => {
+                            patchSelectedDay((day) => ({
+                              ...day,
+                              stops: [
+                                ...day.stops,
+                                {
+                                  id: `local-${spot.id}`,
+                                  day_plan_id: day.id,
+                                  spot_id: spot.id,
+                                  position: day.stops.length,
+                                },
+                              ],
+                            }));
+                            setAdding(false);
+                          },
+                        )
                       }
                     >
                       <CategoryIcon category={spot.category as SpotCategory} size={14} />
@@ -288,8 +364,26 @@ export function DayPlanPanel({
                           disabled={pending || index === 0}
                           aria-label="Nach oben"
                           onClick={() =>
-                            run(() =>
-                              moveSpotOnDay(vacation.id, selected.id, spot.id, "up"),
+                            run(
+                              () =>
+                                moveSpotOnDay(
+                                  vacation.id,
+                                  selected.id,
+                                  spot.id,
+                                  "up",
+                                ),
+                              () => {
+                                patchSelectedDay((day) => {
+                                  const stops = [...day.stops];
+                                  const i = stops.findIndex(
+                                    (entry) => entry.spot_id === spot.id,
+                                  );
+                                  if (i <= 0) return day;
+                                  const copy = [...stops];
+                                  [copy[i - 1], copy[i]] = [copy[i], copy[i - 1]];
+                                  return { ...day, stops: copy };
+                                });
+                              },
                             )
                           }
                         >
@@ -301,8 +395,26 @@ export function DayPlanPanel({
                           disabled={pending || index === selected.stops.length - 1}
                           aria-label="Nach unten"
                           onClick={() =>
-                            run(() =>
-                              moveSpotOnDay(vacation.id, selected.id, spot.id, "down"),
+                            run(
+                              () =>
+                                moveSpotOnDay(
+                                  vacation.id,
+                                  selected.id,
+                                  spot.id,
+                                  "down",
+                                ),
+                              () => {
+                                patchSelectedDay((day) => {
+                                  const stops = [...day.stops];
+                                  const i = stops.findIndex(
+                                    (entry) => entry.spot_id === spot.id,
+                                  );
+                                  if (i < 0 || i >= stops.length - 1) return day;
+                                  const copy = [...stops];
+                                  [copy[i], copy[i + 1]] = [copy[i + 1], copy[i]];
+                                  return { ...day, stops: copy };
+                                });
+                              },
                             )
                           }
                         >
@@ -313,8 +425,21 @@ export function DayPlanPanel({
                           className="h-7 px-1.5 text-[12px] font-semibold text-[var(--danger)]"
                           disabled={pending}
                           onClick={() =>
-                            run(() =>
-                              removeSpotFromDay(vacation.id, selected.id, spot.id),
+                            run(
+                              () =>
+                                removeSpotFromDay(
+                                  vacation.id,
+                                  selected.id,
+                                  spot.id,
+                                ),
+                              () => {
+                                patchSelectedDay((day) => ({
+                                  ...day,
+                                  stops: day.stops.filter(
+                                    (entry) => entry.spot_id !== spot.id,
+                                  ),
+                                }));
+                              },
                             )
                           }
                         >
