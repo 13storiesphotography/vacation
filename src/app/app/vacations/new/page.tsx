@@ -20,7 +20,7 @@ export default function NewVacationPage() {
           Titel
           <input
             name="title"
-            className="mt-1.5 w-full rounded-[12px] border-0 bg-black/5 px-3 py-3 text-[15px] outline-none ring-[var(--fjord)] focus:ring-2"
+            className="glass-field mt-1.5 px-3 py-3"
             required
             defaultValue="Schweden Van Trip"
           />
@@ -29,7 +29,7 @@ export default function NewVacationPage() {
           Art
           <select
             name="type"
-            className="mt-1.5 w-full rounded-[12px] border-0 bg-black/5 px-3 py-3 text-[15px] outline-none ring-[var(--fjord)] focus:ring-2"
+            className="glass-field mt-1.5 px-3 py-3"
             defaultValue="van"
           >
             <option value="van">Wohnmobil / Van</option>
@@ -42,7 +42,7 @@ export default function NewVacationPage() {
           Region
           <input
             name="region"
-            className="mt-1.5 w-full rounded-[12px] border-0 bg-black/5 px-3 py-3 text-[15px] outline-none ring-[var(--fjord)] focus:ring-2"
+            className="glass-field mt-1.5 px-3 py-3"
             defaultValue="Schweden · Süd nach Nord"
           />
         </label>
@@ -51,7 +51,7 @@ export default function NewVacationPage() {
             Start
             <input
               name="start_date"
-              className="mt-1.5 w-full rounded-[12px] border-0 bg-black/5 px-3 py-3 text-[15px] outline-none ring-[var(--fjord)] focus:ring-2"
+              className="glass-field mt-1.5 px-3 py-3"
               type="date"
               required
               defaultValue="2026-07-10"
@@ -61,7 +61,7 @@ export default function NewVacationPage() {
             Ende
             <input
               name="end_date"
-              className="mt-1.5 w-full rounded-[12px] border-0 bg-black/5 px-3 py-3 text-[15px] outline-none ring-[var(--fjord)] focus:ring-2"
+              className="glass-field mt-1.5 px-3 py-3"
               type="date"
               required
               defaultValue="2026-07-24"
@@ -72,7 +72,7 @@ export default function NewVacationPage() {
           Beschreibung
           <textarea
             name="description"
-            className="mt-1.5 min-h-24 w-full rounded-[12px] border-0 bg-black/5 px-3 py-3 text-[15px] outline-none ring-[var(--fjord)] focus:ring-2"
+            className="glass-field mt-1.5 min-h-24 px-3 py-3"
             defaultValue="Zwei Wochen mit dem Van von Skåne bis zur Höga Kusten."
           />
         </label>

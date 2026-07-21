@@ -46,7 +46,7 @@ function LoginForm() {
       <label className="mt-6 block text-[13px] font-semibold text-[var(--ink-soft)]">
         E-Mail
         <input
-          className="mt-1.5 w-full rounded-[12px] border-0 bg-black/5 px-3 py-3 text-[15px] outline-none ring-[var(--fjord)] focus:ring-2"
+          className="glass-field mt-1.5 px-3 py-3"
           type="email"
           autoComplete="email"
           required
@@ -57,7 +57,7 @@ function LoginForm() {
       <label className="mt-4 block text-[13px] font-semibold text-[var(--ink-soft)]">
         Passwort
         <input
-          className="mt-1.5 w-full rounded-[12px] border-0 bg-black/5 px-3 py-3 text-[15px] outline-none ring-[var(--fjord)] focus:ring-2"
+          className="glass-field mt-1.5 px-3 py-3"
           type="password"
           autoComplete="current-password"
           required

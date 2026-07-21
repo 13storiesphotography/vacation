@@ -37,7 +37,7 @@ export default async function AppHomePage() {
       </header>
 
       {showMfaGrace && (
-        <div className="mt-5 rounded-[16px] bg-[var(--fjord-soft)] px-4 py-3 text-[14px] text-[var(--fjord)]">
+        <div className="glass-callout mt-5 px-4 py-3 text-[14px]">
           <p className="font-semibold">MFA noch offen</p>
           <p className="mt-1 text-[13px] leading-relaxed">
             Du hast {MFA_ENROLL_GRACE_DAYS} Tage nach Account-Erstellung Zeit

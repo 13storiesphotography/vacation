@@ -32,7 +32,7 @@ export function EditVacationForm({
           name="title"
           required
           defaultValue={vacation.title}
-          className="mt-1.5 w-full rounded-[12px] border-0 bg-black/5 px-3 py-3 text-[15px] outline-none ring-[var(--fjord)] focus:ring-2"
+          className="glass-field mt-1.5 px-3 py-3"
         />
       </label>
 
@@ -41,7 +41,7 @@ export function EditVacationForm({
         <select
           name="type"
           defaultValue={vacation.type}
-          className="mt-1.5 w-full rounded-[12px] border-0 bg-black/5 px-3 py-3 text-[15px] outline-none ring-[var(--fjord)] focus:ring-2"
+          className="glass-field mt-1.5 px-3 py-3"
         >
           <option value="van">Wohnmobil / Van</option>
           <option value="camping">Camping</option>
@@ -55,7 +55,7 @@ export function EditVacationForm({
         <input
           name="region"
           defaultValue={vacation.region ?? ""}
-          className="mt-1.5 w-full rounded-[12px] border-0 bg-black/5 px-3 py-3 text-[15px] outline-none ring-[var(--fjord)] focus:ring-2"
+          className="glass-field mt-1.5 px-3 py-3"
         />
       </label>
 
@@ -67,7 +67,7 @@ export function EditVacationForm({
             type="date"
             required
             defaultValue={vacation.start_date}
-            className="mt-1.5 w-full rounded-[12px] border-0 bg-black/5 px-3 py-3 text-[15px] outline-none ring-[var(--fjord)] focus:ring-2"
+            className="glass-field mt-1.5 px-3 py-3"
           />
         </label>
         <label className="block text-[13px] font-semibold text-[var(--ink-soft)]">
@@ -77,7 +77,7 @@ export function EditVacationForm({
             type="date"
             required
             defaultValue={vacation.end_date}
-            className="mt-1.5 w-full rounded-[12px] border-0 bg-black/5 px-3 py-3 text-[15px] outline-none ring-[var(--fjord)] focus:ring-2"
+            className="glass-field mt-1.5 px-3 py-3"
           />
         </label>
       </div>
@@ -87,7 +87,7 @@ export function EditVacationForm({
         <textarea
           name="description"
           defaultValue={vacation.description ?? ""}
-          className="mt-1.5 min-h-24 w-full rounded-[12px] border-0 bg-black/5 px-3 py-3 text-[15px] outline-none ring-[var(--fjord)] focus:ring-2"
+          className="glass-field mt-1.5 min-h-24 px-3 py-3"
         />
       </label>
 

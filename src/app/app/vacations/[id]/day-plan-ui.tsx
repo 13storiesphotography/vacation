@@ -423,7 +423,7 @@ export function DayPlanPanel({
                   value={query}
                   onChange={(event) => setQuery(event.target.value)}
                   placeholder="Suchen oder tippen…"
-                  className="mb-2 w-full rounded-[12px] border-0 bg-white/80 px-3 py-2.5 text-[14px] outline-none ring-1 ring-black/5"
+                  className="glass-field mb-2 px-3 py-2.5 text-[14px]"
                 />
                 {pickerSpots.length === 0 ? (
                   <p className="px-2 py-3 text-[13px] text-[var(--ink-soft)]">
@@ -641,7 +641,7 @@ export function DayPlanPanel({
                 Übernachtung
               </p>
               <select
-                className="mt-2 w-full rounded-[12px] border-0 bg-black/5 px-3 py-2.5 text-[14px] outline-none ring-[var(--fjord)] focus:ring-2"
+                className="glass-field mt-2 px-3 py-2.5 text-[14px]"
                 disabled={pending}
                 value={selected.overnight_spot_id ?? ""}
                 onChange={(event) => {

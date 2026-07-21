@@ -14,11 +14,7 @@ export default function GlobalError({
         <p className="mt-2 text-[14px] text-[var(--ink-soft)]">
           {error.message || "Ein Serverfehler ist aufgetreten. Bitte erneut versuchen."}
         </p>
-        <button
-          type="button"
-          onClick={reset}
-          className="mt-6 inline-flex rounded-[12px] bg-[var(--ink)] px-5 py-2.5 text-[14px] font-semibold text-white"
-        >
+        <button type="button" onClick={reset} className="cta mt-6">
           Neu laden
         </button>
       </div>

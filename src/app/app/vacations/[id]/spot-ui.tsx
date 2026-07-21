@@ -106,7 +106,7 @@ function MapsUrlField({ defaultValue = "" }: { defaultValue?: string }) {
         required
         value={url}
         onChange={(e) => setUrl(e.target.value)}
-        className="mt-1.5 w-full rounded-[12px] border-0 bg-black/5 px-3 py-3 text-[15px] outline-none ring-[var(--fjord)] focus:ring-2"
+        className="glass-field mt-1.5 px-3 py-3"
         placeholder="https://maps.app.goo.gl/… oder maps.google.com/…"
       />
       <span
@@ -192,7 +192,7 @@ function SpotFormFields({
           name="name"
           required
           defaultValue={spot?.name ?? ""}
-          className="mt-1.5 w-full rounded-[12px] border-0 bg-black/5 px-3 py-3 text-[15px] outline-none ring-[var(--fjord)] focus:ring-2"
+          className="glass-field mt-1.5 px-3 py-3"
           placeholder="z. B. Stellplatz Söderåsen"
         />
       </label>
@@ -203,7 +203,7 @@ function SpotFormFields({
           name="category"
           value={category}
           onChange={(e) => onCategoryChange(e.target.value as SpotCategory)}
-          className="mt-1.5 w-full rounded-[12px] border-0 bg-black/5 px-3 py-3 text-[15px] outline-none ring-[var(--fjord)] focus:ring-2"
+          className="glass-field mt-1.5 px-3 py-3"
         >
           {categoryOptions.map((option) => (
             <option key={option} value={option}>
@@ -218,7 +218,7 @@ function SpotFormFields({
         <textarea
           name="description"
           defaultValue={spot?.description ?? ""}
-          className="mt-1.5 min-h-20 w-full rounded-[12px] border-0 bg-black/5 px-3 py-3 text-[15px] outline-none ring-[var(--fjord)] focus:ring-2"
+          className="glass-field mt-1.5 min-h-20 px-3 py-3"
         />
       </label>
 
@@ -233,7 +233,7 @@ function SpotFormFields({
           name="image_url"
           type="url"
           defaultValue={spot?.image_manual ? (spot.image_url ?? "") : ""}
-          className="mt-1.5 w-full rounded-[12px] border-0 bg-black/5 px-3 py-3 text-[15px] outline-none ring-[var(--fjord)] focus:ring-2"
+          className="glass-field mt-1.5 px-3 py-3"
           placeholder="https://… (leer = automatisch aus Maps)"
         />
         <span className="mt-1 block text-[11px] font-medium text-[var(--ink-faint)]">
@@ -261,7 +261,7 @@ function SpotFormFields({
           name="info_url"
           type="url"
           defaultValue={spot?.info_url ?? ""}
-          className="mt-1.5 w-full rounded-[12px] border-0 bg-black/5 px-3 py-3 text-[15px] outline-none ring-[var(--fjord)] focus:ring-2"
+          className="glass-field mt-1.5 px-3 py-3"
           placeholder="https://park4night.com/..."
         />
       </label>
@@ -273,7 +273,7 @@ function SpotFormFields({
             <select
               name="overnight_cost"
               defaultValue={spot?.overnight_cost ?? ""}
-              className="mt-1.5 w-full rounded-[12px] border-0 bg-black/5 px-3 py-3 text-[15px] outline-none ring-[var(--fjord)] focus:ring-2"
+              className="glass-field mt-1.5 px-3 py-3"
             >
               <option value="">Keine Angabe</option>
               <option value="frei">Frei</option>
@@ -285,7 +285,7 @@ function SpotFormFields({
             <input
               name="price_hint"
               defaultValue={spot?.price_hint ?? ""}
-              className="mt-1.5 w-full rounded-[12px] border-0 bg-black/5 px-3 py-3 text-[15px] outline-none ring-[var(--fjord)] focus:ring-2"
+              className="glass-field mt-1.5 px-3 py-3"
               placeholder="ab 280 SEK"
             />
           </label>
@@ -297,7 +297,7 @@ function SpotFormFields({
         <input
           name="tags"
           defaultValue={(spot?.tags ?? []).join(", ")}
-          className="mt-1.5 w-full rounded-[12px] border-0 bg-black/5 px-3 py-3 text-[15px] outline-none ring-[var(--fjord)] focus:ring-2"
+          className="glass-field mt-1.5 px-3 py-3"
           placeholder="Wald, ruhig, Strom"
         />
       </label>
@@ -524,9 +524,8 @@ export function SpotList({
         <button
           type="button"
           onClick={() => setFilter("alle")}
-          className={`rounded-full px-3 py-1.5 text-[12px] font-semibold ${
-            filter === "alle" ? "bg-[var(--fjord)] text-white" : "bg-black/5 text-[var(--ink-soft)]"
-          }`}
+          className="glass-chip"
+          data-active={filter === "alle"}
         >
           Alle
         </button>
@@ -535,11 +534,8 @@ export function SpotList({
             key={option}
             type="button"
             onClick={() => setFilter(option)}
-            className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[12px] font-semibold ${
-              filter === option
-                ? "bg-[var(--fjord)] text-white"
-                : "bg-black/5 text-[var(--ink-soft)]"
-            }`}
+            className="glass-chip"
+            data-active={filter === option}
           >
             <CategoryIcon
               category={option}
@@ -553,7 +549,7 @@ export function SpotList({
           value={sortMode}
           onChange={(e) => setSortMode(e.target.value as SortMode)}
           aria-label="Sortierung"
-          className="rounded-full border-0 bg-black/5 px-3 py-1.5 text-[12px] font-semibold text-[var(--ink-soft)] outline-none"
+          className="glass-field max-w-[10rem] px-3 py-1.5 text-[12px] font-semibold"
         >
           <option value="newest">Neueste</option>
           <option value="favorites">Favoriten</option>

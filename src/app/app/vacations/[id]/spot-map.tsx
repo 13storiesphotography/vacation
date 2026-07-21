@@ -69,9 +69,8 @@ export function SpotMap({
         <button
           type="button"
           onClick={() => setFilter("alle")}
-          className={`rounded-full px-3 py-1.5 text-[12px] font-semibold ${
-            filter === "alle" ? "bg-[var(--fjord)] text-white" : "bg-black/5 text-[var(--ink-soft)]"
-          }`}
+          className="glass-chip"
+          data-active={filter === "alle"}
         >
           Alle
         </button>
@@ -80,11 +79,8 @@ export function SpotMap({
             key={option}
             type="button"
             onClick={() => setFilter(option)}
-            className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[12px] font-semibold ${
-              filter === option
-                ? "bg-[var(--fjord)] text-white"
-                : "bg-black/5 text-[var(--ink-soft)]"
-            }`}
+            className="glass-chip"
+            data-active={filter === option}
           >
             <CategoryIcon
               category={option}
@@ -102,7 +98,7 @@ export function SpotMap({
           <select
             value={focus}
             onChange={(e) => setFocus(e.target.value as FocusMode)}
-            className="mt-1 w-full rounded-[12px] border-0 bg-black/5 px-3 py-2.5 text-[14px] outline-none"
+            className="glass-field mt-1 px-3 py-2.5 text-[14px]"
           >
             <option value="all">Alle Spots mit Koordinaten</option>
             <option value="favorites">Nur meine Favoriten</option>
@@ -114,7 +110,7 @@ export function SpotMap({
           <select
             value={minAvg}
             onChange={(e) => setMinAvg(Number(e.target.value))}
-            className="mt-1 w-full rounded-[12px] border-0 bg-black/5 px-3 py-2.5 text-[14px] outline-none"
+            className="glass-field mt-1 px-3 py-2.5 text-[14px]"
           >
             <option value={0}>Keine Mindestnote</option>
             <option value={3}>ab 3★</option>
@@ -134,7 +130,7 @@ export function SpotMap({
           : " · OpenStreetMap (Google-Key fehlt)"}
       </p>
 
-      <div className="h-[min(68vh,640px)] overflow-hidden rounded-[18px] border border-[var(--separator)] shadow-[0_8px_28px_rgba(31,53,64,0.08)]">
+      <div className="h-[min(68vh,640px)] overflow-hidden rounded-[22px] border border-white/55 shadow-[var(--shadow-soft)] backdrop-blur-sm">
         <SpotMapCanvas
           spots={visible}
           summaries={summaries}

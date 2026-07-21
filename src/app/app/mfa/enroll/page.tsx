@@ -98,7 +98,7 @@ export default function EnrollMfaPage() {
           Authenticator). Danach bist du mit Passwort + Code geschützt.
         </p>
         {canSkip && (
-          <p className="mt-3 rounded-[12px] bg-[var(--fjord-soft)] px-3 py-2 text-[13px] text-[var(--fjord)]">
+          <p className="glass-callout mt-3 px-3 py-2 text-[13px]">
             Du hast {MFA_ENROLL_GRACE_DAYS} Tage Zeit nach der Einladung
             {graceLabel ? ` (${graceLabel})` : ""}. Später einrichten geht — danach wird MFA
             Pflicht.
@@ -122,7 +122,7 @@ export default function EnrollMfaPage() {
         <label className="mt-6 block text-[13px] font-semibold text-[var(--ink-soft)]">
           6-stelliger Code
           <input
-            className="mt-1.5 w-full rounded-[12px] border-0 bg-black/5 px-3 py-3 text-center text-[20px] tracking-[0.3em] outline-none ring-[var(--fjord)] focus:ring-2"
+            className="glass-field mt-1.5 px-3 py-3 text-center text-[20px] tracking-[0.3em]"
             inputMode="numeric"
             pattern="[0-9]*"
             maxLength={6}
