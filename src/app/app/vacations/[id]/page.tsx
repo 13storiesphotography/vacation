@@ -54,6 +54,7 @@ export default function VacationDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [inviting, setInviting] = useState(false);
+  const [memberBusyId, setMemberBusyId] = useState<string | null>(null);
   const [showSpotForm, setShowSpotForm] = useState(false);
   const [spotFormKey, setSpotFormKey] = useState(0);
   const [editingVacation, setEditingVacation] = useState(false);
@@ -273,6 +274,63 @@ export default function VacationDetailPage() {
     await load();
   }
 
+  async function onResendInvite(member: Member) {
+    setError(null);
+    setMessage(null);
+    setMemberBusyId(member.id);
+    const response = await fetch("/api/members", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        vacationId,
+        memberId: member.id,
+        action: "resend",
+      }),
+    });
+    const payload = (await response.json()) as { error?: string; note?: string };
+    setMemberBusyId(null);
+    if (!response.ok) {
+      setError(payload.error ?? "Erneutes Senden fehlgeschlagen");
+      return;
+    }
+    setMessage(payload.note ?? "Einladung erneut gesendet.");
+  }
+
+  async function onRemoveMember(member: Member) {
+    const isInvite = member.status === "invited";
+    const confirmed = window.confirm(
+      isInvite
+        ? `Einladung an ${member.email} zurückziehen?`
+        : `${member.email} aus dem Team entfernen?`,
+    );
+    if (!confirmed) return;
+
+    setError(null);
+    setMessage(null);
+    setMemberBusyId(member.id);
+    const response = await fetch("/api/members", {
+      method: "DELETE",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ vacationId, memberId: member.id }),
+    });
+    const payload = (await response.json()) as { error?: string; note?: string };
+    setMemberBusyId(null);
+    if (!response.ok) {
+      setError(payload.error ?? "Entfernen fehlgeschlagen");
+      return;
+    }
+    setMessage(payload.note ?? (isInvite ? "Einladung zurückgezogen." : "Mitglied entfernt."));
+    await load();
+  }
+
+  function memberRoleLabel(role: Member["role"]) {
+    return role === "admin" ? "Admin" : "Mitglied";
+  }
+
+  function memberStatusLabel(status: Member["status"]) {
+    return status === "invited" ? "Eingeladen" : "Aktiv";
+  }
+
   if (loading) {
     return (
       <main className="shell mx-auto max-w-6xl px-5 py-10 text-[var(--ink-soft)] md:px-8">
@@ -446,17 +504,59 @@ export default function VacationDetailPage() {
           </p>
 
           <div className="ios-group mt-4">
-            {members.map((member) => (
-              <div key={member.id} className="ios-row !items-start">
-                <div>
-                  <p className="text-[15px] font-semibold">{member.email}</p>
-                  <p className="text-[12px] font-semibold uppercase tracking-wide text-[var(--ink-faint)]">
-                    {member.role} · {member.status}
-                  </p>
+            {members.map((member) => {
+              const isSelf = Boolean(
+                currentUserId && member.user_id && member.user_id === currentUserId,
+              );
+              const busy = memberBusyId === member.id;
+              const canManage = canEditVacation && !isSelf;
+
+              return (
+                <div key={member.id} className="ios-row !items-start">
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-[15px] font-semibold">{member.email}</p>
+                    <p className="text-[12px] font-semibold uppercase tracking-wide text-[var(--ink-faint)]">
+                      {memberRoleLabel(member.role)} · {memberStatusLabel(member.status)}
+                      {isSelf ? " · Du" : ""}
+                    </p>
+                    {canManage && (
+                      <div className="mt-2 flex flex-wrap gap-2">
+                        {member.status === "invited" && (
+                          <button
+                            type="button"
+                            className="glass-chip"
+                            disabled={busy}
+                            onClick={() => void onResendInvite(member)}
+                          >
+                            {busy ? "…" : "Erneut senden"}
+                          </button>
+                        )}
+                        <button
+                          type="button"
+                          className="glass-chip glass-chip-danger"
+                          disabled={busy}
+                          onClick={() => void onRemoveMember(member)}
+                        >
+                          {busy
+                            ? "…"
+                            : member.status === "invited"
+                              ? "Zurückziehen"
+                              : "Entfernen"}
+                        </button>
+                      </div>
+                    )}
+                  </div>
                 </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
+
+          {(message || error) && tab === "team" && !showInvite && (
+            <div className="mt-3">
+              {message && <p className="text-[13px] text-[var(--pine)]">{message}</p>}
+              {error && <p className="text-[13px] text-[var(--danger)]">{error}</p>}
+            </div>
+          )}
 
           {canEditVacation && (
             <div className="mt-4">
