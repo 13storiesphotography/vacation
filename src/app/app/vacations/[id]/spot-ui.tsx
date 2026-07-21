@@ -599,49 +599,48 @@ export function SpotList({
                 <div className="ios-row !items-start">
                   <SpotThumb spot={spot} size={76} />
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-start justify-between gap-2">
-                      <div className="min-w-0 flex-1">
-                        {spot.maps_url ? (
+                    {spot.maps_url ? (
+                      <a
+                        href={spot.maps_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="block text-[15px] font-semibold leading-snug text-[var(--fjord)] hover:underline"
+                      >
+                        {spot.name}
+                      </a>
+                    ) : (
+                      <p className="text-[15px] font-semibold leading-snug">{spot.name}</p>
+                    )}
+                    <p className="mt-0.5 text-[12px] text-[var(--ink-soft)]">
+                      {categoryLabels[spot.category]}
+                      {spot.overnight_cost ? ` · ${spot.overnight_cost}` : ""}
+                      {spot.price_hint ? ` · ${spot.price_hint}` : ""}
+                      {summary.average != null && (
+                        <>
+                          {" · "}
+                          <span className="tabular-nums text-[var(--ink-faint)]">
+                            Ø {formatAvg(summary.average)}
+                            {summary.count > 1 ? ` · ${summary.count}` : ""}
+                          </span>
+                        </>
+                      )}
+                      {spot.info_url && (
+                        <>
+                          {" · "}
                           <a
-                            href={spot.maps_url}
+                            href={spot.info_url}
                             target="_blank"
                             rel="noreferrer"
-                            className="text-[15px] font-semibold text-[var(--fjord)] hover:underline"
+                            className="font-semibold text-[var(--fjord)]"
                           >
-                            {spot.name}
+                            Info
                           </a>
-                        ) : (
-                          <p className="text-[15px] font-semibold">{spot.name}</p>
-                        )}
-                        <p className="mt-0.5 text-[12px] text-[var(--ink-soft)]">
-                          {categoryLabels[spot.category]}
-                          {spot.overnight_cost ? ` · ${spot.overnight_cost}` : ""}
-                          {spot.price_hint ? ` · ${spot.price_hint}` : ""}
-                          {summary.average != null && (
-                            <>
-                              {" · "}
-                              <span className="tabular-nums text-[var(--ink-faint)]">
-                                Ø {formatAvg(summary.average)}
-                                {summary.count > 1 ? ` · ${summary.count}` : ""}
-                              </span>
-                            </>
-                          )}
-                          {spot.info_url && (
-                            <>
-                              {" · "}
-                              <a
-                                href={spot.info_url}
-                                target="_blank"
-                                rel="noreferrer"
-                                className="font-semibold text-[var(--fjord)]"
-                              >
-                                Info
-                              </a>
-                            </>
-                          )}
-                        </p>
-                      </div>
-                      <div className="mt-0.5 flex shrink-0 items-center gap-0.5">
+                        </>
+                      )}
+                    </p>
+
+                    <div className="mt-1.5 flex items-center justify-between gap-2">
+                      <div className="flex min-w-0 items-center gap-0.5">
                         <Stars
                           value={summary.myRating}
                           onChange={(value) => saveRating(spot.id, { rating: value })}
@@ -659,7 +658,8 @@ export function SpotList({
                         >
                           {summary.myFavorite ? "♥" : "♡"}
                         </button>
-                        <span className="mx-0.5 h-4 w-px bg-[var(--separator)]" aria-hidden />
+                      </div>
+                      <div className="flex shrink-0 items-center">
                         <IconButton
                           label={editingId === spot.id ? "Bearbeiten schließen" : "Bearbeiten"}
                           tone={editingId === spot.id ? "active" : "soft"}
