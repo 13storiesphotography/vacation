@@ -9,6 +9,7 @@ import { CreateSpotForm, SpotList } from "./spot-ui";
 import { SpotMap } from "./spot-map";
 import { EditVacationForm } from "./vacation-edit";
 import { summarizeRatings, type RaterOption, type SpotRating } from "@/lib/ratings";
+import { resolveSpotPreviewImage } from "@/lib/geo";
 
 type Vacation = Database["public"]["Tables"]["vacations"]["Row"];
 type Member = Database["public"]["Tables"]["vacation_members"]["Row"];
@@ -74,7 +75,12 @@ export default function VacationDetailPage() {
 
     setVacation(vacationData);
     setMembers(memberData ?? []);
-    setSpots(spotData ?? []);
+    setSpots(
+      (spotData ?? []).map((spot) => ({
+        ...spot,
+        image_url: resolveSpotPreviewImage(spot),
+      })),
+    );
     setRatings(ratingData ?? []);
     setProfiles(profileData ?? []);
     setLoading(false);

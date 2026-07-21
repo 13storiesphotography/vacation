@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { enrichFromMapsUrl } from "@/lib/geo";
+import { enrichFromMapsUrl, isUsablePreviewImage, previewImageFromCoords } from "@/lib/geo";
 import { parseTags, type OvernightCost, type SpotCategory } from "@/lib/spots";
 
 export type SpotActionState = {
@@ -60,7 +60,15 @@ async function readSpotFields(formData: FormData) {
     lng = enriched.coords.lng;
     storedMapsUrl = mapsUrl || enriched.resolvedUrl;
     if (!imageManual) {
-      imageUrl = enriched.imageUrl || previousAutoImage || null;
+      const preferred = enriched.imageUrl;
+      const previous =
+        previousAutoImage && isUsablePreviewImage(previousAutoImage)
+          ? previousAutoImage
+          : null;
+      imageUrl =
+        (preferred && isUsablePreviewImage(preferred) ? preferred : null) ||
+        previous ||
+        (lat != null && lng != null ? previewImageFromCoords(lat, lng) : null);
       imageManual = false;
     }
   }
