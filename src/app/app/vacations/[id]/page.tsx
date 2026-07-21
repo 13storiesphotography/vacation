@@ -174,13 +174,15 @@ export default function VacationDetailPage() {
 
   if (loading) {
     return (
-      <main className="shell mx-auto max-w-3xl px-5 py-10 text-[var(--ink-soft)]">Laden…</main>
+      <main className="shell mx-auto max-w-6xl px-5 py-10 text-[var(--ink-soft)] md:px-8">
+        Laden…
+      </main>
     );
   }
 
   if (!vacation) {
     return (
-      <main className="shell mx-auto max-w-3xl px-5 py-10">
+      <main className="shell mx-auto max-w-6xl px-5 py-10 md:px-8">
         <p className="text-[var(--danger)]">Urlaub nicht gefunden.</p>
         <Link href="/app" className="mt-4 inline-block text-[var(--fjord)]">
           Zurück
@@ -190,11 +192,7 @@ export default function VacationDetailPage() {
   }
 
   return (
-    <main
-      className={`shell mx-auto min-h-screen w-full px-5 py-8 ${
-        spotsView === "map" ? "max-w-4xl" : "max-w-3xl"
-      }`}
-    >
+    <main className="shell mx-auto min-h-screen w-full max-w-6xl px-5 py-8 md:px-8">
       <Link href="/app" className="text-[13px] font-semibold text-[var(--fjord)]">
         ← Urlaube
       </Link>

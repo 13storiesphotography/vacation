@@ -414,41 +414,39 @@ export function SpotList({
   return (
     <div className="mt-3">
       <div className="mb-3 flex flex-wrap items-center gap-2">
-        <div className="flex min-w-0 flex-1 gap-2 overflow-x-auto pb-0.5">
+        <button
+          type="button"
+          onClick={() => setFilter("alle")}
+          className={`rounded-full px-3 py-1.5 text-[12px] font-semibold ${
+            filter === "alle" ? "bg-[var(--fjord)] text-white" : "bg-black/5 text-[var(--ink-soft)]"
+          }`}
+        >
+          Alle
+        </button>
+        {categoryOptions.map((option) => (
           <button
+            key={option}
             type="button"
-            onClick={() => setFilter("alle")}
-            className={`shrink-0 rounded-full px-3 py-1.5 text-[12px] font-semibold ${
-              filter === "alle" ? "bg-[var(--fjord)] text-white" : "bg-black/5 text-[var(--ink-soft)]"
+            onClick={() => setFilter(option)}
+            className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[12px] font-semibold ${
+              filter === option
+                ? "bg-[var(--fjord)] text-white"
+                : "bg-black/5 text-[var(--ink-soft)]"
             }`}
           >
-            Alle
+            <CategoryIcon
+              category={option}
+              size={14}
+              tone={filter === option ? "#ffffff" : undefined}
+            />
+            {categoryLabels[option]}
           </button>
-          {categoryOptions.map((option) => (
-            <button
-              key={option}
-              type="button"
-              onClick={() => setFilter(option)}
-              className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-[12px] font-semibold ${
-                filter === option
-                  ? "bg-[var(--fjord)] text-white"
-                  : "bg-black/5 text-[var(--ink-soft)]"
-              }`}
-            >
-              <CategoryIcon
-                category={option}
-                size={14}
-                tone={filter === option ? "#ffffff" : undefined}
-              />
-              {categoryLabels[option]}
-            </button>
-          ))}
-        </div>
+        ))}
         <select
           value={sortMode}
           onChange={(e) => setSortMode(e.target.value as SortMode)}
           aria-label="Sortierung"
-          className="shrink-0 rounded-full border-0 bg-black/5 px-3 py-1.5 text-[12px] font-semibold text-[var(--ink-soft)] outline-none"
+          className="rounded-full border-0 bg-black/5 px-3 py-1.5 text-[12px] font-semibold text-[var(--ink-soft)] outline-none"
         >
           <option value="newest">Neueste</option>
           <option value="favorites">Favoriten</option>
