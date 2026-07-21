@@ -1,0 +1,133 @@
+@import "tailwindcss";
+
+:root {
+  --bg: #dfe8e4;
+  --bg-deep: #c5d4cd;
+  --ink: #14231f;
+  --ink-soft: #3d524b;
+  --fjord: #1c5568;
+  --pine: #234b3c;
+  --moss: #5f7d4a;
+  --sand: #d7c4a3;
+  --sun: #c9853f;
+  --mist: rgba(255, 255, 255, 0.55);
+  --line: rgba(20, 35, 31, 0.12);
+  --glow: rgba(28, 85, 104, 0.18);
+}
+
+@theme inline {
+  --color-background: var(--bg);
+  --color-foreground: var(--ink);
+  --font-sans: var(--font-body);
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  margin: 0;
+  min-height: 100%;
+  color: var(--ink);
+  background:
+    radial-gradient(1200px 700px at 10% -10%, rgba(201, 133, 63, 0.22), transparent 55%),
+    radial-gradient(900px 600px at 90% 0%, rgba(28, 85, 104, 0.2), transparent 50%),
+    radial-gradient(800px 500px at 50% 110%, rgba(35, 75, 60, 0.18), transparent 45%),
+    linear-gradient(180deg, #e7efe9 0%, #d5e0da 45%, #cfdad3 100%);
+  font-family: var(--font-body), sans-serif;
+}
+
+body::before {
+  content: "";
+  position: fixed;
+  inset: 0;
+  pointer-events: none;
+  opacity: 0.35;
+  background-image:
+    linear-gradient(rgba(20, 35, 31, 0.03) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(20, 35, 31, 0.03) 1px, transparent 1px);
+  background-size: 48px 48px;
+  mask-image: radial-gradient(circle at center, black, transparent 85%);
+  z-index: 0;
+}
+
+a {
+  color: inherit;
+}
+
+button,
+input,
+textarea {
+  font: inherit;
+}
+
+::selection {
+  background: rgba(28, 85, 104, 0.25);
+}
+
+@keyframes rise-in {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@keyframes drift {
+  0%,
+  100% {
+    transform: translateY(0);
+  }
+  50% {
+    transform: translateY(-8px);
+  }
+}
+
+@keyframes pin-pulse {
+  0%,
+  100% {
+    box-shadow: 0 0 0 0 rgba(28, 85, 104, 0.35);
+  }
+  50% {
+    box-shadow: 0 0 0 10px rgba(28, 85, 104, 0);
+  }
+}
+
+.animate-rise {
+  animation: rise-in 0.7s ease both;
+}
+
+.animate-drift {
+  animation: drift 7s ease-in-out infinite;
+}
+
+.animate-pin {
+  animation: pin-pulse 2.4s ease-out infinite;
+}
+
+.display {
+  font-family: var(--font-display), Georgia, serif;
+  letter-spacing: -0.03em;
+}
+
+.shell {
+  position: relative;
+  z-index: 1;
+}
+
+.panel {
+  background: color-mix(in srgb, white 72%, transparent);
+  border: 1px solid var(--line);
+  backdrop-filter: blur(10px);
+}
+
+.soft-shadow {
+  box-shadow: 0 24px 60px rgba(20, 35, 31, 0.08);
+}
