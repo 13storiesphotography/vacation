@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { FormEvent, useState } from "react";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
@@ -31,6 +32,11 @@ export default function SetPasswordPage() {
         <h1 className="display text-2xl">Passwort festlegen</h1>
         <p className="mt-2 text-[14px] text-[var(--ink-soft)]">
           Du wurdest eingeladen. Vergib jetzt dein Passwort, danach richte MFA ein.
+          Alternativ:{" "}
+          <Link href="/login" className="font-semibold text-[var(--fjord)]">
+            Mit Apple anmelden
+          </Link>{" "}
+          (gleiche E-Mail).
         </p>
         <label className="mt-6 block text-[13px] font-semibold text-[var(--ink-soft)]">
           Neues Passwort

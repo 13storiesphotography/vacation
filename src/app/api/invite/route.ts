@@ -1,5 +1,5 @@
-import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
+import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient as createServerSupabase } from "@/lib/supabase/server";
 
 export async function POST(request: Request) {
@@ -43,18 +43,13 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: memberError.message }, { status: 400 });
   }
 
-  const serviceRole = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  if (!serviceRole || !url) {
+  const admin = createAdminClient();
+  if (!admin) {
     return NextResponse.json({
       ok: true,
       note: "Mitgliedschaft angelegt. SUPABASE_SERVICE_ROLE_KEY fehlt — bitte Einladung manuell im Supabase Dashboard senden (Authentication → Users → Invite).",
     });
   }
-
-  const admin = createClient(url, serviceRole, {
-    auth: { autoRefreshToken: false, persistSession: false },
-  });
 
   const origin = new URL(request.url).origin;
   const { error: inviteError } = await admin.auth.admin.inviteUserByEmail(email, {
