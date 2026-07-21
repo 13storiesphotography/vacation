@@ -5,13 +5,13 @@ import { useMemo, useState } from "react";
 import {
   categoryLabels,
   categoryOptions,
-  categoryTone,
   type SpotCategory,
 } from "@/lib/spots";
 import { resolveSpotCoords } from "@/lib/geo";
 import { emptySummary, type SpotRatingSummary } from "@/lib/ratings";
 import type { Database } from "@/lib/database.types";
 import type { MappableSpot } from "./spot-map-canvas";
+import { CategoryIcon } from "@/components/category-icon";
 
 type Spot = Database["public"]["Tables"]["spots"]["Row"];
 
@@ -80,12 +80,17 @@ export function SpotMap({
             key={option}
             type="button"
             onClick={() => setFilter(option)}
-            className={`shrink-0 rounded-full px-3 py-1.5 text-[12px] font-semibold ${
+            className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-[12px] font-semibold ${
               filter === option
                 ? "bg-[var(--fjord)] text-white"
                 : "bg-black/5 text-[var(--ink-soft)]"
             }`}
           >
+            <CategoryIcon
+              category={option}
+              size={14}
+              tone={filter === option ? "#ffffff" : undefined}
+            />
             {categoryLabels[option]}
           </button>
         ))}
@@ -138,10 +143,7 @@ export function SpotMap({
       {selected && (
         <div className="ios-group mt-3 p-4">
           <div className="flex items-start gap-3">
-            <span
-              className="mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full"
-              style={{ background: categoryTone[selected.category] }}
-            />
+            <CategoryIcon category={selected.category} size={18} className="mt-0.5" />
             <div className="min-w-0 flex-1">
               <p className="text-[15px] font-semibold">{selected.name}</p>
               <p className="text-[12px] text-[var(--ink-soft)]">
@@ -191,10 +193,7 @@ export function SpotMap({
           <ul className="ios-group mt-2">
             {withoutCoords.map((spot) => (
               <li key={spot.id} className="ios-row">
-                <span
-                  className="h-2.5 w-2.5 shrink-0 rounded-full"
-                  style={{ background: categoryTone[spot.category] }}
-                />
+                <CategoryIcon category={spot.category} size={16} />
                 <div>
                   <p className="text-[14px] font-semibold">{spot.name}</p>
                   <p className="text-[12px] text-[var(--ink-soft)]">
@@ -210,10 +209,7 @@ export function SpotMap({
       <div className="mt-4 flex flex-wrap gap-3">
         {categoryOptions.map((option) => (
           <span key={option} className="flex items-center gap-1.5 text-[11px] text-[var(--ink-soft)]">
-            <span
-              className="inline-block h-2.5 w-2.5 rounded-full"
-              style={{ background: categoryTone[option] }}
-            />
+            <CategoryIcon category={option} size={14} />
             {categoryLabels[option]}
           </span>
         ))}
