@@ -536,3 +536,144 @@ textarea {
 .leaflet-popup-content {
   margin: 12px 14px;
 }
+
+/* Day plan — simple day strip + quick add */
+.plan-day-strip {
+  scrollbar-width: none;
+  -webkit-overflow-scrolling: touch;
+}
+
+.plan-day-strip::-webkit-scrollbar {
+  display: none;
+}
+
+.plan-day-chip {
+  flex: 0 0 auto;
+  min-width: 4.75rem;
+  border: 0;
+  border-radius: 16px;
+  padding: 10px 12px 8px;
+  background: rgba(255, 255, 255, 0.55);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.8) inset;
+  color: var(--ink-soft);
+  text-align: left;
+  transition:
+    background 220ms ease,
+    color 220ms ease,
+    transform 180ms ease;
+}
+
+.plan-day-chip[data-active="true"] {
+  background: linear-gradient(160deg, #1c2a33 0%, #0f1a22 100%);
+  color: #fff;
+  transform: translateY(-1px);
+  box-shadow: 0 8px 18px rgba(15, 30, 40, 0.18);
+}
+
+.plan-day-chip-num {
+  display: block;
+  font-size: 11px;
+  font-weight: 700;
+  opacity: 0.7;
+}
+
+.plan-day-chip[data-active="true"] .plan-day-chip-num {
+  opacity: 0.85;
+  color: #9fd0e0;
+}
+
+.plan-day-chip-date {
+  display: block;
+  margin-top: 2px;
+  font-size: 12px;
+  font-weight: 650;
+  white-space: nowrap;
+}
+
+.plan-day-chip-dots {
+  display: flex;
+  gap: 4px;
+  margin-top: 8px;
+}
+
+.plan-day-chip-dots i {
+  width: 6px;
+  height: 6px;
+  border-radius: 99px;
+  background: rgba(31, 53, 64, 0.18);
+}
+
+.plan-day-chip[data-active="true"] .plan-day-chip-dots i {
+  background: rgba(255, 255, 255, 0.28);
+}
+
+.plan-day-chip-dots i[data-on="true"] {
+  background: var(--fjord);
+}
+
+.plan-day-chip[data-active="true"] .plan-day-chip-dots i[data-on="true"] {
+  background: #7fd0e8;
+}
+
+.plan-day-chip-dots i[data-kind="night"][data-on="true"] {
+  background: #c9a227;
+}
+
+.plan-day-chip[data-active="true"]
+  .plan-day-chip-dots
+  i[data-kind="night"][data-on="true"] {
+  background: #f0d56a;
+}
+
+.plan-nav-btn {
+  width: 36px;
+  height: 36px;
+  border: 0;
+  border-radius: 12px;
+  background: rgba(0, 0, 0, 0.05);
+  color: var(--ink);
+  font-size: 20px;
+  line-height: 1;
+  font-weight: 600;
+}
+
+.plan-nav-btn:disabled {
+  opacity: 0.3;
+}
+
+.plan-icon-btn {
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 10px;
+  background: transparent;
+  color: var(--ink-soft);
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.plan-icon-btn:disabled {
+  opacity: 0.25;
+}
+
+.plan-quick-spot {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  max-width: 11rem;
+  flex: 0 0 auto;
+  border: 0;
+  border-radius: 999px;
+  padding: 8px 12px;
+  background: rgba(255, 255, 255, 0.7);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.85) inset;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .plan-day-chip {
+    transition: none;
+  }
+}
