@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useMemo, useState, useTransition, type ReactNode } from "react";
+import { useActionState, useEffect, useMemo, useState, useTransition } from "react";
 import {
   categoryLabels,
   categoryOptions,
@@ -127,16 +127,25 @@ function MapsUrlField({ defaultValue = "" }: { defaultValue?: string }) {
 function SpotThumb({
   spot,
   size = 72,
+  selected = false,
+  onOpen,
 }: {
   spot: Spot;
   size?: number;
+  selected?: boolean;
+  onOpen?: () => void;
 }) {
   const [broken, setBroken] = useState(false);
   const showImage = Boolean(spot.image_url) && !broken;
 
   return (
-    <div
-      className="relative shrink-0 overflow-hidden rounded-[14px] bg-[linear-gradient(160deg,#c5d5d0,#8aa4ad)]"
+    <button
+      type="button"
+      onClick={onOpen}
+      aria-label={`${spot.name} bearbeiten`}
+      className={`relative shrink-0 overflow-hidden rounded-[14px] bg-[linear-gradient(160deg,#c5d5d0,#8aa4ad)] ${
+        selected ? "ring-2 ring-[var(--fjord)] ring-offset-2" : ""
+      }`}
       style={{ width: size, height: size }}
     >
       {showImage ? (
@@ -157,7 +166,7 @@ function SpotThumb({
       <span className="absolute bottom-1 left-1 inline-flex rounded-full bg-white/95 p-1 shadow-sm">
         <CategoryIcon category={spot.category} size={12} />
       </span>
-    </div>
+    </button>
   );
 }
 
@@ -328,10 +337,14 @@ export function EditSpotForm({
   vacationId,
   spot,
   onDone,
+  onDelete,
+  deleting = false,
 }: {
   vacationId: string;
   spot: Spot;
   onDone: () => void;
+  onDelete: () => void;
+  deleting?: boolean;
 }) {
   const [state, action, pending] = useActionState(updateSpot, initialState);
   const [category, setCategory] = useState<SpotCategory>(spot.category);
@@ -341,91 +354,40 @@ export function EditSpotForm({
   }, [state.ok, onDone]);
 
   return (
-    <form action={action} className="border-t border-[var(--separator)] p-4">
-      <input type="hidden" name="vacation_id" value={vacationId} />
-      <input type="hidden" name="spot_id" value={spot.id} />
-      <p className="text-[13px] font-semibold text-[var(--ink-soft)]">Spot bearbeiten</p>
-      <SpotFormFields
-        spot={spot}
-        category={category}
-        onCategoryChange={setCategory}
-        showOvernight={category === "stellplatz"}
-      />
-      {state.error && <p className="mt-3 text-[13px] text-[var(--danger)]">{state.error}</p>}
-      <div className="mt-4 flex gap-2">
-        <button type="button" className="cta cta-secondary flex-1" onClick={onDone}>
-          Abbrechen
-        </button>
-        <button type="submit" className="cta flex-1" disabled={pending}>
-          {pending ? "…" : "Speichern"}
-        </button>
-      </div>
-    </form>
+    <div className="border-t border-[var(--separator)] p-4">
+      <form action={action}>
+        <input type="hidden" name="vacation_id" value={vacationId} />
+        <input type="hidden" name="spot_id" value={spot.id} />
+        <p className="text-[13px] font-semibold text-[var(--ink-soft)]">Spot bearbeiten</p>
+        <SpotFormFields
+          spot={spot}
+          category={category}
+          onCategoryChange={setCategory}
+          showOvernight={category === "stellplatz"}
+        />
+        {state.error && <p className="mt-3 text-[13px] text-[var(--danger)]">{state.error}</p>}
+        <div className="mt-4 flex gap-2">
+          <button type="button" className="cta cta-secondary flex-1" onClick={onDone}>
+            Abbrechen
+          </button>
+          <button type="submit" className="cta flex-1" disabled={pending}>
+            {pending ? "…" : "Speichern"}
+          </button>
+        </div>
+      </form>
+      <button
+        type="button"
+        className="mt-4 w-full text-center text-[13px] font-semibold text-[var(--danger)]"
+        disabled={deleting}
+        onClick={onDelete}
+      >
+        {deleting ? "Wird gelöscht…" : "Löschen"}
+      </button>
+    </div>
   );
 }
 
 type SortMode = "newest" | "favorites" | "avg" | "mine";
-
-function IconButton({
-  label,
-  onClick,
-  disabled,
-  tone = "soft",
-  children,
-}: {
-  label: string;
-  onClick: () => void;
-  disabled?: boolean;
-  tone?: "soft" | "danger" | "active";
-  children: ReactNode;
-}) {
-  const color =
-    tone === "danger"
-      ? "text-[var(--danger)]"
-      : tone === "active"
-        ? "text-[var(--fjord)]"
-        : "text-[var(--ink-faint)] hover:text-[var(--ink-soft)]";
-  return (
-    <button
-      type="button"
-      aria-label={label}
-      title={label}
-      disabled={disabled}
-      onClick={onClick}
-      className={`inline-flex h-8 w-8 items-center justify-center rounded-[10px] ${color} disabled:opacity-40`}
-    >
-      {children}
-    </button>
-  );
-}
-
-function PencilIcon() {
-  return (
-    <svg width="15" height="15" viewBox="0 0 20 20" fill="none" aria-hidden>
-      <path
-        d="M12.4 4.4 15.6 7.6M4 16l1.1-4.2L13.3 3.6a1.5 1.5 0 0 1 2.1 0l1 1a1.5 1.5 0 0 1 0 2.1L7.2 14.9 4 16Z"
-        stroke="currentColor"
-        strokeWidth="1.6"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
-function TrashIcon() {
-  return (
-    <svg width="15" height="15" viewBox="0 0 20 20" fill="none" aria-hidden>
-      <path
-        d="M4.5 6.2h11M8.2 6.2V4.8a1 1 0 0 1 1-1h1.6a1 1 0 0 1 1 1v1.4M7.4 9v5M10 9v5M12.6 9v5M6.2 6.2l.6 9.1a1.2 1.2 0 0 0 1.2 1.1h4a1.2 1.2 0 0 0 1.2-1.1l.6-9.1"
-        stroke="currentColor"
-        strokeWidth="1.6"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
 
 function formatAvg(value: number | null): string {
   if (value == null) return "–";
@@ -594,10 +556,19 @@ export function SpotList({
         ) : (
           visibleSpots.map((spot) => {
             const summary = summaries[spot.id] ?? emptySummary();
+            const isOpen = editingId === spot.id;
+            function openEdit() {
+              setEditingId((current) => (current === spot.id ? null : spot.id));
+            }
             return (
               <div key={spot.id}>
                 <div className="ios-row !items-start">
-                  <SpotThumb spot={spot} size={76} />
+                  <SpotThumb
+                    spot={spot}
+                    size={76}
+                    selected={isOpen}
+                    onOpen={openEdit}
+                  />
                   <div className="min-w-0 flex-1">
                     {spot.maps_url ? (
                       <a
@@ -609,9 +580,19 @@ export function SpotList({
                         {spot.name}
                       </a>
                     ) : (
-                      <p className="text-[15px] font-semibold leading-snug">{spot.name}</p>
+                      <button
+                        type="button"
+                        onClick={openEdit}
+                        className="block w-full text-left text-[15px] font-semibold leading-snug"
+                      >
+                        {spot.name}
+                      </button>
                     )}
-                    <p className="mt-0.5 text-[12px] text-[var(--ink-soft)]">
+                    <button
+                      type="button"
+                      onClick={openEdit}
+                      className="mt-0.5 block w-full text-left text-[12px] text-[var(--ink-soft)]"
+                    >
                       {categoryLabels[spot.category]}
                       {spot.overnight_cost ? ` · ${spot.overnight_cost}` : ""}
                       {spot.price_hint ? ` · ${spot.price_hint}` : ""}
@@ -624,70 +605,54 @@ export function SpotList({
                           </span>
                         </>
                       )}
-                      {spot.info_url && (
-                        <>
-                          {" · "}
-                          <a
-                            href={spot.info_url}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="font-semibold text-[var(--fjord)]"
-                          >
-                            Info
-                          </a>
-                        </>
-                      )}
-                    </p>
+                    </button>
+                    {spot.info_url && (
+                      <a
+                        href={spot.info_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="mt-0.5 inline-block text-[12px] font-semibold text-[var(--fjord)]"
+                      >
+                        Info
+                      </a>
+                    )}
 
-                    <div className="mt-1.5 flex items-center justify-between gap-2">
-                      <div className="flex min-w-0 items-center gap-0.5">
-                        <Stars
-                          value={summary.myRating}
-                          onChange={(value) => saveRating(spot.id, { rating: value })}
-                          size="sm"
-                        />
-                        <button
-                          type="button"
-                          className={`inline-flex h-8 w-8 items-center justify-center text-[16px] leading-none ${
-                            summary.myFavorite ? "text-[var(--sun)]" : "text-black/18"
-                          }`}
-                          aria-label={summary.myFavorite ? "Favorit entfernen" : "Als Favorit"}
-                          onClick={() =>
-                            saveRating(spot.id, { isFavorite: !summary.myFavorite })
-                          }
-                        >
-                          {summary.myFavorite ? "♥" : "♡"}
-                        </button>
-                      </div>
-                      <div className="flex shrink-0 items-center">
-                        <IconButton
-                          label={editingId === spot.id ? "Bearbeiten schließen" : "Bearbeiten"}
-                          tone={editingId === spot.id ? "active" : "soft"}
-                          onClick={() =>
-                            setEditingId((current) => (current === spot.id ? null : spot.id))
-                          }
-                        >
-                          <PencilIcon />
-                        </IconButton>
-                        <IconButton
-                          label="Löschen"
-                          tone="danger"
-                          disabled={deletingId === spot.id}
-                          onClick={() => onDelete(spot.id)}
-                        >
-                          <TrashIcon />
-                        </IconButton>
-                      </div>
+                    <div className="mt-1.5 flex items-center gap-0.5">
+                      <Stars
+                        value={summary.myRating}
+                        onChange={(value) => saveRating(spot.id, { rating: value })}
+                        size="sm"
+                      />
+                      <button
+                        type="button"
+                        className={`inline-flex h-8 w-8 items-center justify-center text-[16px] leading-none ${
+                          summary.myFavorite ? "text-[var(--sun)]" : "text-black/18"
+                        }`}
+                        aria-label={summary.myFavorite ? "Favorit entfernen" : "Als Favorit"}
+                        onClick={() =>
+                          saveRating(spot.id, { isFavorite: !summary.myFavorite })
+                        }
+                      >
+                        {summary.myFavorite ? "♥" : "♡"}
+                      </button>
                     </div>
 
                     {spot.description && (
-                      <p className="mt-1.5 text-[13px] leading-relaxed text-[var(--ink-soft)]">
+                      <button
+                        type="button"
+                        onClick={openEdit}
+                        className="mt-1.5 block w-full text-left text-[13px] leading-relaxed text-[var(--ink-soft)]"
+                      >
                         {spot.description}
-                      </p>
+                      </button>
                     )}
 
                     {(spot.tags ?? []).length > 0 && (
-                      <div className="mt-1.5 flex flex-wrap gap-1.5">
+                      <button
+                        type="button"
+                        onClick={openEdit}
+                        className="mt-1.5 flex w-full flex-wrap gap-1.5 text-left"
+                      >
                         {(spot.tags ?? []).map((tag) => (
                           <span
                             key={tag}
@@ -696,14 +661,16 @@ export function SpotList({
                             {tag}
                           </span>
                         ))}
-                      </div>
+                      </button>
                     )}
                   </div>
                 </div>
-                {editingId === spot.id && (
+                {isOpen && (
                   <EditSpotForm
                     vacationId={vacationId}
                     spot={spot}
+                    deleting={deletingId === spot.id}
+                    onDelete={() => onDelete(spot.id)}
                     onDone={() => {
                       setEditingId(null);
                       onChanged();
