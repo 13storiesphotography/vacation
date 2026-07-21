@@ -4,7 +4,6 @@ import { useActionState, useEffect, useMemo, useState, useTransition } from "rea
 import {
   categoryLabels,
   categoryOptions,
-  categoryTone,
   type SpotCategory,
 } from "@/lib/spots";
 import type { Database } from "@/lib/database.types";
@@ -18,6 +17,7 @@ import {
   type SpotRatingSummary,
 } from "@/lib/ratings";
 import { parseLatLngFromMapsUrl } from "@/lib/geo";
+import { CategoryIcon } from "@/components/category-icon";
 
 type Spot = Database["public"]["Tables"]["spots"]["Row"];
 
@@ -400,12 +400,17 @@ export function SpotList({
               key={option}
               type="button"
               onClick={() => setFilter(option)}
-              className={`shrink-0 rounded-full px-3 py-1.5 text-[12px] font-semibold ${
+              className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-[12px] font-semibold ${
                 filter === option
                   ? "bg-[var(--fjord)] text-white"
                   : "bg-black/5 text-[var(--ink-soft)]"
               }`}
             >
+              <CategoryIcon
+                category={option}
+                size={14}
+                tone={filter === option ? "#ffffff" : undefined}
+              />
               {categoryLabels[option]}
             </button>
           ))}
@@ -437,10 +442,7 @@ export function SpotList({
             return (
               <div key={spot.id}>
                 <div className="ios-row !items-start">
-                  <span
-                    className="mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full"
-                    style={{ background: categoryTone[spot.category] }}
-                  />
+                  <CategoryIcon category={spot.category} size={18} className="mt-0.5" />
                   <div className="min-w-0 flex-1">
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0 flex-1">
