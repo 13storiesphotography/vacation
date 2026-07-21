@@ -141,9 +141,25 @@ export function SpotMap({
       </div>
 
       {selected && (
-        <div className="ios-group mt-3 p-4">
-          <div className="flex items-start gap-3">
-            <CategoryIcon category={selected.category} size={18} className="mt-0.5" />
+        <div className="ios-group mt-3 overflow-hidden">
+          {selected.image_url ? (
+            <div className="relative aspect-[16/7] w-full bg-[linear-gradient(160deg,#c5d5d0,#8aa4ad)]">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img
+                src={selected.image_url}
+                alt=""
+                className="h-full w-full object-cover"
+                referrerPolicy="no-referrer"
+              />
+              <span className="absolute bottom-2 left-2 inline-flex rounded-full bg-white/95 p-1.5 shadow-sm">
+                <CategoryIcon category={selected.category} size={14} />
+              </span>
+            </div>
+          ) : null}
+          <div className="flex items-start gap-3 p-4">
+            {!selected.image_url && (
+              <CategoryIcon category={selected.category} size={18} className="mt-0.5" />
+            )}
             <div className="min-w-0 flex-1">
               {selected.maps_url ? (
                 <a
