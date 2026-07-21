@@ -15,6 +15,7 @@ import {
   VacationTabBar,
   type VacationTabId,
 } from "@/components/app/vacation-tabbar";
+import { DayPlanPanel } from "./day-plan-ui";
 
 type Vacation = Database["public"]["Tables"]["vacations"]["Row"];
 type Member = Database["public"]["Tables"]["vacation_members"]["Row"];
@@ -395,20 +396,10 @@ export default function VacationDetailPage() {
       {tab === "plan" && (
         <section>
           <h1 className="display text-2xl">Tagesplan</h1>
-          <div className="ios-group mt-4 p-5">
-            <p className="text-[15px] font-semibold">Als Nächstes im Konzept</p>
-            <p className="mt-2 text-[14px] leading-relaxed text-[var(--ink-soft)]">
-              Hier weist ihr Spots konkreten Reisetagen zu — inkl. optionaler Übernachtung
-              für Van-Tage. Die Sammlung bleibt unabhängig; der Plan referenziert nur.
-            </p>
-            <button
-              type="button"
-              className="cta mt-5 w-full"
-              onClick={() => changeTab("spots")}
-            >
-              Weiter Spots sammeln
-            </button>
-          </div>
+          <p className="mt-1 text-[13px] text-[var(--ink-soft)]">
+            Spots den Reisetagen zuweisen — Sammlung bleibt unabhängig
+          </p>
+          <DayPlanPanel vacation={vacation} spots={spots} />
         </section>
       )}
 
