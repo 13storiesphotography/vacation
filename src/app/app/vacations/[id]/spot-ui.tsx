@@ -126,7 +126,7 @@ function MapsUrlField({ defaultValue = "" }: { defaultValue?: string }) {
 
 function SpotThumb({
   spot,
-  size = 72,
+  size = 56,
   selected = false,
   onOpen,
 }: {
@@ -143,8 +143,8 @@ function SpotThumb({
       type="button"
       onClick={onOpen}
       aria-label={`${spot.name} bearbeiten`}
-      className={`relative shrink-0 overflow-hidden rounded-[14px] bg-[linear-gradient(160deg,#c5d5d0,#8aa4ad)] ${
-        selected ? "ring-2 ring-[var(--fjord)] ring-offset-2" : ""
+      className={`relative shrink-0 overflow-hidden rounded-[12px] bg-[linear-gradient(160deg,#c5d5d0,#8aa4ad)] ${
+        selected ? "ring-2 ring-[var(--fjord)]" : ""
       }`}
       style={{ width: size, height: size }}
     >
@@ -163,8 +163,8 @@ function SpotThumb({
           <CategoryIcon category={spot.category} size={Math.round(size * 0.36)} tone="#ffffff" />
         </div>
       )}
-      <span className="absolute bottom-1 left-1 inline-flex rounded-full bg-white/95 p-1 shadow-sm">
-        <CategoryIcon category={spot.category} size={12} />
+      <span className="absolute bottom-0.5 left-0.5 inline-flex rounded-full bg-white/95 p-0.5 shadow-sm">
+        <CategoryIcon category={spot.category} size={11} />
       </span>
     </button>
   );
@@ -575,107 +575,95 @@ export function SpotList({
             }
             return (
               <div key={spot.id}>
-                <div className="ios-row !items-start">
+                <div className="ios-row !items-center !py-2.5">
                   <SpotThumb
                     spot={spot}
-                    size={76}
+                    size={52}
                     selected={isOpen}
                     onOpen={openEdit}
                   />
                   <div className="min-w-0 flex-1">
-                    {spot.maps_url ? (
-                      <a
-                        href={spot.maps_url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="block text-[15px] font-semibold leading-snug text-[var(--fjord)] hover:underline"
-                      >
-                        {spot.name}
-                      </a>
-                    ) : (
-                      <button
-                        type="button"
-                        onClick={openEdit}
-                        className="block w-full text-left text-[15px] font-semibold leading-snug"
-                      >
-                        {spot.name}
-                      </button>
-                    )}
-                    <button
-                      type="button"
-                      onClick={openEdit}
-                      className="mt-0.5 block w-full text-left text-[12px] text-[var(--ink-soft)]"
-                    >
-                      {categoryLabels[spot.category]}
-                      {spot.overnight_cost ? ` · ${spot.overnight_cost}` : ""}
-                      {spot.price_hint ? ` · ${spot.price_hint}` : ""}
-                      {summary.average != null && (
-                        <>
-                          {" · "}
-                          <span className="tabular-nums text-[var(--ink-faint)]">
-                            Ø {formatAvg(summary.average)}
-                            {summary.count > 1 ? ` · ${summary.count}` : ""}
-                          </span>
-                        </>
-                      )}
-                    </button>
-                    {spot.info_url && (
-                      <a
-                        href={spot.info_url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="mt-0.5 inline-block text-[12px] font-semibold text-[var(--fjord)]"
-                      >
-                        Info
-                      </a>
-                    )}
-
-                    <div className="mt-1.5 flex items-center gap-0.5">
-                      <Stars
-                        value={summary.myRating}
-                        onChange={(value) => saveRating(spot.id, { rating: value })}
-                        size="sm"
-                      />
-                      <button
-                        type="button"
-                        className={`inline-flex h-8 w-8 items-center justify-center text-[16px] leading-none ${
-                          summary.myFavorite ? "text-[var(--sun)]" : "text-black/18"
-                        }`}
-                        aria-label={summary.myFavorite ? "Favorit entfernen" : "Als Favorit"}
-                        onClick={() =>
-                          saveRating(spot.id, { isFavorite: !summary.myFavorite })
-                        }
-                      >
-                        {summary.myFavorite ? "♥" : "♡"}
-                      </button>
+                    <div className="flex items-start gap-2">
+                      <div className="min-w-0 flex-1">
+                        {spot.maps_url ? (
+                          <a
+                            href={spot.maps_url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="block truncate text-[15px] font-semibold leading-tight text-[var(--fjord)] hover:underline"
+                          >
+                            {spot.name}
+                          </a>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={openEdit}
+                            className="block w-full truncate text-left text-[15px] font-semibold leading-tight"
+                          >
+                            {spot.name}
+                          </button>
+                        )}
+                        <div className="mt-0.5 flex min-w-0 items-baseline gap-1.5 text-[12px] leading-snug text-[var(--ink-soft)]">
+                          <button
+                            type="button"
+                            onClick={openEdit}
+                            className="min-w-0 truncate text-left"
+                          >
+                            {categoryLabels[spot.category]}
+                            {spot.overnight_cost ? ` · ${spot.overnight_cost}` : ""}
+                            {spot.price_hint ? ` · ${spot.price_hint}` : ""}
+                            {summary.average != null && (
+                              <>
+                                {" · "}
+                                <span className="tabular-nums text-[var(--ink-faint)]">
+                                  Ø {formatAvg(summary.average)}
+                                  {summary.count > 1 ? ` · ${summary.count}` : ""}
+                                </span>
+                              </>
+                            )}
+                          </button>
+                          {spot.info_url ? (
+                            <a
+                              href={spot.info_url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="shrink-0 font-semibold text-[var(--fjord)]"
+                            >
+                              Info
+                            </a>
+                          ) : null}
+                        </div>
+                      </div>
+                      <div className="flex shrink-0 items-center gap-0.5 pt-0.5">
+                        <Stars
+                          value={summary.myRating}
+                          onChange={(value) => saveRating(spot.id, { rating: value })}
+                          size="sm"
+                        />
+                        <button
+                          type="button"
+                          className={`inline-flex h-6 w-6 items-center justify-center text-[14px] leading-none ${
+                            summary.myFavorite ? "text-[var(--sun)]" : "text-black/18"
+                          }`}
+                          aria-label={summary.myFavorite ? "Favorit entfernen" : "Als Favorit"}
+                          onClick={() =>
+                            saveRating(spot.id, { isFavorite: !summary.myFavorite })
+                          }
+                        >
+                          {summary.myFavorite ? "♥" : "♡"}
+                        </button>
+                      </div>
                     </div>
 
-                    {spot.description && (
+                    {spot.description ? (
                       <button
                         type="button"
                         onClick={openEdit}
-                        className="mt-1.5 block w-full text-left text-[13px] leading-relaxed text-[var(--ink-soft)]"
+                        className="mt-1 line-clamp-1 w-full text-left text-[12px] leading-snug text-[var(--ink-soft)]"
                       >
                         {spot.description}
                       </button>
-                    )}
-
-                    {(spot.tags ?? []).length > 0 && (
-                      <button
-                        type="button"
-                        onClick={openEdit}
-                        className="mt-1.5 flex w-full flex-wrap gap-1.5 text-left"
-                      >
-                        {(spot.tags ?? []).map((tag) => (
-                          <span
-                            key={tag}
-                            className="rounded-full bg-black/5 px-2.5 py-1 text-[11px] font-medium text-[var(--ink-soft)]"
-                          >
-                            {tag}
-                          </span>
-                        ))}
-                      </button>
-                    )}
+                    ) : null}
                   </div>
                 </div>
                 {isOpen && (
