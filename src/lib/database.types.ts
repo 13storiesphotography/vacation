@@ -111,6 +111,9 @@ export type Database = {
           image_manual: boolean;
           overnight_cost: "frei" | "kostenpflichtig" | null;
           price_hint: string | null;
+          stay_check_in: string | null;
+          stay_check_out: string | null;
+          stay_status: "interessiert" | "gebucht" | null;
           tags: string[];
           created_by: string | null;
           created_at: string;
@@ -135,6 +138,9 @@ export type Database = {
           image_manual?: boolean;
           overnight_cost?: "frei" | "kostenpflichtig" | null;
           price_hint?: string | null;
+          stay_check_in?: string | null;
+          stay_check_out?: string | null;
+          stay_status?: "interessiert" | "gebucht" | null;
           tags?: string[];
           created_by?: string | null;
           created_at?: string;
@@ -159,6 +165,9 @@ export type Database = {
           image_manual?: boolean;
           overnight_cost?: "frei" | "kostenpflichtig" | null;
           price_hint?: string | null;
+          stay_check_in?: string | null;
+          stay_check_out?: string | null;
+          stay_status?: "interessiert" | "gebucht" | null;
           tags?: string[];
           created_by?: string | null;
           created_at?: string;
@@ -268,6 +277,7 @@ export type Database = {
         | "freizeit"
         | "versorgung";
       overnight_cost: "frei" | "kostenpflichtig";
+      stay_status: "interessiert" | "gebucht";
       vacation_type: "van" | "hotel" | "camping" | "other";
     };
     CompositeTypes: Record<string, never>;

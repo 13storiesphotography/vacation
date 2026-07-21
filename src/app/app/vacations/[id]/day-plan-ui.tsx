@@ -13,8 +13,10 @@ import {
   setDayOvernightClient,
   updateDayPlanMetaClient,
 } from "@/lib/day-plans-api";
+import { syncAllSpotStays } from "@/lib/apply-stay";
 import { createClient } from "@/lib/supabase/client";
 import { CategoryIcon } from "@/components/category-icon";
+import { formatStayRange, stayStatusLabels } from "@/lib/stay";
 
 type Spot = Database["public"]["Tables"]["spots"]["Row"];
 type Vacation = Database["public"]["Tables"]["vacations"]["Row"];
@@ -92,6 +94,7 @@ export function DayPlanPanel({
     const seq = ++reloadSeq.current;
     try {
       const supabase = createClient();
+      await syncAllSpotStays(supabase, vacation.id);
       const result = await Promise.race([
         ensureAndLoadDayPlans(
           supabase,
@@ -667,7 +670,14 @@ export function DayPlanPanel({
                 {overnightCandidates.map((spot) => (
                   <option key={spot.id} value={spot.id}>
                     {spot.name}
-                    {spot.overnight_cost ? ` · ${spot.overnight_cost}` : ""}
+                    {spot.stay_status
+                      ? ` · ${stayStatusLabels[spot.stay_status]}`
+                      : ""}
+                    {formatStayRange(spot.stay_check_in, spot.stay_check_out)
+                      ? ` · ${formatStayRange(spot.stay_check_in, spot.stay_check_out)}`
+                      : spot.overnight_cost
+                        ? ` · ${spot.overnight_cost}`
+                        : ""}
                   </option>
                 ))}
               </select>
@@ -678,6 +688,9 @@ export function DayPlanPanel({
               ) : overnight ? (
                 <p className="mt-2 text-[12px] text-[var(--ink-soft)]">
                   Heute Nacht: {overnight.name}
+                  {overnight.stay_status
+                    ? ` · ${stayStatusLabels[overnight.stay_status]}`
+                    : ""}
                 </p>
               ) : null}
             </div>
