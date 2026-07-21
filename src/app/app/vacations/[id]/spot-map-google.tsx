@@ -48,16 +48,26 @@ async function ensureMapsApi(apiKey: string) {
   await importLibrary("maps");
 }
 
+function isDocumentFullscreen(): boolean {
+  const doc = document as Document & {
+    webkitFullscreenElement?: Element | null;
+  };
+  return Boolean(document.fullscreenElement || doc.webkitFullscreenElement);
+}
+
 export default function SpotMapGoogle({
   spots,
   summaries,
   selectedId,
   onSelect,
+  expanded = false,
 }: {
   spots: MappableSpot[];
   summaries: Record<string, SpotRatingSummary>;
   selectedId: string | null;
   onSelect: (id: string | null) => void;
+  /** When true (enlarged overlay), allow one-finger pan. */
+  expanded?: boolean;
 }) {
   const apiKey = getBrowserGoogleMapsKey();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -66,6 +76,7 @@ export default function SpotMapGoogle({
   const onSelectRef = useRef(onSelect);
   const [error, setError] = useState<string | null>(null);
   const [ready, setReady] = useState(false);
+  const [nativeFullscreen, setNativeFullscreen] = useState(false);
 
   useEffect(() => {
     onSelectRef.current = onSelect;
@@ -74,6 +85,7 @@ export default function SpotMapGoogle({
   useEffect(() => {
     if (!apiKey || !containerRef.current) return;
     let cancelled = false;
+    let fullscreenListener: google.maps.MapsEventListener | null = null;
 
     void (async () => {
       try {
@@ -90,9 +102,13 @@ export default function SpotMapGoogle({
           streetViewControl: false,
           fullscreenControl: true,
           clickableIcons: false,
-          gestureHandling: "greedy",
+          // Cooperative: one finger scrolls the page; two fingers pan the map.
+          gestureHandling: "cooperative",
         });
         map.addListener("click", () => onSelectRef.current(null));
+        fullscreenListener = map.addListener("fullscreen_changed", () => {
+          setNativeFullscreen(isDocumentFullscreen());
+        });
         mapRef.current = map;
         setReady(true);
       } catch (err) {
@@ -105,11 +121,24 @@ export default function SpotMapGoogle({
 
     return () => {
       cancelled = true;
+      if (fullscreenListener) fullscreenListener.remove();
       markersRef.current.forEach((marker) => marker.setMap(null));
       markersRef.current = [];
       mapRef.current = null;
     };
   }, [apiKey]);
+
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!ready || !map) return;
+    map.setOptions({
+      gestureHandling: expanded || nativeFullscreen ? "greedy" : "cooperative",
+    });
+    // Recalculate layout after our overlay expands/collapses.
+    window.setTimeout(() => {
+      google.maps.event.trigger(map, "resize");
+    }, 50);
+  }, [expanded, nativeFullscreen, ready]);
 
   useEffect(() => {
     const map = mapRef.current;
