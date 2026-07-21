@@ -61,6 +61,7 @@ export default function SpotMapGoogle({
   selectedId,
   onSelect,
   expanded = false,
+  active = true,
 }: {
   spots: MappableSpot[];
   summaries: Record<string, SpotRatingSummary>;
@@ -68,6 +69,8 @@ export default function SpotMapGoogle({
   onSelect: (id: string | null) => void;
   /** When true (enlarged overlay), allow one-finger pan. */
   expanded?: boolean;
+  /** False while the map tab is hidden — resize when shown again. */
+  active?: boolean;
 }) {
   const apiKey = getBrowserGoogleMapsKey();
   const containerRef = useRef<HTMLDivElement>(null);
@@ -134,11 +137,12 @@ export default function SpotMapGoogle({
     map.setOptions({
       gestureHandling: expanded || nativeFullscreen ? "greedy" : "cooperative",
     });
-    // Recalculate layout after our overlay expands/collapses.
+    // Recalculate layout after expand/collapse or returning to the map tab.
+    if (!active) return;
     window.setTimeout(() => {
       google.maps.event.trigger(map, "resize");
     }, 50);
-  }, [expanded, nativeFullscreen, ready]);
+  }, [expanded, nativeFullscreen, ready, active]);
 
   useEffect(() => {
     const map = mapRef.current;

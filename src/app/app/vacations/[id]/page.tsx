@@ -15,6 +15,7 @@ import {
   VacationTabBar,
   type VacationTabId,
 } from "@/components/app/vacation-tabbar";
+import { VacationTabPanel } from "@/components/app/vacation-tab-panel";
 import { DayPlanPanel } from "./day-plan-ui";
 import { MFA_ENROLL_GRACE_DAYS } from "@/lib/mfa";
 
@@ -57,13 +58,24 @@ export default function VacationDetailPage() {
   const [editingVacation, setEditingVacation] = useState(false);
   const [showInvite, setShowInvite] = useState(false);
   const [tab, setTab] = useState<VacationTabId>("spots");
+  const [visitedTabs, setVisitedTabs] = useState<ReadonlySet<VacationTabId>>(
+    () => new Set<VacationTabId>(["spots"]),
+  );
 
   useEffect(() => {
-    setTab(readInitialTab());
+    const initial = readInitialTab();
+    setTab(initial);
+    setVisitedTabs(new Set<VacationTabId>([initial]));
   }, []);
 
   function changeTab(next: VacationTabId) {
     setTab(next);
+    setVisitedTabs((prev) => {
+      if (prev.has(next)) return prev;
+      const nextVisited = new Set(prev);
+      nextVisited.add(next);
+      return nextVisited;
+    });
     if (next !== "spots") setShowSpotForm(false);
     if (next !== "urlaub") setEditingVacation(false);
     try {
@@ -291,8 +303,8 @@ export default function VacationDetailPage() {
         <VacationTabBar active={tab} onChange={changeTab} />
       </div>
 
-      {tab === "urlaub" && (
-        <section>
+      {visitedTabs.has("urlaub") && (
+        <VacationTabPanel id="urlaub" active={tab === "urlaub"}>
           {!editingVacation ? (
             <div>
               <div className="flex items-start justify-between gap-3">
@@ -352,11 +364,11 @@ export default function VacationDetailPage() {
               }}
             />
           )}
-        </section>
+        </VacationTabPanel>
       )}
 
-      {tab === "spots" && (
-        <section>
+      {visitedTabs.has("spots") && (
+        <VacationTabPanel id="spots" active={tab === "spots"}>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <h1 className="display text-2xl">Spots</h1>
@@ -395,31 +407,31 @@ export default function VacationDetailPage() {
             onChanged={load}
             onMyRatingPatch={applyMyRating}
           />
-        </section>
+        </VacationTabPanel>
       )}
 
-      {tab === "karte" && (
-        <section>
+      {visitedTabs.has("karte") && (
+        <VacationTabPanel id="karte" active={tab === "karte"}>
           <h1 className="display text-2xl">Karte</h1>
           <p className="mt-1 text-[13px] text-[var(--ink-soft)]">
             Alle Spots mit Position
           </p>
-          <SpotMap spots={spots} summaries={summaries} />
-        </section>
+          <SpotMap spots={spots} summaries={summaries} active={tab === "karte"} />
+        </VacationTabPanel>
       )}
 
-      {tab === "plan" && (
-        <section>
+      {visitedTabs.has("plan") && (
+        <VacationTabPanel id="plan" active={tab === "plan"}>
           <h1 className="display text-2xl">Plan</h1>
           <p className="mt-1 text-[13px] text-[var(--ink-soft)]">
             Tag wählen, Spots tippen — fertig
           </p>
           <DayPlanPanel vacation={vacation} spots={spots} />
-        </section>
+        </VacationTabPanel>
       )}
 
-      {tab === "team" && (
-        <section>
+      {visitedTabs.has("team") && (
+        <VacationTabPanel id="team" active={tab === "team"}>
           <h1 className="display text-2xl">Team</h1>
           <p className="mt-1 text-[13px] text-[var(--ink-soft)]">
             {members.length} Mitglied{members.length === 1 ? "" : "er"} · Einladung per
@@ -506,7 +518,7 @@ export default function VacationDetailPage() {
               )}
             </div>
           )}
-        </section>
+        </VacationTabPanel>
       )}
 
       <div className="md:hidden">

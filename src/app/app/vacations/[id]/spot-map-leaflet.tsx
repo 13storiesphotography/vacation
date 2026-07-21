@@ -84,12 +84,14 @@ export default function SpotMapLeaflet({
   selectedId,
   onSelect,
   expanded = false,
+  active = true,
 }: {
   spots: MappableSpot[];
   summaries: Record<string, SpotRatingSummary>;
   selectedId: string | null;
   onSelect: (id: string | null) => void;
   expanded?: boolean;
+  active?: boolean;
 }) {
   const markers = useMemo(
     () =>
@@ -118,7 +120,10 @@ export default function SpotMapLeaflet({
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
-      <LeafletGestureMode mode={expanded ? "greedy" : "cooperative"} />
+      <LeafletGestureMode
+        mode={expanded ? "greedy" : "cooperative"}
+        active={active}
+      />
       <FitBounds spots={spots} />
       {markers.map(({ spot, selected, icon, summary }) => (
         <Marker
