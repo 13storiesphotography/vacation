@@ -107,6 +107,7 @@ export async function POST(request: Request) {
   const mail = await sendInviteEmail(
     member.email,
     `${origin}/auth/callback?next=/auth/set-password`,
+    { supabase: auth.supabase, vacationId },
   );
 
   if (!mail.ok) {
