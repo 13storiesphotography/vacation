@@ -17,6 +17,7 @@ import {
 } from "@/components/app/vacation-tabbar";
 import { VacationTabPanel } from "@/components/app/vacation-tab-panel";
 import { DayPlanPanel } from "./day-plan-ui";
+import { isCompleteEmail } from "@/lib/email";
 import { MFA_ENROLL_GRACE_DAYS } from "@/lib/mfa";
 
 type Vacation = Database["public"]["Tables"]["vacations"]["Row"];
@@ -243,9 +244,15 @@ export default function VacationDetailPage() {
 
   async function onInvite(event: FormEvent) {
     event.preventDefault();
-    setInviting(true);
     setError(null);
     setMessage(null);
+
+    if (!isCompleteEmail(inviteEmail)) {
+      setError("Bitte gib eine vollständige E-Mail-Adresse ein (z. B. name@domain.de).");
+      return;
+    }
+
+    setInviting(true);
     const response = await fetch("/api/invite", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
@@ -493,6 +500,7 @@ export default function VacationDetailPage() {
                       className="glass-field px-3 py-3"
                       type="text"
                       inputMode="email"
+                      enterKeyHint="send"
                       name="vacation-invite-email"
                       id="vacation-invite-email"
                       autoComplete="off"
@@ -506,9 +514,17 @@ export default function VacationDetailPage() {
                       required
                       placeholder="email@example.com"
                       value={inviteEmail}
-                      onChange={(e) => setInviteEmail(e.target.value)}
+                      onChange={(e) => {
+                        setInviteEmail(e.target.value);
+                        if (message) setMessage(null);
+                        if (error) setError(null);
+                      }}
                     />
-                    <button type="submit" className="cta shrink-0" disabled={inviting}>
+                    <button
+                      type="submit"
+                      className="cta shrink-0"
+                      disabled={inviting || !isCompleteEmail(inviteEmail)}
+                    >
                       {inviting ? "…" : "Einladen"}
                     </button>
                   </div>

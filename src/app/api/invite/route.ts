@@ -1,14 +1,21 @@
 import { NextResponse } from "next/server";
+import { isCompleteEmail, normalizeEmail } from "@/lib/email";
 import { createAdminClient } from "@/lib/supabase/admin";
 import { createClient as createServerSupabase } from "@/lib/supabase/server";
 
 export async function POST(request: Request) {
   const body = (await request.json()) as { vacationId?: string; email?: string };
   const vacationId = body.vacationId?.trim();
-  const email = body.email?.trim().toLowerCase();
+  const email = normalizeEmail(body.email ?? "");
 
   if (!vacationId || !email) {
     return NextResponse.json({ error: "vacationId und email sind nötig." }, { status: 400 });
+  }
+  if (!isCompleteEmail(email)) {
+    return NextResponse.json(
+      { error: "Bitte gib eine vollständige E-Mail-Adresse ein (z. B. name@domain.de)." },
+      { status: 400 },
+    );
   }
 
   const supabase = await createServerSupabase();
@@ -45,9 +52,12 @@ export async function POST(request: Request) {
 
   const admin = createAdminClient();
   if (!admin) {
+    console.error(
+      "[invite] SUPABASE_SERVICE_ROLE_KEY fehlt — Mitgliedschaft angelegt, E-Mail nicht gesendet.",
+    );
     return NextResponse.json({
       ok: true,
-      note: "Mitgliedschaft angelegt. SUPABASE_SERVICE_ROLE_KEY fehlt — bitte Einladung manuell im Supabase Dashboard senden (Authentication → Users → Invite).",
+      note: "Person ist eingeladen, aber die E-Mail konnte nicht automatisch gesendet werden. Bitte den App-Admin kontaktieren oder die Einladung manuell in Supabase senden.",
     });
   }
 
@@ -57,9 +67,10 @@ export async function POST(request: Request) {
   });
 
   if (inviteError) {
+    console.error("[invite] inviteUserByEmail failed:", inviteError.message);
     return NextResponse.json({
       ok: true,
-      note: `Mitgliedschaft gespeichert, E-Mail-Invite: ${inviteError.message}`,
+      note: "Person ist eingeladen, aber der E-Mail-Versand ist fehlgeschlagen. Bitte später erneut versuchen oder manuell in Supabase einladen.",
     });
   }
 
