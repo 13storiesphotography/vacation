@@ -16,6 +16,7 @@ import {
   type VacationTabId,
 } from "@/components/app/vacation-tabbar";
 import { DayPlanPanel } from "./day-plan-ui";
+import { MFA_ENROLL_GRACE_DAYS } from "@/lib/mfa";
 
 type Vacation = Database["public"]["Tables"]["vacations"]["Row"];
 type Member = Database["public"]["Tables"]["vacation_members"]["Row"];
@@ -421,7 +422,8 @@ export default function VacationDetailPage() {
         <section>
           <h1 className="display text-2xl">Team</h1>
           <p className="mt-1 text-[13px] text-[var(--ink-soft)]">
-            {members.length} Mitglied{members.length === 1 ? "" : "er"}
+            {members.length} Mitglied{members.length === 1 ? "" : "er"} · Einladung per
+            E-Mail, danach Passwort + MFA ({MFA_ENROLL_GRACE_DAYS} Tage Schonfrist)
           </p>
 
           <div className="ios-group mt-4">
