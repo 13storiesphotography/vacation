@@ -11,28 +11,46 @@ export default function SignupPage() {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
+  const [info, setInfo] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
     setLoading(true);
     setError(null);
-    const supabase = createClient();
-    const { error: signUpError } = await supabase.auth.signUp({
-      email,
-      password,
-      options: {
-        data: { display_name: displayName },
-        emailRedirectTo: `${window.location.origin}/auth/callback`,
-      },
-    });
-    setLoading(false);
-    if (signUpError) {
-      setError(signUpError.message);
-      return;
+    setInfo(null);
+
+    try {
+      const supabase = createClient();
+      const { data, error: signUpError } = await supabase.auth.signUp({
+        email,
+        password,
+        options: {
+          data: { display_name: displayName },
+          emailRedirectTo: `${window.location.origin}/auth/callback?next=/app/mfa/enroll`,
+        },
+      });
+
+      if (signUpError) {
+        setError(signUpError.message);
+        return;
+      }
+
+      // Email confirmation enabled → no session until link is clicked
+      if (!data.session) {
+        setInfo(
+          "Konto angelegt. Bitte bestätige den Link in deiner E-Mail, danach kannst du dich anmelden und MFA einrichten.",
+        );
+        return;
+      }
+
+      router.replace("/app/mfa/enroll");
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Unbekannter Fehler beim Registrieren.");
+    } finally {
+      setLoading(false);
     }
-    router.replace("/app/mfa/enroll");
-    router.refresh();
   }
 
   return (
@@ -76,6 +94,7 @@ export default function SignupPage() {
           />
         </label>
         {error && <p className="mt-4 text-[14px] text-[var(--danger)]">{error}</p>}
+        {info && <p className="mt-4 text-[14px] text-[var(--pine)]">{info}</p>}
         <button type="submit" className="cta mt-6 w-full" disabled={loading}>
           {loading ? "…" : "Registrieren"}
         </button>
