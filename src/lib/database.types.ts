@@ -113,6 +113,7 @@ export type Database = {
           price_hint: string | null;
           stay_check_in: string | null;
           stay_check_out: string | null;
+          stay_nights: number | null;
           stay_status: "interessiert" | "gebucht" | null;
           tags: string[];
           created_by: string | null;
@@ -140,6 +141,7 @@ export type Database = {
           price_hint?: string | null;
           stay_check_in?: string | null;
           stay_check_out?: string | null;
+          stay_nights?: number | null;
           stay_status?: "interessiert" | "gebucht" | null;
           tags?: string[];
           created_by?: string | null;
@@ -167,6 +169,7 @@ export type Database = {
           price_hint?: string | null;
           stay_check_in?: string | null;
           stay_check_out?: string | null;
+          stay_nights?: number | null;
           stay_status?: "interessiert" | "gebucht" | null;
           tags?: string[];
           created_by?: string | null;

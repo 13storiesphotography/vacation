@@ -16,7 +16,7 @@ import {
 import { syncAllSpotStays } from "@/lib/apply-stay";
 import { createClient } from "@/lib/supabase/client";
 import { CategoryIcon } from "@/components/category-icon";
-import { formatStayRange, stayStatusLabels } from "@/lib/stay";
+import { formatStaySummary, stayStatusLabels } from "@/lib/stay";
 
 type Spot = Database["public"]["Tables"]["spots"]["Row"];
 type Vacation = Database["public"]["Tables"]["vacations"]["Row"];
@@ -673,8 +673,8 @@ export function DayPlanPanel({
                     {spot.stay_status
                       ? ` · ${stayStatusLabels[spot.stay_status]}`
                       : ""}
-                    {formatStayRange(spot.stay_check_in, spot.stay_check_out)
-                      ? ` · ${formatStayRange(spot.stay_check_in, spot.stay_check_out)}`
+                    {formatStaySummary(spot)
+                      ? ` · ${formatStaySummary(spot)}`
                       : spot.overnight_cost
                         ? ` · ${spot.overnight_cost}`
                         : ""}
