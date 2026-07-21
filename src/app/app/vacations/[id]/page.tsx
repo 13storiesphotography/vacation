@@ -1,10 +1,11 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useState } from "react";
 import { useParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import type { Database } from "@/lib/database.types";
+import { CreateSpotForm, SpotList } from "./spot-ui";
 
 type Vacation = Database["public"]["Tables"]["vacations"]["Row"];
 type Member = Database["public"]["Tables"]["vacation_members"]["Row"];
@@ -21,8 +22,10 @@ export default function VacationDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [inviting, setInviting] = useState(false);
+  const [showSpotForm, setShowSpotForm] = useState(false);
+  const [spotFormKey, setSpotFormKey] = useState(0);
 
-  async function load() {
+  const load = useCallback(async () => {
     const supabase = createClient();
     const [{ data: vacationData }, { data: memberData }, { data: spotData }] =
       await Promise.all([
@@ -42,12 +45,11 @@ export default function VacationDetailPage() {
     setMembers(memberData ?? []);
     setSpots(spotData ?? []);
     setLoading(false);
-  }
+  }, [vacationId]);
 
   useEffect(() => {
     void load();
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [vacationId]);
+  }, [load]);
 
   async function onInvite(event: FormEvent) {
     event.preventDefault();
@@ -104,6 +106,36 @@ export default function VacationDetailPage() {
       )}
 
       <section className="mt-8">
+        <div className="flex items-center justify-between gap-3">
+          <h2 className="display text-xl">Spots</h2>
+          <div className="flex items-center gap-3">
+            <span className="text-[13px] text-[var(--ink-soft)]">{spots.length}</span>
+            <button
+              type="button"
+              className="cta !px-3 !py-2 text-[13px]"
+              onClick={() => setShowSpotForm((value) => !value)}
+            >
+              {showSpotForm ? "Schließen" : "Hinzufügen"}
+            </button>
+          </div>
+        </div>
+
+        {showSpotForm && (
+          <CreateSpotForm
+            key={spotFormKey}
+            vacationId={vacationId}
+            onCreated={async () => {
+              setSpotFormKey((value) => value + 1);
+              setShowSpotForm(false);
+              await load();
+            }}
+          />
+        )}
+
+        <SpotList vacationId={vacationId} spots={spots} onChanged={load} />
+      </section>
+
+      <section className="mt-8">
         <h2 className="display text-xl">Team</h2>
         <div className="ios-group mt-3">
           {members.map((member) => (
@@ -135,29 +167,6 @@ export default function VacationDetailPage() {
           {message && <p className="mt-3 text-[13px] text-[var(--pine)]">{message}</p>}
           {error && <p className="mt-3 text-[13px] text-[var(--danger)]">{error}</p>}
         </form>
-      </section>
-
-      <section className="mt-8">
-        <div className="flex items-center justify-between gap-3">
-          <h2 className="display text-xl">Spots</h2>
-          <span className="text-[13px] text-[var(--ink-soft)]">{spots.length}</span>
-        </div>
-        <div className="ios-group mt-3">
-          {spots.length === 0 ? (
-            <div className="p-5 text-[14px] text-[var(--ink-soft)]">
-              Noch keine Spots. Als Nächstes bauen wir das Spot-Formulat und die Karte aus.
-            </div>
-          ) : (
-            spots.map((spot) => (
-              <div key={spot.id} className="ios-row">
-                <div>
-                  <p className="text-[15px] font-semibold">{spot.name}</p>
-                  <p className="text-[12px] text-[var(--ink-soft)]">{spot.category}</p>
-                </div>
-              </div>
-            ))
-          )}
-        </div>
       </section>
     </main>
   );
