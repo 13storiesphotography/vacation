@@ -10,6 +10,7 @@ import { SpotMap } from "./spot-map";
 import { EditVacationForm } from "./vacation-edit";
 import { summarizeRatings, type RaterOption, type SpotRating } from "@/lib/ratings";
 import { resolveSpotPreviewImage } from "@/lib/geo";
+import { healVacationSpotCoords } from "./maps-coords-actions";
 
 type Vacation = Database["public"]["Tables"]["vacations"]["Row"];
 type Member = Database["public"]["Tables"]["vacation_members"]["Row"];
@@ -89,6 +90,26 @@ export default function VacationDetailPage() {
   useEffect(() => {
     void load();
   }, [load]);
+
+  useEffect(() => {
+    let cancelled = false;
+    const storageKey = `heal-spot-coords:${vacationId}`;
+    try {
+      if (sessionStorage.getItem(storageKey)) return;
+      sessionStorage.setItem(storageKey, "1");
+    } catch {
+      // private mode — still attempt once this mount
+    }
+    void (async () => {
+      const { updated } = await healVacationSpotCoords(vacationId);
+      if (!cancelled && updated > 0) {
+        await load();
+      }
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [vacationId, load]);
 
   const summaries = useMemo(
     () => summarizeRatings(ratings, currentUserId),

@@ -21,7 +21,28 @@ function pair(lat: number, lng: number): LatLng | null {
   return isValidLatLng(lat, lng) ? { lat, lng } : null;
 }
 
-/** Extract lat/lng from common Google Maps URL shapes. */
+/** Place-pin patterns only — safe to run against Maps page HTML. */
+function parsePlacePinCoords(text: string): LatLng | null {
+  const placePin = text.match(
+    /!8m2!3d(-?\d+(?:\.\d+)?)!4d(-?\d+(?:\.\d+)?)/,
+  );
+  if (placePin) {
+    const found = pair(Number(placePin[1]), Number(placePin[2]));
+    if (found) return found;
+  }
+  const bangAll = [
+    ...text.matchAll(/!3d(-?\d+(?:\.\d+)?)!4d(-?\d+(?:\.\d+)?)/g),
+  ];
+  if (bangAll.length > 0) {
+    const last = bangAll[bangAll.length - 1];
+    return pair(Number(last[1]), Number(last[2]));
+  }
+  return null;
+}
+
+/** Extract lat/lng from common Google Maps URL shapes.
+ * Prefer place-pin coords (!3d/!4d) over camera viewport (@lat,lng).
+ */
 export function parseLatLngFromMapsUrl(
   url: string | null | undefined,
 ): LatLng | null {
@@ -29,19 +50,8 @@ export function parseLatLngFromMapsUrl(
   try {
     const decoded = decodeURIComponent(url.trim());
 
-    const atMatch = decoded.match(/@(-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?)/);
-    if (atMatch) {
-      const found = pair(Number(atMatch[1]), Number(atMatch[2]));
-      if (found) return found;
-    }
-
-    const bangMatch = decoded.match(
-      /!3d(-?\d+(?:\.\d+)?)!4d(-?\d+(?:\.\d+)?)/,
-    );
-    if (bangMatch) {
-      const found = pair(Number(bangMatch[1]), Number(bangMatch[2]));
-      if (found) return found;
-    }
+    const place = parsePlacePinCoords(decoded);
+    if (place) return place;
 
     const searchPath = decoded.match(
       /\/(?:maps\/)?search\/\s*(-?\d+(?:\.\d+)?)[,\s+]+(-?\d+(?:\.\d+)?)/i,
@@ -72,6 +82,13 @@ export function parseLatLngFromMapsUrl(
     );
     if (destPlain) {
       const found = pair(Number(destPlain[1]), Number(destPlain[2]));
+      if (found) return found;
+    }
+
+    // Viewport/camera — often offset from the actual place pin
+    const atMatch = decoded.match(/@(-?\d+(?:\.\d+)?),\s*(-?\d+(?:\.\d+)?)/);
+    if (atMatch) {
+      const found = pair(Number(atMatch[1]), Number(atMatch[2]));
       if (found) return found;
     }
 
@@ -269,7 +286,9 @@ export async function enrichFromMapsUrl(
   }
 
   const coords =
-    parseLatLngFromMapsUrl(resolvedUrl) ?? parseLatLngFromMapsUrl(original);
+    parseLatLngFromMapsUrl(resolvedUrl) ??
+    (page.html ? parsePlacePinCoords(page.html) : null) ??
+    parseLatLngFromMapsUrl(original);
 
   if (!imageUrl && coords) {
     imageUrl = previewImageFromCoords(coords.lat, coords.lng);
@@ -300,6 +319,11 @@ export function resolveSpotCoords(spot: {
   lng: number | null;
   maps_url: string | null;
 }): LatLng | null {
+  // Prefer coords embedded in the Maps URL (place pin) over stored lat/lng,
+  // which may have been saved from the camera @lat,lng viewport.
+  const fromUrl = parseLatLngFromMapsUrl(spot.maps_url);
+  if (fromUrl) return fromUrl;
+
   if (
     typeof spot.lat === "number" &&
     typeof spot.lng === "number" &&
@@ -307,7 +331,7 @@ export function resolveSpotCoords(spot: {
   ) {
     return { lat: spot.lat, lng: spot.lng };
   }
-  return parseLatLngFromMapsUrl(spot.maps_url);
+  return null;
 }
 
 /** Fix broken auto-previews (e.g. signed Google staticmap 403) for display. */
