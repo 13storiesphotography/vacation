@@ -266,7 +266,7 @@ export function DayPlanPanel({
         </p>
         <button
           type="button"
-          className="mt-4 text-[14px] font-semibold text-[var(--fjord)]"
+          className="glass-chip mt-4"
           onClick={() => {
             setLoading(true);
             setError(null);
@@ -297,7 +297,7 @@ export function DayPlanPanel({
     vacation.type === "van" || vacation.type === "camping";
 
   return (
-    <div className="mt-4 space-y-4">
+    <div className="mt-3 space-y-4">
       {error && (
         <p className="text-[13px] text-[var(--danger)]">{friendlyError(error)}</p>
       )}
@@ -357,7 +357,7 @@ export function DayPlanPanel({
               <input
                 value={titleDraft}
                 disabled={pending}
-                className="mt-1 w-full border-0 bg-transparent p-0 text-[22px] font-bold tracking-tight text-[var(--ink)] outline-none placeholder:text-[var(--ink-faint)]"
+                className="inline-title-field"
                 placeholder={`Tag ${selectedIndex + 1}`}
                 onChange={(event) => setTitleDraft(event.target.value)}
                 onBlur={() => {
@@ -408,7 +408,7 @@ export function DayPlanPanel({
               </p>
               <button
                 type="button"
-                className="text-[13px] font-semibold text-[var(--fjord)] disabled:opacity-40"
+                className="glass-chip"
                 disabled={pending || availableForDay.length === 0}
                 onClick={() => setPickerOpen((value) => !value)}
               >
@@ -417,7 +417,7 @@ export function DayPlanPanel({
             </div>
 
             {pickerOpen && (
-              <div className="mx-3 mb-3 rounded-[16px] bg-black/[0.03] p-2">
+              <div className="glass-subpanel mx-3 mb-3 p-2">
                 <input
                   autoFocus
                   value={query}
@@ -440,7 +440,7 @@ export function DayPlanPanel({
                           <button
                             type="button"
                             disabled={pending}
-                            className="flex w-full items-center gap-2.5 rounded-[12px] px-2 py-2.5 text-left hover:bg-white/70"
+                            className="flex w-full items-center gap-2.5 rounded-[12px] px-2 py-2.5 text-left hover:bg-[var(--fjord-soft)] disabled:opacity-50"
                             onClick={() =>
                               run(
                                 () =>
@@ -498,7 +498,7 @@ export function DayPlanPanel({
               <button
                 type="button"
                 disabled={pending || availableForDay.length === 0}
-                className="mx-3 mb-3 flex w-[calc(100%-1.5rem)] flex-col items-start rounded-[16px] border border-dashed border-[var(--separator)] bg-transparent px-4 py-5 text-left disabled:opacity-50"
+                className="glass-subpanel mx-3 mb-3 flex w-[calc(100%-1.5rem)] flex-col items-start border-dashed px-4 py-5 text-left disabled:opacity-50"
                 onClick={() => setPickerOpen(true)}
               >
                 <span className="text-[15px] font-semibold">Noch leer</span>

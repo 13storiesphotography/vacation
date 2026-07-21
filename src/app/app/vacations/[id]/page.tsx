@@ -308,18 +308,18 @@ export default function VacationDetailPage() {
           {!editingVacation ? (
             <div>
               <div className="flex items-start justify-between gap-3">
-                <h1 className="display text-3xl">{vacation.title}</h1>
+                <h1 className="display text-2xl">{vacation.title}</h1>
                 {canEditVacation && (
                   <button
                     type="button"
-                    className="shrink-0 text-[13px] font-semibold text-[var(--fjord)]"
+                    className="glass-chip shrink-0"
                     onClick={() => setEditingVacation(true)}
                   >
                     Bearbeiten
                   </button>
                 )}
               </div>
-              <p className="mt-2 text-[14px] text-[var(--ink-soft)]">
+              <p className="tab-subtitle">
                 {vacation.start_date} – {vacation.end_date}
                 {vacation.region ? ` · ${vacation.region}` : ""} · {vacation.type}
               </p>
@@ -328,7 +328,7 @@ export default function VacationDetailPage() {
                   {vacation.description}
                 </p>
               )}
-              <div className="ios-group mt-6">
+              <div className="ios-group mt-4">
                 <button
                   type="button"
                   className="ios-row ios-chevron"
@@ -372,7 +372,7 @@ export default function VacationDetailPage() {
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <h1 className="display text-2xl">Spots</h1>
-              <p className="mt-1 text-[13px] text-[var(--ink-soft)]">
+              <p className="tab-subtitle">
                 {spots.length} in der Sammlung
               </p>
             </div>
@@ -413,7 +413,7 @@ export default function VacationDetailPage() {
       {visitedTabs.has("karte") && (
         <VacationTabPanel id="karte" active={tab === "karte"}>
           <h1 className="display text-2xl">Karte</h1>
-          <p className="mt-1 text-[13px] text-[var(--ink-soft)]">
+          <p className="tab-subtitle">
             Alle Spots mit Position
           </p>
           <SpotMap spots={spots} summaries={summaries} active={tab === "karte"} />
@@ -423,7 +423,7 @@ export default function VacationDetailPage() {
       {visitedTabs.has("plan") && (
         <VacationTabPanel id="plan" active={tab === "plan"}>
           <h1 className="display text-2xl">Plan</h1>
-          <p className="mt-1 text-[13px] text-[var(--ink-soft)]">
+          <p className="tab-subtitle">
             Tag wählen, Spots tippen — fertig
           </p>
           <DayPlanPanel vacation={vacation} spots={spots} />
@@ -433,7 +433,7 @@ export default function VacationDetailPage() {
       {visitedTabs.has("team") && (
         <VacationTabPanel id="team" active={tab === "team"}>
           <h1 className="display text-2xl">Team</h1>
-          <p className="mt-1 text-[13px] text-[var(--ink-soft)]">
+          <p className="tab-subtitle">
             {members.length} Mitglied{members.length === 1 ? "" : "er"} · Einladung per
             E-Mail, danach Apple oder Passwort + MFA ({MFA_ENROLL_GRACE_DAYS} Tage Schonfrist)
           </p>
@@ -477,7 +477,7 @@ export default function VacationDetailPage() {
                     </p>
                     <button
                       type="button"
-                      className="text-[12px] font-semibold text-[var(--ink-faint)]"
+                      className="glass-chip"
                       onClick={() => {
                         setShowInvite(false);
                         setInviteEmail("");

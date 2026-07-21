@@ -5,7 +5,7 @@ export default function SignupPage() {
     <main className="shell flex min-h-screen items-center px-5 py-12">
       <div className="ios-group mx-auto w-full max-w-md p-6">
         <h1 className="display text-2xl">Nur per Einladung</h1>
-        <p className="mt-3 text-[15px] leading-relaxed text-[var(--ink-soft)]">
+        <p className="mt-2 text-[14px] leading-relaxed text-[var(--ink-soft)]">
           Neue Konten können sich nicht selbst registrieren. Ein Admin lädt dich ein — danach
           meldest du dich mit Apple oder E-Mail/Passwort an und richtest MFA ein.
         </p>

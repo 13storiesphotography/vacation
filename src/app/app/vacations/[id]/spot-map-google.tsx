@@ -218,7 +218,7 @@ export default function SpotMapGoogle({
 
   if (!apiKey) {
     return (
-      <div className="flex h-full flex-col items-center justify-center gap-2 rounded-[18px] bg-[linear-gradient(160deg,#c5d5d0,#8aa4ad)] px-6 text-center text-white">
+      <div className="flex h-full flex-col items-center justify-center gap-2 rounded-[18px] media-fallback px-6 text-center text-white">
         <p className="text-[15px] font-semibold">Google Maps Key fehlt</p>
         <p className="max-w-sm text-[13px] text-white/90">
           In Vercel/Env{" "}
@@ -231,7 +231,7 @@ export default function SpotMapGoogle({
 
   if (error) {
     return (
-      <div className="flex h-full items-center justify-center rounded-[18px] bg-[linear-gradient(160deg,#c5d5d0,#8aa4ad)] px-6 text-center text-[14px] font-semibold text-white">
+      <div className="flex h-full items-center justify-center rounded-[18px] media-fallback px-6 text-center text-[14px] font-semibold text-white">
         {error}
       </div>
     );

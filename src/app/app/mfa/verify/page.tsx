@@ -54,7 +54,7 @@ export default function VerifyMfaPage() {
         <p className="mt-2 text-[14px] text-[var(--ink-soft)]">
           Öffne deine Authenticator-App und gib den aktuellen Code ein.
         </p>
-        <label className="mt-6 block text-[13px] font-semibold text-[var(--ink-soft)]">
+        <label className="form-label mt-6">
           6-stelliger Code
           <input
             className="glass-field mt-1.5 px-3 py-3 text-center text-[20px] tracking-[0.3em]"
