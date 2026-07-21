@@ -37,11 +37,19 @@
 
 html {
   scroll-behavior: smooth;
+  overflow-x: hidden;
+  overscroll-behavior-x: none;
+  width: 100%;
+  max-width: 100%;
 }
 
 body {
   margin: 0;
   min-height: 100%;
+  width: 100%;
+  max-width: 100%;
+  overflow-x: hidden;
+  overscroll-behavior-x: none;
   color: var(--ink);
   background:
     radial-gradient(900px 500px at 80% -10%, rgba(15, 110, 140, 0.12), transparent 55%),
@@ -50,6 +58,13 @@ body {
   font-family: var(--font-body), "Plus Jakarta Sans", sans-serif;
   letter-spacing: -0.01em;
   -webkit-font-smoothing: antialiased;
+}
+
+/* Nested horizontal carousels may scroll sideways without moving the page. */
+.plan-day-strip,
+.plan-quick-row {
+  touch-action: pan-x pinch-zoom;
+  overscroll-behavior-x: contain;
 }
 
 a {

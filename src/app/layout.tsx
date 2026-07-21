@@ -14,6 +14,12 @@ export const metadata: Metadata = {
     "Konzept und Live-Demo für den Vacation Planer: Spots sammeln, Karte, Tagesplan und Team-Einladungen mit MFA.",
 };
 
+export const viewport = {
+  width: "device-width",
+  initialScale: 1,
+  viewportFit: "cover",
+};
+
 export default function RootLayout({
   children,
 }: Readonly<{

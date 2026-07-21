@@ -320,7 +320,7 @@ export function DayPlanPanel({
       {/* Day strip */}
       <div
         ref={dayStripRef}
-        className="plan-day-strip -mx-1 flex gap-2 overflow-x-auto px-1 pb-1"
+        className="plan-day-strip flex gap-2 overflow-x-auto pb-1"
       >
         {days.map((day, index) => {
           const active = day.id === selectedId;
@@ -686,7 +686,7 @@ export function DayPlanPanel({
               <p className="mb-2 px-0.5 text-[12px] font-semibold uppercase tracking-wide text-[var(--ink-faint)]">
                 Noch nicht eingeplant
               </p>
-              <div className="flex gap-2 overflow-x-auto pb-1">
+              <div className="plan-quick-row flex gap-2 overflow-x-auto pb-1">
                 {unplannedSpots.slice(0, 12).map((spot) => (
                   <button
                     key={spot.id}
