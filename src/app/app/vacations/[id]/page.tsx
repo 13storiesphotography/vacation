@@ -7,6 +7,7 @@ import { createClient } from "@/lib/supabase/client";
 import type { Database } from "@/lib/database.types";
 import { CreateSpotForm, SpotList } from "./spot-ui";
 import { SpotMap } from "./spot-map";
+import { EditVacationForm } from "./vacation-edit";
 import { summarizeRatings, type RaterOption, type SpotRating } from "@/lib/ratings";
 
 type Vacation = Database["public"]["Tables"]["vacations"]["Row"];
@@ -31,6 +32,7 @@ export default function VacationDetailPage() {
   const [showSpotForm, setShowSpotForm] = useState(false);
   const [spotFormKey, setSpotFormKey] = useState(0);
   const [spotsView, setSpotsView] = useState<"list" | "map">("list");
+  const [editingVacation, setEditingVacation] = useState(false);
 
   const load = useCallback(async () => {
     const supabase = createClient();
@@ -97,6 +99,16 @@ export default function VacationDetailPage() {
       });
   }, [members, profiles]);
 
+  const canEditVacation = useMemo(() => {
+    if (!currentUserId) return false;
+    return members.some(
+      (member) =>
+        member.user_id === currentUserId &&
+        member.status === "active" &&
+        member.role === "admin",
+    );
+  }, [currentUserId, members]);
+
   async function onInvite(event: FormEvent) {
     event.preventDefault();
     setInviting(true);
@@ -144,15 +156,39 @@ export default function VacationDetailPage() {
       <Link href="/app" className="text-[13px] font-semibold text-[var(--fjord)]">
         ← Urlaube
       </Link>
-      <h1 className="display mt-3 text-3xl">{vacation.title}</h1>
-      <p className="mt-2 text-[14px] text-[var(--ink-soft)]">
-        {vacation.start_date} – {vacation.end_date}
-        {vacation.region ? ` · ${vacation.region}` : ""} · {vacation.type}
-      </p>
-      {vacation.description && (
-        <p className="mt-3 text-[15px] leading-relaxed text-[var(--ink-soft)]">
-          {vacation.description}
-        </p>
+
+      {!editingVacation ? (
+        <div className="mt-3">
+          <div className="flex items-start justify-between gap-3">
+            <h1 className="display text-3xl">{vacation.title}</h1>
+            {canEditVacation && (
+              <button
+                type="button"
+                className="shrink-0 text-[13px] font-semibold text-[var(--fjord)]"
+                onClick={() => setEditingVacation(true)}
+              >
+                Bearbeiten
+              </button>
+            )}
+          </div>
+          <p className="mt-2 text-[14px] text-[var(--ink-soft)]">
+            {vacation.start_date} – {vacation.end_date}
+            {vacation.region ? ` · ${vacation.region}` : ""} · {vacation.type}
+          </p>
+          {vacation.description && (
+            <p className="mt-3 text-[15px] leading-relaxed text-[var(--ink-soft)]">
+              {vacation.description}
+            </p>
+          )}
+        </div>
+      ) : (
+        <EditVacationForm
+          vacation={vacation}
+          onDone={async () => {
+            setEditingVacation(false);
+            await load();
+          }}
+        />
       )}
 
       <section className="mt-8">
