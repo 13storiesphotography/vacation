@@ -23,7 +23,6 @@ import { isStaleServerActionError, reloadForStaleDeployment } from "@/lib/stale-
 import {
   checkoutFromNights,
   formatStaySummary,
-  resolveStayNights,
   stayNightCountFromDates,
   stayStatusLabels,
   type StayStatus,
@@ -311,17 +310,48 @@ function SpotFormFields({
   onDetailsOpenChange: (value: boolean) => void;
 }) {
   const derivedNights = stayNightCountFromDates(stayCheckIn || null, stayCheckOut || null);
-  const nightsValue =
-    stayNights !== ""
-      ? stayNights
-      : derivedNights > 0
-        ? String(derivedNights)
-        : "";
-  const staySummary = formatStaySummary({
-    stay_nights: stayNights ? Number.parseInt(stayNights, 10) || null : null,
-    stay_check_in: stayCheckIn || null,
-    stay_check_out: stayCheckOut || null,
-  });
+  // Controlled only by stayNights — never ghost-fill from dates (that blocked clearing).
+  const nightsValue = stayNights;
+  const explicitNights = stayNights
+    ? Number.parseInt(stayNights, 10) || null
+    : null;
+  // While editing: do not imply nights from dates when the nights field is empty.
+  const staySummary = explicitNights
+    ? formatStaySummary({
+        stay_nights: explicitNights,
+        stay_check_in: stayCheckIn || null,
+        stay_check_out: stayCheckOut || null,
+      })
+    : stayCheckIn && stayCheckOut
+      ? (() => {
+          const fmt = new Intl.DateTimeFormat("de-DE", {
+            day: "numeric",
+            month: "short",
+          });
+          const from = fmt.format(new Date(`${stayCheckIn}T12:00:00Z`));
+          const to = fmt.format(new Date(`${stayCheckOut}T12:00:00Z`));
+          return `${from} → ${to} · Nächte offen`;
+        })()
+      : stayCheckIn || stayCheckOut
+        ? "Datum unvollständig"
+        : null;
+  const hasStay =
+    Boolean(stayNights.trim()) || Boolean(stayCheckIn) || Boolean(stayCheckOut);
+
+  function clearStay() {
+    onStayNightsChange("");
+    onStayCheckInChange("");
+    onStayCheckOutChange("");
+  }
+
+  function clearDates() {
+    onStayCheckInChange("");
+    onStayCheckOutChange("");
+  }
+
+  function clearNights() {
+    onStayNightsChange("");
+  }
 
   return (
     <>
@@ -363,42 +393,55 @@ function SpotFormFields({
 
       {showOvernight && (
         <div className="mt-3 space-y-3">
-          <p className="text-[12px] font-semibold uppercase tracking-wide text-[var(--ink-faint)]">
-            Aufenthalt
-          </p>
+          <div className="flex items-center justify-between gap-3">
+            <p className="text-[12px] font-semibold uppercase tracking-wide text-[var(--ink-faint)]">
+              Aufenthalt
+            </p>
+            {hasStay ? (
+              <button
+                type="button"
+                className="glass-chip glass-chip-danger !py-1 !text-[11px]"
+                onClick={clearStay}
+              >
+                Leeren
+              </button>
+            ) : null}
+          </div>
           <div className="grid grid-cols-2 gap-3">
             <label className="form-label">
-              Nächte
+              <span className="flex items-center justify-between gap-2">
+                Nächte
+                {nightsValue ? (
+                  <button
+                    type="button"
+                    className="text-[11px] font-semibold text-[var(--danger)]"
+                    onClick={clearNights}
+                  >
+                    Entfernen
+                  </button>
+                ) : null}
+              </span>
               <input
-                type="number"
+                type="text"
                 name="stay_nights"
-                min={1}
-                max={60}
                 inputMode="numeric"
+                pattern="[0-9]*"
+                autoComplete="off"
                 value={nightsValue}
                 placeholder="z. B. 2"
                 onChange={(e) => {
-                  const next = e.target.value;
-                  // Allow clearing the field completely.
+                  const next = e.target.value.replace(/[^\d]/g, "");
                   if (next === "") {
                     onStayNightsChange("");
-                    onStayCheckInChange("");
-                    onStayCheckOutChange("");
-                    return;
-                  }
-                  // Allow typing partial values like "" while editing.
-                  if (!/^\d+$/.test(next)) {
-                    onStayNightsChange(next);
                     return;
                   }
                   const raw = Number.parseInt(next, 10);
-                  if (!Number.isFinite(raw) || raw < 1) {
-                    onStayNightsChange(next);
+                  if (!Number.isFinite(raw)) {
+                    onStayNightsChange("");
                     return;
                   }
-                  const capped = Math.min(60, raw);
+                  const capped = Math.min(60, Math.max(1, raw));
                   onStayNightsChange(String(capped));
-                  // Only sync checkout when Anreise is already set — nights alone is fine.
                   if (stayCheckIn) {
                     onStayCheckOutChange(checkoutFromNights(stayCheckIn, capped));
                   }
@@ -422,7 +465,18 @@ function SpotFormFields({
           </div>
           <div className="grid grid-cols-2 gap-3">
             <label className="form-label">
-              Anreise
+              <span className="flex items-center justify-between gap-2">
+                Anreise
+                {stayCheckIn ? (
+                  <button
+                    type="button"
+                    className="text-[11px] font-semibold text-[var(--danger)]"
+                    onClick={clearDates}
+                  >
+                    Entfernen
+                  </button>
+                ) : null}
+              </span>
               <input
                 type="date"
                 name="stay_check_in"
@@ -434,16 +488,35 @@ function SpotFormFields({
                     onStayCheckOutChange("");
                     return;
                   }
-                  const nights =
-                    Number.parseInt(stayNights || String(derivedNights || "1"), 10) || 1;
-                  onStayNightsChange(String(nights));
-                  onStayCheckOutChange(checkoutFromNights(nextIn, nights));
+                  // Keep existing nights if set; otherwise leave nights empty
+                  // so dates can exist without a forced nights count.
+                  if (stayNights) {
+                    const nights = Number.parseInt(stayNights, 10) || 1;
+                    onStayCheckOutChange(checkoutFromNights(nextIn, nights));
+                  } else if (stayCheckOut && stayCheckOut > nextIn) {
+                    // keep checkout; nights stay empty
+                  } else if (derivedNights > 0) {
+                    onStayCheckOutChange(checkoutFromNights(nextIn, derivedNights));
+                  } else {
+                    onStayCheckOutChange(checkoutFromNights(nextIn, 1));
+                  }
                 }}
                 className="glass-field mt-1.5 px-3 py-3"
               />
             </label>
             <label className="form-label">
-              Abreise
+              <span className="flex items-center justify-between gap-2">
+                Abreise
+                {stayCheckOut ? (
+                  <button
+                    type="button"
+                    className="text-[11px] font-semibold text-[var(--danger)]"
+                    onClick={clearDates}
+                  >
+                    Entfernen
+                  </button>
+                ) : null}
+              </span>
               <input
                 type="date"
                 name="stay_check_out"
@@ -452,7 +525,12 @@ function SpotFormFields({
                   const nextOut = e.target.value;
                   onStayCheckOutChange(nextOut);
                   if (!nextOut) return;
-                  if (stayCheckIn && nextOut > stayCheckIn) {
+                  // Only sync nights from dates when the nights field already has a value.
+                  if (
+                    stayNights &&
+                    stayCheckIn &&
+                    nextOut > stayCheckIn
+                  ) {
                     const n = stayNightCountFromDates(stayCheckIn, nextOut);
                     if (n > 0) onStayNightsChange(String(n));
                   }
@@ -473,7 +551,7 @@ function SpotFormFields({
             </p>
           ) : (
             <p className="text-[12px] text-[var(--ink-faint)]">
-              Nächte allein reichen — Datum ist optional für die Planung.
+              Nächte allein reichen — Datum ist optional. Beides lässt sich wieder leeren.
             </p>
           )}
         </div>
@@ -763,12 +841,9 @@ export function EditSpotForm({
   const [overnightCost, setOvernightCost] = useState(spot.overnight_cost ?? "");
   const [stayCheckIn, setStayCheckIn] = useState(spot.stay_check_in ?? "");
   const [stayCheckOut, setStayCheckOut] = useState(spot.stay_check_out ?? "");
+  // Only load explicit stay_nights — never ghost-fill from dates (blocked clearing).
   const [stayNights, setStayNights] = useState(
-    spot.stay_nights != null
-      ? String(spot.stay_nights)
-      : resolveStayNights(spot)
-        ? String(resolveStayNights(spot))
-        : "",
+    spot.stay_nights != null ? String(spot.stay_nights) : "",
   );
   const [stayStatus, setStayStatus] = useState(spot.stay_status ?? "");
   const [detailsOpen, setDetailsOpen] = useState(false);
