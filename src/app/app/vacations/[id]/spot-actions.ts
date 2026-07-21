@@ -49,6 +49,7 @@ async function readSpotFields(formData: FormData) {
   const priceHint = String(formData.get("price_hint") ?? "").trim();
   const stayCheckIn = String(formData.get("stay_check_in") ?? "").trim() || null;
   const stayCheckOut = String(formData.get("stay_check_out") ?? "").trim() || null;
+  // Empty nights field must stay empty — do not re-derive from dates on save.
   const stayNights = parseStayNights(String(formData.get("stay_nights") ?? ""));
   const stayStatus = parseStayStatus(String(formData.get("stay_status") ?? "").trim());
   const tags = parseTags(String(formData.get("tags") ?? ""));
@@ -63,17 +64,6 @@ async function readSpotFields(formData: FormData) {
   if (stayError) {
     return { error: stayError } as const;
   }
-
-  // If dates exist but nights empty, derive nights from dates for storage.
-  const resolvedNights =
-    stayNights ??
-    (stayCheckIn && stayCheckOut
-      ? Math.max(1, Math.round(
-          (Date.parse(`${stayCheckOut}T12:00:00Z`) -
-            Date.parse(`${stayCheckIn}T12:00:00Z`)) /
-            86_400_000,
-        ))
-      : null);
 
   let lat: number | null = null;
   let lng: number | null = null;
@@ -139,7 +129,7 @@ async function readSpotFields(formData: FormData) {
       price_hint: overnight ? priceHint || null : null,
       stay_check_in: overnight ? stayCheckIn : null,
       stay_check_out: overnight ? stayCheckOut : null,
-      stay_nights: overnight ? resolvedNights : null,
+      stay_nights: overnight ? stayNights : null,
       stay_status: overnight ? stayStatus : null,
       tags,
       lat,
