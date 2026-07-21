@@ -10,14 +10,25 @@ Konzept und Live-Demo für einen gemeinsamen Vacation Planer.
 4. **Tage planen** – Stops sortieren, bei Van-Urlauben Übernachtung pro Tag (frei/kostenpflichtig)
 5. **Zusammenarbeiten** – Admin lädt ein, Member setzt Passwort + MFA
 
-## Lokal starten
+## Live auf GitHub Pages
+
+Nach einmaligem Aktivieren unter **Settings → Pages → Source: GitHub Pages**  
+(Build/Deploy über GitHub Actions) ist die Demo unter:
+
+**https://13storiesphotography.github.io/vacation/**
+
+Lokal ohne `basePath`:
 
 ```bash
 npm install
 npm run dev
 ```
 
-Öffne [http://localhost:3000](http://localhost:3000).
+Für denselben Build wie auf Pages:
+
+```bash
+GITHUB_PAGES=true npm run build
+```
 
 ## Stack (geplant)
 
