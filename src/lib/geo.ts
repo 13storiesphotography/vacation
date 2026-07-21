@@ -1,5 +1,11 @@
 export type LatLng = { lat: number; lng: number };
 
+export type MapsEnrichment = {
+  resolvedUrl: string | null;
+  coords: LatLng | null;
+  imageUrl: string | null;
+};
+
 export function isValidLatLng(lat: number, lng: number): boolean {
   return (
     Number.isFinite(lat) &&
@@ -69,7 +75,6 @@ export function parseLatLngFromMapsUrl(
       if (found) return found;
     }
 
-    // Fallback: first plausible coordinate pair in the URL
     const loose = decoded.match(
       /(-?\d{1,2}\.\d{3,}),\s*(-?\d{1,3}\.\d{3,})/,
     );
@@ -97,13 +102,50 @@ export function isShortMapsUrl(url: string): boolean {
   }
 }
 
-/** Follow redirects for short Google Maps share links. */
-export async function expandMapsUrl(url: string): Promise<string> {
-  const trimmed = url.trim();
-  if (!trimmed || !isShortMapsUrl(trimmed)) return trimmed;
+function parseOgImage(html: string): string | null {
+  const patterns = [
+    /<meta[^>]+property=["']og:image(?::secure_url)?["'][^>]+content=["']([^"']+)["']/i,
+    /<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image(?::secure_url)?["']/i,
+    /<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["']/i,
+    /<meta[^>]+content=["']([^"']+)["'][^>]+name=["']twitter:image["']/i,
+  ];
+  for (const pattern of patterns) {
+    const match = html.match(pattern);
+    if (match?.[1]) {
+      try {
+        const url = decodeURIComponent(match[1].trim());
+        if (/^https?:\/\//i.test(url)) return url;
+      } catch {
+        if (/^https?:\/\//i.test(match[1].trim())) return match[1].trim();
+      }
+    }
+  }
+  return null;
+}
 
+function parseResolvedUrlFromHtml(html: string, fallback: string): string {
+  const canonical = html.match(
+    /<link[^>]+rel=["']canonical["'][^>]+href=["']([^"']+)["']/i,
+  );
+  if (canonical?.[1]) return canonical[1];
+
+  const og = html.match(
+    /<meta[^>]+property=["']og:url["'][^>]+content=["']([^"']+)["']/i,
+  );
+  if (og?.[1]) return og[1];
+
+  const refresh = html.match(/content=["']\d+;\s*url=([^"']+)["']/i);
+  if (refresh?.[1]) return refresh[1];
+
+  return fallback;
+}
+
+async function fetchMapsPage(url: string): Promise<{
+  finalUrl: string;
+  html: string | null;
+}> {
   try {
-    const response = await fetch(trimmed, {
+    const response = await fetch(url, {
       method: "GET",
       redirect: "follow",
       headers: {
@@ -113,42 +155,81 @@ export async function expandMapsUrl(url: string): Promise<string> {
       },
       signal: AbortSignal.timeout(10000),
     });
-
-    if (response.url && response.url !== trimmed) {
-      return response.url;
-    }
-
     const html = await response.text();
-    const canonical = html.match(
-      /<link[^>]+rel=["']canonical["'][^>]+href=["']([^"']+)["']/i,
-    );
-    if (canonical?.[1]) return canonical[1];
-
-    const og = html.match(
-      /<meta[^>]+property=["']og:url["'][^>]+content=["']([^"']+)["']/i,
-    );
-    if (og?.[1]) return og[1];
-
-    const refresh = html.match(
-      /content=["']\d+;\s*url=([^"']+)["']/i,
-    );
-    if (refresh?.[1]) return refresh[1];
+    return {
+      finalUrl: response.url || url,
+      html,
+    };
   } catch {
-    // Keep original URL; parser may still succeed for full links.
+    return { finalUrl: url, html: null };
+  }
+}
+
+export function streetViewImageUrl(lat: number, lng: number): string | null {
+  const key = process.env.GOOGLE_MAPS_API_KEY?.trim();
+  if (!key) return null;
+  const params = new URLSearchParams({
+    size: "640x360",
+    location: `${lat},${lng}`,
+    fov: "80",
+    pitch: "0",
+    key,
+  });
+  return `https://maps.googleapis.com/maps/api/streetview?${params.toString()}`;
+}
+
+/** Resolve coords + optional preview image from a Google Maps share/place URL. */
+export async function enrichFromMapsUrl(
+  url: string | null | undefined,
+): Promise<MapsEnrichment> {
+  if (!url?.trim()) {
+    return { resolvedUrl: null, coords: null, imageUrl: null };
   }
 
-  return trimmed;
+  const original = url.trim();
+  let resolvedUrl = original;
+  let imageUrl: string | null = null;
+
+  const page = await fetchMapsPage(original);
+  if (page.html) {
+    resolvedUrl = page.finalUrl !== original
+      ? page.finalUrl
+      : parseResolvedUrlFromHtml(page.html, page.finalUrl);
+    imageUrl = parseOgImage(page.html);
+  } else if (isShortMapsUrl(original)) {
+    resolvedUrl = page.finalUrl;
+  }
+
+  // If short link resolved but no image yet, fetch the long URL once more.
+  if (!imageUrl && resolvedUrl !== original && !isShortMapsUrl(resolvedUrl)) {
+    const longPage = await fetchMapsPage(resolvedUrl);
+    if (longPage.html) {
+      imageUrl = parseOgImage(longPage.html);
+      resolvedUrl = longPage.finalUrl || resolvedUrl;
+    }
+  }
+
+  const coords =
+    parseLatLngFromMapsUrl(resolvedUrl) ?? parseLatLngFromMapsUrl(original);
+
+  if (!imageUrl && coords) {
+    imageUrl = streetViewImageUrl(coords.lat, coords.lng);
+  }
+
+  return { resolvedUrl, coords, imageUrl };
 }
 
 export async function extractCoordsFromMapsUrl(
   url: string | null | undefined,
 ): Promise<{ coords: LatLng | null; resolvedUrl: string | null }> {
-  if (!url?.trim()) return { coords: null, resolvedUrl: null };
-  const resolvedUrl = await expandMapsUrl(url.trim());
-  const fromResolved = parseLatLngFromMapsUrl(resolvedUrl);
-  if (fromResolved) return { coords: fromResolved, resolvedUrl };
-  const fromOriginal = parseLatLngFromMapsUrl(url);
-  return { coords: fromOriginal, resolvedUrl };
+  const enriched = await enrichFromMapsUrl(url);
+  return { coords: enriched.coords, resolvedUrl: enriched.resolvedUrl };
+}
+
+/** Follow redirects for short Google Maps share links. */
+export async function expandMapsUrl(url: string): Promise<string> {
+  const enriched = await enrichFromMapsUrl(url);
+  return enriched.resolvedUrl ?? url.trim();
 }
 
 export function resolveSpotCoords(spot: {

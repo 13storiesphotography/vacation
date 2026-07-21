@@ -2,7 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
-import { extractCoordsFromMapsUrl } from "@/lib/geo";
+import { enrichFromMapsUrl } from "@/lib/geo";
 import { parseTags, type OvernightCost, type SpotCategory } from "@/lib/spots";
 
 export type SpotActionState = {
@@ -39,23 +39,30 @@ async function readSpotFields(formData: FormData) {
   const overnightCost = (overnightRaw || null) as OvernightCost | null;
   const priceHint = String(formData.get("price_hint") ?? "").trim();
   const tags = parseTags(String(formData.get("tags") ?? ""));
+  const imageUrlManual = String(formData.get("image_url") ?? "").trim();
+  const previousAutoImage = String(formData.get("previous_image_url") ?? "").trim();
 
   let lat: number | null = null;
   let lng: number | null = null;
   let storedMapsUrl: string | null = mapsUrl || null;
+  let imageUrl: string | null = imageUrlManual || null;
+  let imageManual = Boolean(imageUrlManual);
 
   if (mapsUrl) {
-    const { coords, resolvedUrl } = await extractCoordsFromMapsUrl(mapsUrl);
-    if (!coords) {
+    const enriched = await enrichFromMapsUrl(mapsUrl);
+    if (!enriched.coords) {
       return {
         error:
           "Im Google-Maps-Link steckt keine Position. Ort in Maps öffnen und „Link teilen“ verwenden.",
       } as const;
     }
-    lat = coords.lat;
-    lng = coords.lng;
-    // Keep the original share link if it's short; still store coords.
-    storedMapsUrl = mapsUrl || resolvedUrl;
+    lat = enriched.coords.lat;
+    lng = enriched.coords.lng;
+    storedMapsUrl = mapsUrl || enriched.resolvedUrl;
+    if (!imageManual) {
+      imageUrl = enriched.imageUrl || previousAutoImage || null;
+      imageManual = false;
+    }
   }
 
   return {
@@ -70,6 +77,8 @@ async function readSpotFields(formData: FormData) {
       tags,
       lat,
       lng,
+      image_url: imageUrl,
+      image_manual: imageManual,
     },
   } as const;
 }

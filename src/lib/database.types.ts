@@ -106,6 +106,8 @@ export type Database = {
           lng: number | null;
           maps_url: string | null;
           info_url: string | null;
+          image_url: string | null;
+          image_manual: boolean;
           overnight_cost: "frei" | "kostenpflichtig" | null;
           price_hint: string | null;
           tags: string[];
@@ -127,6 +129,8 @@ export type Database = {
           lng?: number | null;
           maps_url?: string | null;
           info_url?: string | null;
+          image_url?: string | null;
+          image_manual?: boolean;
           overnight_cost?: "frei" | "kostenpflichtig" | null;
           price_hint?: string | null;
           tags?: string[];
@@ -148,6 +152,8 @@ export type Database = {
           lng?: number | null;
           maps_url?: string | null;
           info_url?: string | null;
+          image_url?: string | null;
+          image_manual?: boolean;
           overnight_cost?: "frei" | "kostenpflichtig" | null;
           price_hint?: string | null;
           tags?: string[];

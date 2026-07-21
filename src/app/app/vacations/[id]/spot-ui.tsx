@@ -124,6 +124,43 @@ function MapsUrlField({ defaultValue = "" }: { defaultValue?: string }) {
   );
 }
 
+function SpotThumb({
+  spot,
+  size = 72,
+}: {
+  spot: Spot;
+  size?: number;
+}) {
+  const [broken, setBroken] = useState(false);
+  const showImage = Boolean(spot.image_url) && !broken;
+
+  return (
+    <div
+      className="relative shrink-0 overflow-hidden rounded-[14px] bg-[linear-gradient(160deg,#c5d5d0,#8aa4ad)]"
+      style={{ width: size, height: size }}
+    >
+      {showImage ? (
+        // eslint-disable-next-line @next/next/no-img-element
+        <img
+          src={spot.image_url!}
+          alt=""
+          className="h-full w-full object-cover"
+          loading="lazy"
+          referrerPolicy="no-referrer"
+          onError={() => setBroken(true)}
+        />
+      ) : (
+        <div className="flex h-full w-full items-center justify-center bg-black/5">
+          <CategoryIcon category={spot.category} size={Math.round(size * 0.36)} tone="#ffffff" />
+        </div>
+      )}
+      <span className="absolute bottom-1 left-1 inline-flex rounded-full bg-white/95 p-1 shadow-sm">
+        <CategoryIcon category={spot.category} size={12} />
+      </span>
+    </div>
+  );
+}
+
 function SpotFormFields({
   spot,
   showOvernight,
@@ -174,6 +211,37 @@ function SpotFormFields({
       </label>
 
       <MapsUrlField defaultValue={spot?.maps_url ?? ""} />
+
+      <label className="mt-3 block text-[13px] font-semibold text-[var(--ink-soft)]">
+        Vorschaubild (optional)
+        {spot?.image_url && !spot.image_manual ? (
+          <input type="hidden" name="previous_image_url" value={spot.image_url} />
+        ) : null}
+        <input
+          name="image_url"
+          type="url"
+          defaultValue={spot?.image_manual ? (spot.image_url ?? "") : ""}
+          className="mt-1.5 w-full rounded-[12px] border-0 bg-black/5 px-3 py-3 text-[15px] outline-none ring-[var(--fjord)] focus:ring-2"
+          placeholder="https://… (leer = automatisch aus Maps)"
+        />
+        <span className="mt-1 block text-[11px] font-medium text-[var(--ink-faint)]">
+          Leer lassen für automatisches Maps-Bild. Eigene URL überschreibt das.
+          {spot?.image_url && !spot.image_manual
+            ? " Aktuell: automatisch gesetzt."
+            : ""}
+        </span>
+        {spot?.image_url && !spot.image_manual ? (
+          <span className="mt-2 block overflow-hidden rounded-[12px]">
+            {/* eslint-disable-next-line @next/next/no-img-element */}
+            <img
+              src={spot.image_url}
+              alt=""
+              className="h-28 w-full object-cover"
+              referrerPolicy="no-referrer"
+            />
+          </span>
+        ) : null}
+      </label>
 
       <label className="mt-3 block text-[13px] font-semibold text-[var(--ink-soft)]">
         Buchung / Info Link
@@ -529,7 +597,7 @@ export function SpotList({
             return (
               <div key={spot.id}>
                 <div className="ios-row !items-start">
-                  <CategoryIcon category={spot.category} size={18} className="mt-0.5" />
+                  <SpotThumb spot={spot} size={76} />
                   <div className="min-w-0 flex-1">
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0 flex-1">
