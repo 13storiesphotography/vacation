@@ -44,6 +44,7 @@ async function readSpotFields(formData: FormData) {
   const imageUrlManual = String(formData.get("image_url") ?? "").trim();
   const previousAutoImage = String(formData.get("previous_image_url") ?? "").trim();
   const airbnbListing = isAirbnbUrl(infoUrl);
+  const hasListingLink = Boolean(infoUrl);
 
   let lat: number | null = null;
   let lng: number | null = null;
@@ -101,9 +102,10 @@ async function readSpotFields(formData: FormData) {
       lat,
       lng,
       image_url: imageUrl,
-      image_manual: imageManual || (airbnbListing && Boolean(imageUrlManual)),
+      image_manual: imageManual || (hasListingLink && Boolean(imageUrlManual) && !mapsUrl),
     },
     airbnbListing,
+    hasListingLink,
   } as const;
 }
 
@@ -114,10 +116,9 @@ function requireLocationOrListing(
     return { error: parsed.error || "Spot konnte nicht gelesen werden." };
   }
   if (!parsed.fields.name) return { error: "Name ist Pflicht." };
-  if (!parsed.fields.maps_url && !parsed.airbnbListing) {
+  if (!parsed.fields.maps_url && !parsed.hasListingLink) {
     return {
-      error:
-        "Google-Maps-Link oder Airbnb-Link ist Pflicht — Position bzw. Unterkunft brauchen wir.",
+      error: "Bitte einen Link einfügen (Google Maps, Airbnb, Park4Night, …).",
     };
   }
   return null;

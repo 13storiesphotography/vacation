@@ -9,6 +9,7 @@ export type MapsEnrichment = {
   resolvedUrl: string | null;
   coords: LatLng | null;
   imageUrl: string | null;
+  title: string | null;
 };
 
 export function isValidLatLng(lat: number, lng: number): boolean {
@@ -276,23 +277,44 @@ export function isAppMapPreviewUrl(url: string | null | undefined): boolean {
   return Boolean(url?.startsWith("/api/map-preview?"));
 }
 
+function parseOgTitle(html: string): string | null {
+  const patterns = [
+    /<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["']/i,
+    /<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:title["']/i,
+    /<title[^>]*>([^<]+)<\/title>/i,
+  ];
+  for (const pattern of patterns) {
+    const match = html.match(pattern);
+    if (!match?.[1]) continue;
+    const title = decodeHtmlEntities(match[1]).trim();
+    if (!title) continue;
+    return title
+      .replace(/\s*[-–|]\s*Google\s*Maps\s*$/i, "")
+      .replace(/\s*-\s*Maps\s*$/i, "")
+      .trim();
+  }
+  return null;
+}
+
 /** Resolve coords + preview image from a Google Maps share/place URL. */
 export async function enrichFromMapsUrl(
   url: string | null | undefined,
 ): Promise<MapsEnrichment> {
   if (!url?.trim()) {
-    return { resolvedUrl: null, coords: null, imageUrl: null };
+    return { resolvedUrl: null, coords: null, imageUrl: null, title: null };
   }
 
   const original = url.trim();
   let resolvedUrl = original;
   let imageUrl: string | null = null;
+  let title: string | null = null;
 
   const page = await fetchMapsPage(original);
   resolvedUrl = page.finalUrl || original;
   if (page.html) {
     imageUrl =
       parsePlacePhotoCandidate(page.html) ?? parseOgImage(page.html) ?? null;
+    title = parseOgTitle(page.html);
   }
 
   const coords =
@@ -300,11 +322,15 @@ export async function enrichFromMapsUrl(
     (page.html ? parsePlacePinCoords(page.html) : null) ??
     parseLatLngFromMapsUrl(original);
 
+  const placeName =
+    parsePlaceNameFromMapsUrl(resolvedUrl) ??
+    parsePlaceNameFromMapsUrl(original);
+  if (placeName) {
+    title = title || placeName;
+  }
+
   // Google no longer embeds place hero photos in Maps HTML — use Places API.
   if (!imageUrl || isAppMapPreviewUrl(imageUrl) || !isUsablePreviewImage(imageUrl)) {
-    const placeName =
-      parsePlaceNameFromMapsUrl(resolvedUrl) ??
-      parsePlaceNameFromMapsUrl(original);
     if (placeName) {
       const placePhoto = await fetchGooglePlacePhoto({
         query: placeName,
@@ -324,7 +350,7 @@ export async function enrichFromMapsUrl(
     imageUrl = previewImageFromCoords(coords.lat, coords.lng);
   }
 
-  return { resolvedUrl, coords, imageUrl };
+  return { resolvedUrl, coords, imageUrl, title };
 }
 
 export async function extractCoordsFromMapsUrl(
