@@ -1,3 +1,8 @@
+import {
+  fetchGooglePlacePhoto,
+  parsePlaceNameFromMapsUrl,
+} from "@/lib/places-photo";
+
 export type LatLng = { lat: number; lng: number };
 
 export type MapsEnrichment = {
@@ -266,6 +271,11 @@ export function previewImageFromCoords(lat: number, lng: number): string {
   return appMapPreviewUrl(lat, lng);
 }
 
+/** App-hosted map snapshot (tile fallback), not a real place photo. */
+export function isAppMapPreviewUrl(url: string | null | undefined): boolean {
+  return Boolean(url?.startsWith("/api/map-preview?"));
+}
+
 /** Resolve coords + preview image from a Google Maps share/place URL. */
 export async function enrichFromMapsUrl(
   url: string | null | undefined,
@@ -289,6 +299,22 @@ export async function enrichFromMapsUrl(
     parseLatLngFromMapsUrl(resolvedUrl) ??
     (page.html ? parsePlacePinCoords(page.html) : null) ??
     parseLatLngFromMapsUrl(original);
+
+  // Google no longer embeds place hero photos in Maps HTML — use Places API.
+  if (!imageUrl || isAppMapPreviewUrl(imageUrl) || !isUsablePreviewImage(imageUrl)) {
+    const placeName =
+      parsePlaceNameFromMapsUrl(resolvedUrl) ??
+      parsePlaceNameFromMapsUrl(original);
+    if (placeName) {
+      const placePhoto = await fetchGooglePlacePhoto({
+        query: placeName,
+        coords,
+      });
+      if (placePhoto && isUsablePreviewImage(placePhoto)) {
+        imageUrl = placePhoto;
+      }
+    }
+  }
 
   if (!imageUrl && coords) {
     imageUrl = previewImageFromCoords(coords.lat, coords.lng);

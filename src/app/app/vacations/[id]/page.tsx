@@ -93,7 +93,7 @@ export default function VacationDetailPage() {
 
   useEffect(() => {
     let cancelled = false;
-    const storageKey = `heal-spot-coords:${vacationId}`;
+    const storageKey = `heal-spot-meta:v2:${vacationId}`;
     try {
       if (sessionStorage.getItem(storageKey)) return;
       sessionStorage.setItem(storageKey, "1");
