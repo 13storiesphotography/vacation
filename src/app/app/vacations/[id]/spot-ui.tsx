@@ -7,9 +7,9 @@ import {
   type SpotCategory,
 } from "@/lib/spots";
 import type { Database } from "@/lib/database.types";
+import { createClient } from "@/lib/supabase/client";
 import { createSpot, updateSpot, type SpotActionState } from "./spot-actions";
 import { previewMapsCoords } from "./maps-coords-actions";
-import { upsertSpotRating } from "./rating-actions";
 import {
   emptySummary,
   type RaterOption,
@@ -310,7 +310,9 @@ export function SpotList({
   vacationId,
   spots,
   summaries,
+  currentUserId,
   onChanged,
+  onMyRatingPatch,
 }: {
   vacationId: string;
   spots: Spot[];
@@ -319,13 +321,16 @@ export function SpotList({
   raters: RaterOption[];
   currentUserId: string | null;
   onChanged: () => void;
+  onMyRatingPatch: (
+    spotId: string,
+    patch: { rating?: number | null; isFavorite?: boolean },
+  ) => void;
 }) {
   const [filter, setFilter] = useState<"alle" | SpotCategory>("alle");
   const [sortMode, setSortMode] = useState<SortMode>("newest");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
-  const [pending, startTransition] = useTransition();
 
   const visibleSpots = useMemo(() => {
     const list =
@@ -367,19 +372,43 @@ export function SpotList({
   }
 
   function saveRating(spotId: string, patch: { rating?: number | null; isFavorite?: boolean }) {
-    startTransition(async () => {
-      setError(null);
-      const result = await upsertSpotRating({
-        vacationId,
-        spotId,
-        ...patch,
+    if (!currentUserId) {
+      setError("Nicht angemeldet.");
+      return;
+    }
+
+    const previous = summaries[spotId] ?? emptySummary();
+    const revert = {
+      rating: previous.myRating,
+      isFavorite: previous.myFavorite,
+    };
+
+    setError(null);
+    onMyRatingPatch(spotId, patch);
+
+    void (async () => {
+      const supabase = createClient();
+      const payload: {
+        spot_id: string;
+        user_id: string;
+        rating?: number | null;
+        is_favorite?: boolean;
+      } = {
+        spot_id: spotId,
+        user_id: currentUserId,
+      };
+      if (patch.rating !== undefined) payload.rating = patch.rating;
+      if (patch.isFavorite !== undefined) payload.is_favorite = patch.isFavorite;
+
+      const { error: upsertError } = await supabase.from("spot_ratings").upsert(payload, {
+        onConflict: "spot_id,user_id",
       });
-      if (result.error) {
-        setError(result.error);
-        return;
+
+      if (upsertError) {
+        onMyRatingPatch(spotId, revert);
+        setError(upsertError.message);
       }
-      onChanged();
-    });
+    })();
   }
 
   return (
@@ -429,7 +458,6 @@ export function SpotList({
       </div>
 
       {error && <p className="mb-3 text-[13px] text-[var(--danger)]">{error}</p>}
-      {pending && <p className="mb-2 text-[12px] text-[var(--ink-faint)]">Speichere…</p>}
 
       <div className="ios-group">
         {visibleSpots.length === 0 ? (

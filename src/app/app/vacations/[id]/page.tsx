@@ -89,6 +89,46 @@ export default function VacationDetailPage() {
     [ratings, currentUserId],
   );
 
+  const applyMyRating = useCallback(
+    (
+      spotId: string,
+      patch: { rating?: number | null; isFavorite?: boolean },
+    ) => {
+      if (!currentUserId) return;
+      setRatings((prev) => {
+        const index = prev.findIndex(
+          (entry) => entry.spot_id === spotId && entry.user_id === currentUserId,
+        );
+        if (index >= 0) {
+          const next = [...prev];
+          const current = next[index];
+          next[index] = {
+            ...current,
+            rating: patch.rating !== undefined ? patch.rating : current.rating,
+            is_favorite:
+              patch.isFavorite !== undefined ? patch.isFavorite : current.is_favorite,
+            updated_at: new Date().toISOString(),
+          };
+          return next;
+        }
+        return [
+          ...prev,
+          {
+            id: `local-${spotId}-${currentUserId}`,
+            spot_id: spotId,
+            user_id: currentUserId,
+            rating: patch.rating ?? null,
+            is_favorite: patch.isFavorite ?? false,
+            note: null,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          },
+        ];
+      });
+    },
+    [currentUserId],
+  );
+
   const raters: RaterOption[] = useMemo(() => {
     return members
       .filter((member) => member.user_id && member.status === "active")
@@ -253,6 +293,7 @@ export default function VacationDetailPage() {
             raters={raters}
             currentUserId={currentUserId}
             onChanged={load}
+            onMyRatingPatch={applyMyRating}
           />
         ) : (
           <SpotMap spots={spots} summaries={summaries} />
