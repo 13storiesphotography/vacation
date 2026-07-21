@@ -487,13 +487,26 @@ export function SpotList({
                       </p>
                     )}
 
-                    <div className="mt-2 flex flex-wrap gap-2">
+                    {(spot.tags ?? []).length > 0 && (
+                      <div className="mt-2 flex flex-wrap gap-1.5">
+                        {(spot.tags ?? []).map((tag) => (
+                          <span
+                            key={tag}
+                            className="rounded-full bg-black/5 px-2.5 py-1 text-[11px] font-medium text-[var(--ink-soft)]"
+                          >
+                            {tag}
+                          </span>
+                        ))}
+                      </div>
+                    )}
+
+                    <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1">
                       {spot.maps_url && (
                         <a
                           href={spot.maps_url}
                           target="_blank"
                           rel="noreferrer"
-                          className="rounded-full bg-[var(--fjord-soft)] px-2.5 py-1 text-[11px] font-semibold text-[var(--fjord)]"
+                          className="text-[12px] font-semibold text-[var(--fjord)]"
                         >
                           Maps
                         </a>
@@ -503,22 +516,11 @@ export function SpotList({
                           href={spot.info_url}
                           target="_blank"
                           rel="noreferrer"
-                          className="rounded-full bg-black/5 px-2.5 py-1 text-[11px] font-semibold text-[var(--ink-soft)]"
+                          className="text-[12px] font-semibold text-[var(--fjord)]"
                         >
-                          Info / Buchung
+                          Info
                         </a>
                       )}
-                      {(spot.tags ?? []).map((tag) => (
-                        <span
-                          key={tag}
-                          className="rounded-full bg-black/5 px-2.5 py-1 text-[11px] font-medium text-[var(--ink-soft)]"
-                        >
-                          {tag}
-                        </span>
-                      ))}
-                    </div>
-
-                    <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1">
                       <button
                         type="button"
                         className="text-[12px] font-semibold text-[var(--fjord)]"
