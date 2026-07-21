@@ -1,15 +1,17 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useCallback, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import type { Database } from "@/lib/database.types";
 import { CreateSpotForm, SpotList } from "./spot-ui";
+import { summarizeRatings, type RaterOption, type SpotRating } from "@/lib/ratings";
 
 type Vacation = Database["public"]["Tables"]["vacations"]["Row"];
 type Member = Database["public"]["Tables"]["vacation_members"]["Row"];
 type Spot = Database["public"]["Tables"]["spots"]["Row"];
+type Profile = Database["public"]["Tables"]["profiles"]["Row"];
 
 export default function VacationDetailPage() {
   const params = useParams<{ id: string }>();
@@ -17,6 +19,9 @@ export default function VacationDetailPage() {
   const [vacation, setVacation] = useState<Vacation | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
   const [spots, setSpots] = useState<Spot[]>([]);
+  const [ratings, setRatings] = useState<SpotRating[]>([]);
+  const [profiles, setProfiles] = useState<Profile[]>([]);
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [inviteEmail, setInviteEmail] = useState("");
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -27,6 +32,11 @@ export default function VacationDetailPage() {
 
   const load = useCallback(async () => {
     const supabase = createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    setCurrentUserId(user?.id ?? null);
+
     const [{ data: vacationData }, { data: memberData }, { data: spotData }] =
       await Promise.all([
         supabase.from("vacations").select("*").eq("id", vacationId).single(),
@@ -41,15 +51,49 @@ export default function VacationDetailPage() {
           .eq("vacation_id", vacationId)
           .order("created_at", { ascending: false }),
       ]);
+
+    const spotIds = (spotData ?? []).map((spot) => spot.id);
+    const userIds = (memberData ?? [])
+      .map((member) => member.user_id)
+      .filter((id): id is string => Boolean(id));
+
+    const [{ data: ratingData }, { data: profileData }] = await Promise.all([
+      spotIds.length
+        ? supabase.from("spot_ratings").select("*").in("spot_id", spotIds)
+        : Promise.resolve({ data: [] as SpotRating[] }),
+      userIds.length
+        ? supabase.from("profiles").select("*").in("id", userIds)
+        : Promise.resolve({ data: [] as Profile[] }),
+    ]);
+
     setVacation(vacationData);
     setMembers(memberData ?? []);
     setSpots(spotData ?? []);
+    setRatings(ratingData ?? []);
+    setProfiles(profileData ?? []);
     setLoading(false);
   }, [vacationId]);
 
   useEffect(() => {
     void load();
   }, [load]);
+
+  const summaries = useMemo(
+    () => summarizeRatings(ratings, currentUserId),
+    [ratings, currentUserId],
+  );
+
+  const raters: RaterOption[] = useMemo(() => {
+    return members
+      .filter((member) => member.user_id && member.status === "active")
+      .map((member) => {
+        const profile = profiles.find((entry) => entry.id === member.user_id);
+        return {
+          userId: member.user_id as string,
+          label: profile?.display_name || member.email,
+        };
+      });
+  }, [members, profiles]);
 
   async function onInvite(event: FormEvent) {
     event.preventDefault();
@@ -132,7 +176,15 @@ export default function VacationDetailPage() {
           />
         )}
 
-        <SpotList vacationId={vacationId} spots={spots} onChanged={load} />
+        <SpotList
+          vacationId={vacationId}
+          spots={spots}
+          ratings={ratings}
+          summaries={summaries}
+          raters={raters}
+          currentUserId={currentUserId}
+          onChanged={load}
+        />
       </section>
 
       <section className="mt-8">

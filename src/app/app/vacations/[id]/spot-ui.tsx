@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
+import { useActionState, useEffect, useMemo, useState, useTransition } from "react";
 import {
   categoryLabels,
   categoryOptions,
@@ -9,10 +9,59 @@ import {
 } from "@/lib/spots";
 import type { Database } from "@/lib/database.types";
 import { createSpot, updateSpot, type SpotActionState } from "./spot-actions";
+import { upsertSpotRating } from "./rating-actions";
+import {
+  emptySummary,
+  type RaterOption,
+  type SpotRating,
+  type SpotRatingSummary,
+} from "@/lib/ratings";
 
 type Spot = Database["public"]["Tables"]["spots"]["Row"];
 
 const initialState: SpotActionState = {};
+
+function Stars({
+  value,
+  onChange,
+  readOnly = false,
+  size = "md",
+}: {
+  value: number | null;
+  onChange?: (value: number) => void;
+  readOnly?: boolean;
+  size?: "sm" | "md";
+}) {
+  const starSize = size === "sm" ? "text-[14px]" : "text-[18px]";
+  return (
+    <div className="flex items-center gap-0.5">
+      {[1, 2, 3, 4, 5].map((star) => {
+        const active = (value ?? 0) >= star;
+        if (readOnly) {
+          return (
+            <span
+              key={star}
+              className={`${starSize} ${active ? "text-[var(--sun)]" : "text-black/15"}`}
+            >
+              ★
+            </span>
+          );
+        }
+        return (
+          <button
+            key={star}
+            type="button"
+            className={`${starSize} leading-none ${active ? "text-[var(--sun)]" : "text-black/15"}`}
+            onClick={() => onChange?.(star)}
+            aria-label={`${star} Sterne`}
+          >
+            ★
+          </button>
+        );
+      })}
+    </div>
+  );
+}
 
 function SpotFormFields({
   spot,
@@ -216,22 +265,71 @@ export function EditSpotForm({
   );
 }
 
+type SortMode = "newest" | "favorites" | "avg" | "mine";
+type ViewMode = "avg" | "mine" | string; // string = other user id
+
 export function SpotList({
   vacationId,
   spots,
+  ratings,
+  summaries,
+  raters,
+  currentUserId,
   onChanged,
 }: {
   vacationId: string;
   spots: Spot[];
+  ratings: SpotRating[];
+  summaries: Record<string, SpotRatingSummary>;
+  raters: RaterOption[];
+  currentUserId: string | null;
   onChanged: () => void;
 }) {
   const [filter, setFilter] = useState<"alle" | SpotCategory>("alle");
+  const [sortMode, setSortMode] = useState<SortMode>("newest");
+  const [viewMode, setViewMode] = useState<ViewMode>("avg");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [pending, startTransition] = useTransition();
 
-  const filtered =
-    filter === "alle" ? spots : spots.filter((spot) => spot.category === filter);
+  const ratingsBySpotUser = useMemo(() => {
+    const map = new Map<string, SpotRating>();
+    for (const rating of ratings) {
+      map.set(`${rating.spot_id}:${rating.user_id}`, rating);
+    }
+    return map;
+  }, [ratings]);
+
+  const visibleSpots = useMemo(() => {
+    let list =
+      filter === "alle" ? [...spots] : spots.filter((spot) => spot.category === filter);
+
+    list.sort((a, b) => {
+      const summaryA = summaries[a.id] ?? emptySummary();
+      const summaryB = summaries[b.id] ?? emptySummary();
+
+      if (sortMode === "favorites") {
+        if (summaryA.myFavorite !== summaryB.myFavorite) {
+          return summaryA.myFavorite ? -1 : 1;
+        }
+        return (summaryB.average ?? -1) - (summaryA.average ?? -1);
+      }
+      if (sortMode === "avg") {
+        return (summaryB.average ?? -1) - (summaryA.average ?? -1);
+      }
+      if (sortMode === "mine") {
+        return (summaryB.myRating ?? -1) - (summaryA.myRating ?? -1);
+      }
+      return 0; // newest already from query order
+    });
+
+    if (sortMode === "favorites") {
+      // keep non-favorites after favorites, already sorted
+    }
+
+    return list;
+  }, [filter, sortMode, spots, summaries]);
 
   async function onDelete(spotId: string) {
     setDeletingId(spotId);
@@ -244,6 +342,47 @@ export function SpotList({
       return;
     }
     onChanged();
+  }
+
+  function saveRating(spotId: string, patch: { rating?: number | null; isFavorite?: boolean }) {
+    startTransition(async () => {
+      setError(null);
+      const result = await upsertSpotRating({
+        vacationId,
+        spotId,
+        ...patch,
+      });
+      if (result.error) {
+        setError(result.error);
+        return;
+      }
+      onChanged();
+    });
+  }
+
+  function displayedRating(spotId: string): { label: string; value: number | null; meta: string } {
+    const summary = summaries[spotId] ?? emptySummary();
+    if (viewMode === "avg") {
+      return {
+        label: "Gesamt",
+        value: summary.average,
+        meta: summary.count ? `${summary.count} Bewertung${summary.count === 1 ? "" : "en"}` : "noch keine",
+      };
+    }
+    if (viewMode === "mine") {
+      return {
+        label: "Meine",
+        value: summary.myRating,
+        meta: summary.myFavorite ? "Favorit" : "—",
+      };
+    }
+    const other = ratingsBySpotUser.get(`${spotId}:${viewMode}`);
+    const rater = raters.find((entry) => entry.userId === viewMode);
+    return {
+      label: rater?.label ?? "Mitglied",
+      value: other?.rating ?? null,
+      meta: other?.is_favorite ? "Favorit" : "—",
+    };
   }
 
   return (
@@ -274,96 +413,194 @@ export function SpotList({
         ))}
       </div>
 
+      <div className="mb-3 grid gap-2 sm:grid-cols-2">
+        <label className="block text-[12px] font-semibold text-[var(--ink-soft)]">
+          Sortierung
+          <select
+            value={sortMode}
+            onChange={(e) => setSortMode(e.target.value as SortMode)}
+            className="mt-1 w-full rounded-[12px] border-0 bg-black/5 px-3 py-2.5 text-[14px] outline-none"
+          >
+            <option value="newest">Neueste zuerst</option>
+            <option value="favorites">Meine Favoriten zuerst</option>
+            <option value="avg">Beste Gesamtbewertung</option>
+            <option value="mine">Meine Top-Spots</option>
+          </select>
+        </label>
+        <label className="block text-[12px] font-semibold text-[var(--ink-soft)]">
+          Bewertung anzeigen
+          <select
+            value={viewMode}
+            onChange={(e) => setViewMode(e.target.value)}
+            className="mt-1 w-full rounded-[12px] border-0 bg-black/5 px-3 py-2.5 text-[14px] outline-none"
+          >
+            <option value="avg">Gesamt (Durchschnitt)</option>
+            <option value="mine">Meine Bewertung</option>
+            {raters
+              .filter((rater) => rater.userId !== currentUserId)
+              .map((rater) => (
+                <option key={rater.userId} value={rater.userId}>
+                  {rater.label}
+                </option>
+              ))}
+          </select>
+        </label>
+      </div>
+
       {error && <p className="mb-3 text-[13px] text-[var(--danger)]">{error}</p>}
+      {pending && <p className="mb-2 text-[12px] text-[var(--ink-faint)]">Speichere…</p>}
 
       <div className="ios-group">
-        {filtered.length === 0 ? (
+        {visibleSpots.length === 0 ? (
           <div className="p-5 text-[14px] text-[var(--ink-soft)]">
             Noch keine Spots in dieser Kategorie.
           </div>
         ) : (
-          filtered.map((spot) => (
-            <div key={spot.id}>
-              <div className="ios-row !items-start">
-                <span
-                  className="mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full"
-                  style={{ background: categoryTone[spot.category] }}
-                />
-                <div className="min-w-0 flex-1">
-                  <p className="text-[15px] font-semibold">{spot.name}</p>
-                  <p className="text-[12px] text-[var(--ink-soft)]">
-                    {categoryLabels[spot.category]}
-                    {spot.overnight_cost ? ` · ${spot.overnight_cost}` : ""}
-                    {spot.price_hint ? ` · ${spot.price_hint}` : ""}
-                  </p>
-                  {spot.description && (
-                    <p className="mt-1 text-[13px] leading-relaxed text-[var(--ink-soft)]">
-                      {spot.description}
-                    </p>
-                  )}
-                  <div className="mt-2 flex flex-wrap gap-2">
-                    {spot.maps_url && (
-                      <a
-                        href={spot.maps_url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="rounded-full bg-[var(--fjord-soft)] px-2.5 py-1 text-[11px] font-semibold text-[var(--fjord)]"
+          visibleSpots.map((spot) => {
+            const summary = summaries[spot.id] ?? emptySummary();
+            const shown = displayedRating(spot.id);
+            return (
+              <div key={spot.id}>
+                <div className="ios-row !items-start">
+                  <span
+                    className="mt-1.5 h-2.5 w-2.5 shrink-0 rounded-full"
+                    style={{ background: categoryTone[spot.category] }}
+                  />
+                  <div className="min-w-0 flex-1">
+                    <div className="flex items-start justify-between gap-3">
+                      <div>
+                        <p className="text-[15px] font-semibold">{spot.name}</p>
+                        <p className="text-[12px] text-[var(--ink-soft)]">
+                          {categoryLabels[spot.category]}
+                          {spot.overnight_cost ? ` · ${spot.overnight_cost}` : ""}
+                          {spot.price_hint ? ` · ${spot.price_hint}` : ""}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        className={`text-[20px] leading-none ${
+                          summary.myFavorite ? "text-[var(--sun)]" : "text-black/20"
+                        }`}
+                        aria-label="Favorit"
+                        onClick={() =>
+                          saveRating(spot.id, { isFavorite: !summary.myFavorite })
+                        }
                       >
-                        Maps
-                      </a>
+                        {summary.myFavorite ? "★" : "☆"}
+                      </button>
+                    </div>
+
+                    <div className="mt-2 rounded-[12px] bg-black/[0.03] px-3 py-2">
+                      <div className="flex flex-wrap items-center justify-between gap-2">
+                        <div>
+                          <p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--ink-faint)]">
+                            {shown.label}
+                          </p>
+                          <div className="mt-0.5 flex items-center gap-2">
+                            <Stars value={shown.value} readOnly size="sm" />
+                            <span className="text-[12px] text-[var(--ink-soft)]">
+                              {shown.value ?? "–"} · {shown.meta}
+                            </span>
+                          </div>
+                        </div>
+                        {summary.favoriteCount > 0 && (
+                          <span className="text-[11px] font-semibold text-[var(--sun)]">
+                            {summary.favoriteCount}× Favorit
+                          </span>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="mt-2">
+                      <p className="text-[11px] font-semibold uppercase tracking-wide text-[var(--ink-faint)]">
+                        Meine Bewertung
+                      </p>
+                      <div className="mt-1 flex items-center gap-3">
+                        <Stars
+                          value={summary.myRating}
+                          onChange={(value) => saveRating(spot.id, { rating: value })}
+                        />
+                        {summary.myRating && (
+                          <button
+                            type="button"
+                            className="text-[11px] font-semibold text-[var(--ink-soft)]"
+                            onClick={() => saveRating(spot.id, { rating: null })}
+                          >
+                            Zurücksetzen
+                          </button>
+                        )}
+                      </div>
+                    </div>
+
+                    {spot.description && (
+                      <p className="mt-2 text-[13px] leading-relaxed text-[var(--ink-soft)]">
+                        {spot.description}
+                      </p>
                     )}
-                    {spot.info_url && (
-                      <a
-                        href={spot.info_url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="rounded-full bg-black/5 px-2.5 py-1 text-[11px] font-semibold text-[var(--ink-soft)]"
+                    <div className="mt-2 flex flex-wrap gap-2">
+                      {spot.maps_url && (
+                        <a
+                          href={spot.maps_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="rounded-full bg-[var(--fjord-soft)] px-2.5 py-1 text-[11px] font-semibold text-[var(--fjord)]"
+                        >
+                          Maps
+                        </a>
+                      )}
+                      {spot.info_url && (
+                        <a
+                          href={spot.info_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="rounded-full bg-black/5 px-2.5 py-1 text-[11px] font-semibold text-[var(--ink-soft)]"
+                        >
+                          Info / Buchung
+                        </a>
+                      )}
+                      {(spot.tags ?? []).map((tag) => (
+                        <span
+                          key={tag}
+                          className="rounded-full bg-black/5 px-2.5 py-1 text-[11px] font-medium text-[var(--ink-soft)]"
+                        >
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
+                    <div className="mt-3 flex gap-2">
+                      <button
+                        type="button"
+                        className="text-[12px] font-semibold text-[var(--fjord)]"
+                        onClick={() =>
+                          setEditingId((current) => (current === spot.id ? null : spot.id))
+                        }
                       >
-                        Info / Buchung
-                      </a>
-                    )}
-                    {(spot.tags ?? []).map((tag) => (
-                      <span
-                        key={tag}
-                        className="rounded-full bg-black/5 px-2.5 py-1 text-[11px] font-medium text-[var(--ink-soft)]"
+                        {editingId === spot.id ? "Schließen" : "Bearbeiten"}
+                      </button>
+                      <button
+                        type="button"
+                        className="text-[12px] font-semibold text-[var(--danger)]"
+                        disabled={deletingId === spot.id}
+                        onClick={() => onDelete(spot.id)}
                       >
-                        {tag}
-                      </span>
-                    ))}
-                  </div>
-                  <div className="mt-3 flex gap-2">
-                    <button
-                      type="button"
-                      className="text-[12px] font-semibold text-[var(--fjord)]"
-                      onClick={() =>
-                        setEditingId((current) => (current === spot.id ? null : spot.id))
-                      }
-                    >
-                      {editingId === spot.id ? "Schließen" : "Bearbeiten"}
-                    </button>
-                    <button
-                      type="button"
-                      className="text-[12px] font-semibold text-[var(--danger)]"
-                      disabled={deletingId === spot.id}
-                      onClick={() => onDelete(spot.id)}
-                    >
-                      {deletingId === spot.id ? "…" : "Löschen"}
-                    </button>
+                        {deletingId === spot.id ? "…" : "Löschen"}
+                      </button>
+                    </div>
                   </div>
                 </div>
+                {editingId === spot.id && (
+                  <EditSpotForm
+                    vacationId={vacationId}
+                    spot={spot}
+                    onDone={() => {
+                      setEditingId(null);
+                      onChanged();
+                    }}
+                  />
+                )}
               </div>
-              {editingId === spot.id && (
-                <EditSpotForm
-                  vacationId={vacationId}
-                  spot={spot}
-                  onDone={() => {
-                    setEditingId(null);
-                    onChanged();
-                  }}
-                />
-              )}
-            </div>
-          ))
+            );
+          })
         )}
       </div>
     </div>
