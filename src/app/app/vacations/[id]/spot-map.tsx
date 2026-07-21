@@ -10,7 +10,7 @@ import {
 import { resolveSpotCoords } from "@/lib/geo";
 import { emptySummary, type SpotRatingSummary } from "@/lib/ratings";
 import type { Database } from "@/lib/database.types";
-import type { MappableSpot } from "./spot-map-canvas";
+import type { MappableSpot } from "@/lib/google-maps";
 import { CategoryIcon } from "@/components/category-icon";
 
 type Spot = Database["public"]["Tables"]["spots"]["Row"];
@@ -129,6 +129,9 @@ export function SpotMap({
         {withoutCoords.length > 0
           ? ` · ${withoutCoords.length} ohne Koordinaten`
           : ""}
+        {process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
+          ? " · Google Maps"
+          : " · OpenStreetMap (Google-Key fehlt)"}
       </p>
 
       <div className="h-[min(68vh,640px)] overflow-hidden rounded-[18px] border border-[var(--separator)] shadow-[0_8px_28px_rgba(31,53,64,0.08)]">
