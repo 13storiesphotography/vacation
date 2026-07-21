@@ -121,6 +121,9 @@ function SpotFormFields({
           className="mt-1.5 w-full rounded-[12px] border-0 bg-black/5 px-3 py-3 text-[15px] outline-none ring-[var(--fjord)] focus:ring-2"
           placeholder="https://maps.google.com/..."
         />
+        <span className="mt-1 block text-[11px] font-medium text-[var(--ink-faint)]">
+          Enthält der Link Koordinaten, werden Lat/Lng automatisch gesetzt.
+        </span>
       </label>
 
       <label className="mt-3 block text-[13px] font-semibold text-[var(--ink-soft)]">
@@ -302,7 +305,7 @@ export function SpotList({
   }, [ratings]);
 
   const visibleSpots = useMemo(() => {
-    let list =
+    const list =
       filter === "alle" ? [...spots] : spots.filter((spot) => spot.category === filter);
 
     list.sort((a, b) => {

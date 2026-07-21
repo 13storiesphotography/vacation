@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { parseLatLngFromMapsUrl } from "@/lib/geo";
 import { parseTags, type OvernightCost, type SpotCategory } from "@/lib/spots";
 
 export type SpotActionState = {
@@ -40,8 +41,15 @@ function readSpotFields(formData: FormData) {
   const tags = parseTags(String(formData.get("tags") ?? ""));
   const latRaw = String(formData.get("lat") ?? "").trim();
   const lngRaw = String(formData.get("lng") ?? "").trim();
-  const lat = latRaw ? Number(latRaw) : null;
-  const lng = lngRaw ? Number(lngRaw) : null;
+  let lat = latRaw ? Number(latRaw) : null;
+  let lng = lngRaw ? Number(lngRaw) : null;
+  if ((!Number.isFinite(lat) || !Number.isFinite(lng)) && mapsUrl) {
+    const parsed = parseLatLngFromMapsUrl(mapsUrl);
+    if (parsed) {
+      lat = parsed.lat;
+      lng = parsed.lng;
+    }
+  }
 
   return {
     name,
