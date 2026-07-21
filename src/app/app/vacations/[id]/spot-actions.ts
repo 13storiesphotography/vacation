@@ -1,11 +1,18 @@
 "use server";
 
 import { revalidatePath } from "next/cache";
+import { applySpotStayToDayPlans } from "@/lib/apply-stay";
 import { createClient } from "@/lib/supabase/server";
 import { isAirbnbUrl } from "@/lib/airbnb";
-import { enrichFromMapsUrl, isAppMapPreviewUrl, isUsablePreviewImage, previewImageFromCoords } from "@/lib/geo";
+import {
+  enrichFromMapsUrl,
+  isAppMapPreviewUrl,
+  isUsablePreviewImage,
+  previewImageFromCoords,
+} from "@/lib/geo";
 import { isOvernightCategory } from "@/lib/overnight";
 import { parseTags, type OvernightCost, type SpotCategory } from "@/lib/spots";
+import { parseStayStatus, validateStayRange } from "@/lib/stay";
 
 export type SpotActionState = {
   error?: string;
@@ -40,11 +47,21 @@ async function readSpotFields(formData: FormData) {
   const overnightRaw = String(formData.get("overnight_cost") ?? "").trim();
   const overnightCost = (overnightRaw || null) as OvernightCost | null;
   const priceHint = String(formData.get("price_hint") ?? "").trim();
+  const stayCheckIn = String(formData.get("stay_check_in") ?? "").trim() || null;
+  const stayCheckOut = String(formData.get("stay_check_out") ?? "").trim() || null;
+  const stayStatus = parseStayStatus(String(formData.get("stay_status") ?? "").trim());
   const tags = parseTags(String(formData.get("tags") ?? ""));
   const imageUrlManual = String(formData.get("image_url") ?? "").trim();
   const previousAutoImage = String(formData.get("previous_image_url") ?? "").trim();
   const airbnbListing = isAirbnbUrl(infoUrl);
   const hasListingLink = Boolean(infoUrl);
+
+  const stayError = isOvernightCategory(category)
+    ? validateStayRange(stayCheckIn, stayCheckOut)
+    : null;
+  if (stayError) {
+    return { error: stayError } as const;
+  }
 
   let lat: number | null = null;
   let lng: number | null = null;
@@ -89,6 +106,8 @@ async function readSpotFields(formData: FormData) {
     imageManual = true;
   }
 
+  const overnight = isOvernightCategory(category);
+
   return {
     fields: {
       name,
@@ -96,8 +115,11 @@ async function readSpotFields(formData: FormData) {
       description: description || null,
       maps_url: storedMapsUrl,
       info_url: infoUrl || null,
-      overnight_cost: isOvernightCategory(category) ? overnightCost : null,
-      price_hint: isOvernightCategory(category) ? priceHint || null : null,
+      overnight_cost: overnight ? overnightCost : null,
+      price_hint: overnight ? priceHint || null : null,
+      stay_check_in: overnight ? stayCheckIn : null,
+      stay_check_out: overnight ? stayCheckOut : null,
+      stay_status: overnight ? stayStatus : null,
       tags,
       lat,
       lng,
@@ -137,13 +159,29 @@ export async function createSpot(
   if (invalid) return invalid;
   if ("error" in parsed) return { error: parsed.error };
 
-  const { error: insertError } = await supabase.from("spots").insert({
-    vacation_id: vacationId,
-    created_by: user.id,
-    ...parsed.fields,
-  });
+  const { data: inserted, error: insertError } = await supabase
+    .from("spots")
+    .insert({
+      vacation_id: vacationId,
+      created_by: user.id,
+      ...parsed.fields,
+    })
+    .select("id")
+    .single();
 
   if (insertError) return { error: insertError.message };
+
+  if (
+    inserted?.id &&
+    isOvernightCategory(parsed.fields.category) &&
+    (parsed.fields.stay_check_in || parsed.fields.stay_check_out)
+  ) {
+    const sync = await applySpotStayToDayPlans(supabase, vacationId, inserted.id, {
+      stay_check_in: parsed.fields.stay_check_in,
+      stay_check_out: parsed.fields.stay_check_out,
+    });
+    if (sync.error) return { error: sync.error };
+  }
 
   revalidatePath(`/app/vacations/${vacationId}`);
   return { ok: true };
@@ -171,6 +209,12 @@ export async function updateSpot(
 
   if (updateError) return { error: updateError.message };
 
+  const sync = await applySpotStayToDayPlans(supabase, vacationId, spotId, {
+    stay_check_in: parsed.fields.stay_check_in,
+    stay_check_out: parsed.fields.stay_check_out,
+  });
+  if (sync.error) return { error: sync.error };
+
   revalidatePath(`/app/vacations/${vacationId}`);
   return { ok: true };
 }
@@ -178,6 +222,13 @@ export async function updateSpot(
 export async function deleteSpot(vacationId: string, spotId: string): Promise<SpotActionState> {
   const { supabase, error } = await requireMember(vacationId);
   if (error) return { error };
+
+  // Clear overnight refs first (FK may restrict), then delete.
+  await supabase
+    .from("day_plans")
+    .update({ overnight_spot_id: null })
+    .eq("vacation_id", vacationId)
+    .eq("overnight_spot_id", spotId);
 
   const { error: deleteError } = await supabase
     .from("spots")
