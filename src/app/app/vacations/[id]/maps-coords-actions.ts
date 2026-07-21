@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { fetchAirbnbMetadata, isAirbnbUrl } from "@/lib/airbnb";
 import {
   enrichFromMapsUrl,
   extractCoordsFromMapsUrl,
@@ -102,44 +103,65 @@ export async function healVacationSpotCoords(vacationId: string): Promise<{
 
     const { data: spots } = await supabase
       .from("spots")
-      .select("id, lat, lng, maps_url, image_url, image_manual")
+      .select("id, lat, lng, maps_url, info_url, image_url, image_manual")
       .eq("vacation_id", vacationId);
 
     let updated = 0;
     for (const spot of spots ?? []) {
-      if (!spot.maps_url) continue;
-
       try {
+        const previous = previousCoords(spot);
         const refreshImage = needsImageRefresh(spot);
-        const syncCoords = parseLatLngFromMapsUrl(spot.maps_url);
-        const needsEnrich =
-          refreshImage ||
-          !syncCoords ||
-          isShortMapsUrl(spot.maps_url);
+        const patch: {
+          lat?: number;
+          lng?: number;
+          maps_url?: string;
+          image_url?: string;
+        } = {};
 
-        const enriched = needsEnrich
-          ? await enrichFromMapsUrl(spot.maps_url)
-          : { coords: syncCoords, imageUrl: null as string | null };
+        if (spot.maps_url) {
+          const syncCoords = parseLatLngFromMapsUrl(spot.maps_url);
+          const needsEnrich =
+            refreshImage ||
+            !syncCoords ||
+            isShortMapsUrl(spot.maps_url);
 
-        const coords = enriched.coords;
-        const patch: { lat?: number; lng?: number; image_url?: string } = {};
+          const enriched = needsEnrich
+            ? await enrichFromMapsUrl(spot.maps_url)
+            : { coords: syncCoords, imageUrl: null as string | null };
 
-        if (coords && isValidLatLng(coords.lat, coords.lng)) {
-          const previous = previousCoords(spot);
-          if (!previous || haversineMeters(previous, coords) > driftMeters) {
-            patch.lat = coords.lat;
-            patch.lng = coords.lng;
+          const coords = enriched.coords ?? syncCoords;
+
+          if (coords && isValidLatLng(coords.lat, coords.lng)) {
+            if (!previous || haversineMeters(previous, coords) > driftMeters) {
+              patch.lat = coords.lat;
+              patch.lng = coords.lng;
+            }
           }
-        }
 
-        if (
-          refreshImage &&
-          enriched.imageUrl &&
-          isUsablePreviewImage(enriched.imageUrl) &&
-          !isAppMapPreviewUrl(enriched.imageUrl) &&
-          enriched.imageUrl !== spot.image_url
-        ) {
-          patch.image_url = enriched.imageUrl;
+          if (
+            refreshImage &&
+            enriched.imageUrl &&
+            isUsablePreviewImage(enriched.imageUrl) &&
+            !isAppMapPreviewUrl(enriched.imageUrl) &&
+            enriched.imageUrl !== spot.image_url
+          ) {
+            patch.image_url = enriched.imageUrl;
+          }
+        } else if (!previous && spot.info_url && isAirbnbUrl(spot.info_url)) {
+          const meta = await fetchAirbnbMetadata(spot.info_url);
+          if (meta.ok && meta.lat != null && meta.lng != null) {
+            patch.lat = meta.lat;
+            patch.lng = meta.lng;
+            patch.maps_url = `https://www.google.com/maps?q=${meta.lat},${meta.lng}`;
+            if (
+              refreshImage &&
+              meta.imageUrl &&
+              isUsablePreviewImage(meta.imageUrl) &&
+              meta.imageUrl !== spot.image_url
+            ) {
+              patch.image_url = meta.imageUrl;
+            }
+          }
         }
 
         if (Object.keys(patch).length === 0) continue;

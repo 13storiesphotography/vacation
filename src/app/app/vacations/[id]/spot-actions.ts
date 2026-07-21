@@ -3,11 +3,12 @@
 import { revalidatePath } from "next/cache";
 import { applySpotStayToDayPlans } from "@/lib/apply-stay";
 import { createClient } from "@/lib/supabase/server";
-import { isAirbnbUrl } from "@/lib/airbnb";
+import { isAirbnbUrl, fetchAirbnbMetadata } from "@/lib/airbnb";
 import {
   enrichFromMapsUrl,
   isAppMapPreviewUrl,
   isUsablePreviewImage,
+  parseLatLngFromMapsUrl,
   previewImageFromCoords,
 } from "@/lib/geo";
 import { isOvernightCategory } from "@/lib/overnight";
@@ -73,15 +74,19 @@ async function readSpotFields(formData: FormData) {
 
   if (mapsUrl) {
     try {
+      // Prefer coords already embedded in the URL (e.g. Airbnb → maps?q=lat,lng)
+      // so a flaky Maps HTML fetch cannot drop a known position.
+      const fromUrl = parseLatLngFromMapsUrl(mapsUrl);
       const enriched = await enrichFromMapsUrl(mapsUrl);
-      if (!enriched.coords) {
+      const coords = fromUrl ?? enriched.coords;
+      if (!coords) {
         return {
           error:
             "Im Google-Maps-Link steckt keine Position. Ort in Maps öffnen und „Link teilen“ verwenden.",
         } as const;
       }
-      lat = enriched.coords.lat;
-      lng = enriched.coords.lng;
+      lat = coords.lat;
+      lng = coords.lng;
       storedMapsUrl = mapsUrl || enriched.resolvedUrl;
       if (!imageManual) {
         const preferred = enriched.imageUrl;
@@ -106,13 +111,36 @@ async function readSpotFields(formData: FormData) {
       }
     } catch (error) {
       console.error("[spot] enrichFromMapsUrl failed:", error);
-      return {
-        error:
-          "Google-Maps-Link konnte nicht gelesen werden. Bitte Link prüfen oder Position später setzen.",
-      } as const;
+      const fromUrl = parseLatLngFromMapsUrl(mapsUrl);
+      if (fromUrl) {
+        lat = fromUrl.lat;
+        lng = fromUrl.lng;
+        storedMapsUrl = mapsUrl;
+      } else {
+        return {
+          error:
+            "Google-Maps-Link konnte nicht gelesen werden. Bitte Link prüfen oder Position später setzen.",
+        } as const;
+      }
+    }
+  } else if (airbnbListing) {
+    // Paste-only Airbnb: pull approximate listing coords when Maps URL is absent.
+    try {
+      const meta = await fetchAirbnbMetadata(infoUrl);
+      if (meta.ok && meta.lat != null && meta.lng != null) {
+        lat = meta.lat;
+        lng = meta.lng;
+        storedMapsUrl = `https://www.google.com/maps?q=${meta.lat},${meta.lng}`;
+        if (!imageManual && meta.imageUrl && isUsablePreviewImage(meta.imageUrl)) {
+          imageUrl = meta.imageUrl;
+          imageManual = true;
+        }
+      }
+    } catch (error) {
+      console.error("[spot] Airbnb coord backfill failed:", error);
     }
   } else if (imageManual) {
-    // Airbnb / manual image without Maps coords.
+    // Manual image without Maps coords.
     imageManual = true;
   }
 
