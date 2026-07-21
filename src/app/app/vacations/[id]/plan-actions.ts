@@ -278,27 +278,32 @@ export async function moveSpotOnDay(
     .order("position", { ascending: true });
 
   if (stopsError) return { error: stopsError.message };
-  const list = stops ?? [];
+  const list = [...(stops ?? [])];
   const index = list.findIndex((stop) => stop.spot_id === spotId);
   if (index < 0) return { error: "Stop nicht gefunden." };
 
   const swapWith = direction === "up" ? index - 1 : index + 1;
   if (swapWith < 0 || swapWith >= list.length) return { ok: true };
 
-  const a = list[index];
-  const b = list[swapWith];
+  const tmp = list[index];
+  list[index] = list[swapWith];
+  list[swapWith] = tmp;
 
-  const { error: firstError } = await supabase
-    .from("day_plan_spots")
-    .update({ position: b.position })
-    .eq("id", a.id);
-  if (firstError) return { error: firstError.message };
-
-  const { error: secondError } = await supabase
-    .from("day_plan_spots")
-    .update({ position: a.position })
-    .eq("id", b.id);
-  if (secondError) return { error: secondError.message };
+  // Avoid unique/race issues: park on negative positions, then renumber 0..n
+  for (const [i, stop] of list.entries()) {
+    const { error: parkError } = await supabase
+      .from("day_plan_spots")
+      .update({ position: -(i + 1) })
+      .eq("id", stop.id);
+    if (parkError) return { error: parkError.message };
+  }
+  for (const [i, stop] of list.entries()) {
+    const { error: placeError } = await supabase
+      .from("day_plan_spots")
+      .update({ position: i })
+      .eq("id", stop.id);
+    if (placeError) return { error: placeError.message };
+  }
 
   revalidateVacation(vacationId);
   return { ok: true };
