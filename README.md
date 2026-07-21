@@ -1,36 +1,50 @@
 # Vacation Planer
 
-Konzept und Live-Demo für einen gemeinsamen Vacation Planer.
+Gemeinsamer Vacation Planer mit Supabase Auth (inkl. MFA) und RLS.
 
-## Idee
-
-1. **Urlaub anlegen** – Zeitraum, Typ (z. B. Wohnmobil/Van), Infos
-2. **Spots sammeln** – Stellplätze, Sehenswürdigkeiten, Orte, Freizeit, Versorgung
-3. **Auf der Karte sehen** – filtern, auswählen, Maps- & Info-/Buchungslinks
-4. **Tage planen** – Stops sortieren, bei Van-Urlauben Übernachtung pro Tag (frei/kostenpflichtig)
-5. **Zusammenarbeiten** – Admin lädt ein, Member setzt Passwort + MFA
-
-## Live auf GitHub Pages
-
-Nach einmaligem Aktivieren unter **Settings → Pages → Source: GitHub Pages**  
-(Build/Deploy über GitHub Actions) ist die Demo unter:
-
-**https://13storiesphotography.github.io/vacation/**
-
-Lokal ohne `basePath`:
+## Lokal starten
 
 ```bash
+cp .env.example .env.local
+# NEXT_PUBLIC_SUPABASE_URL + NEXT_PUBLIC_SUPABASE_ANON_KEY eintragen
+# Optional: SUPABASE_SERVICE_ROLE_KEY für E-Mail-Invites
+
 npm install
 npm run dev
 ```
 
-Für denselben Build wie auf Pages:
+Öffne [http://localhost:3000](http://localhost:3000).
 
-```bash
-GITHUB_PAGES=true npm run build
-```
+## Erster Start
 
-## Stack (geplant)
+1. `/signup` – Admin-Konto anlegen
+2. MFA (TOTP) einrichten
+3. Urlaub anlegen unter `/app`
+4. Team einladen (braucht `SUPABASE_SERVICE_ROLE_KEY` oder Dashboard-Invite)
+
+Im Supabase Dashboard unter **Authentication → URL Configuration** die Site URL und Redirect URLs setzen, z. B.:
+
+- `http://localhost:3000`
+- `http://localhost:3000/auth/callback`
+
+## Routen
+
+| Pfad | Inhalt |
+| --- | --- |
+| `/` | Landing |
+| `/login`, `/signup` | Auth |
+| `/app` | Geschützte App (MFA Pflicht) |
+| `/app/vacations/new` | Urlaub anlegen |
+| `/app/vacations/[id]` | Detail + Team-Invite |
+| `/konzept` | Öffentliche Konzept-Demo |
+
+## Stack
 
 - Next.js + TypeScript
-- Supabase (Postgres, Auth, RLS, MFA/TOTP)
+- Supabase (Postgres, Auth, RLS, MFA/TOTP, Edge Function `invite-member`)
+
+## Konzept auf GitHub Pages
+
+Die frühere statische Konzept-Demo bleibt unter  
+https://13storiesphotography.github.io/vacation/  
+(Stand vor dem Platform-Build). Der Pages-Workflow ist jetzt **manuell** (`workflow_dispatch`), weil die App Auth/API braucht und nicht mehr rein statisch ist.
