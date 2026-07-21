@@ -30,20 +30,20 @@ function Stars({
   size = "md",
 }: {
   value: number | null;
-  onChange?: (value: number) => void;
+  onChange?: (value: number | null) => void;
   readOnly?: boolean;
   size?: "sm" | "md";
 }) {
   const starSize = size === "sm" ? "text-[14px]" : "text-[18px]";
   return (
-    <div className="flex items-center gap-0.5">
+    <div className="flex items-center gap-px" role={readOnly ? undefined : "group"} aria-label="Bewertung">
       {[1, 2, 3, 4, 5].map((star) => {
         const active = (value ?? 0) >= star;
         if (readOnly) {
           return (
             <span
               key={star}
-              className={`${starSize} ${active ? "text-[var(--sun)]" : "text-black/15"}`}
+              className={`${starSize} leading-none ${active ? "text-[var(--sun)]" : "text-black/15"}`}
             >
               ★
             </span>
@@ -54,8 +54,8 @@ function Stars({
             key={star}
             type="button"
             className={`${starSize} leading-none ${active ? "text-[var(--sun)]" : "text-black/15"}`}
-            onClick={() => onChange?.(star)}
-            aria-label={`${star} Sterne`}
+            onClick={() => onChange?.(value === star ? null : star)}
+            aria-label={value === star ? "Bewertung entfernen" : `${star} Sterne`}
           >
             ★
           </button>
@@ -309,10 +309,7 @@ function formatAvg(value: number | null): string {
 export function SpotList({
   vacationId,
   spots,
-  ratings,
   summaries,
-  raters,
-  currentUserId,
   onChanged,
 }: {
   vacationId: string;
@@ -326,18 +323,9 @@ export function SpotList({
   const [filter, setFilter] = useState<"alle" | SpotCategory>("alle");
   const [sortMode, setSortMode] = useState<SortMode>("newest");
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [ratingId, setRatingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [pending, startTransition] = useTransition();
-
-  const ratingsBySpotUser = useMemo(() => {
-    const map = new Map<string, SpotRating>();
-    for (const rating of ratings) {
-      map.set(`${rating.spot_id}:${rating.user_id}`, rating);
-    }
-    return map;
-  }, [ratings]);
 
   const visibleSpots = useMemo(() => {
     const list =
@@ -394,23 +382,6 @@ export function SpotList({
     });
   }
 
-  function teammateLine(spotId: string): string | null {
-    const others = raters.filter((rater) => rater.userId !== currentUserId);
-    if (others.length === 0) return null;
-    const parts = others
-      .map((rater) => {
-        const entry = ratingsBySpotUser.get(`${spotId}:${rater.userId}`);
-        if (!entry?.rating && !entry?.is_favorite) return null;
-        const bits = [
-          entry.rating != null ? `${entry.rating}★` : null,
-          entry.is_favorite ? "♥" : null,
-        ].filter(Boolean);
-        return `${rater.label} ${bits.join(" ")}`;
-      })
-      .filter(Boolean);
-    return parts.length ? parts.join(" · ") : null;
-  }
-
   return (
     <div className="mt-3">
       <div className="mb-3 flex flex-wrap items-center gap-2">
@@ -463,8 +434,6 @@ export function SpotList({
         ) : (
           visibleSpots.map((spot) => {
             const summary = summaries[spot.id] ?? emptySummary();
-            const ratingOpen = ratingId === spot.id;
-            const teammates = teammateLine(spot.id);
             return (
               <div key={spot.id}>
                 <div className="ios-row !items-start">
@@ -473,8 +442,8 @@ export function SpotList({
                     style={{ background: categoryTone[spot.category] }}
                   />
                   <div className="min-w-0 flex-1">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
+                    <div className="flex items-start justify-between gap-2">
+                      <div className="min-w-0 flex-1">
                         <p className="text-[15px] font-semibold">{spot.name}</p>
                         <p className="mt-0.5 text-[12px] text-[var(--ink-soft)]">
                           {categoryLabels[spot.category]}
@@ -483,32 +452,33 @@ export function SpotList({
                           {summary.average != null && (
                             <>
                               {" · "}
-                              <span className="text-[var(--ink)]">
-                                ★ {formatAvg(summary.average)}
+                              <span className="tabular-nums text-[var(--ink-faint)]">
+                                Ø {formatAvg(summary.average)}
+                                {summary.count > 1 ? ` · ${summary.count}` : ""}
                               </span>
-                              <span className="text-[var(--ink-faint)]"> ({summary.count})</span>
-                            </>
-                          )}
-                          {summary.myRating != null && summary.average == null && (
-                            <>
-                              {" · "}
-                              <span className="text-[var(--ink)]">du ★ {summary.myRating}</span>
                             </>
                           )}
                         </p>
                       </div>
-                      <button
-                        type="button"
-                        className={`mt-0.5 text-[18px] leading-none ${
-                          summary.myFavorite ? "text-[var(--sun)]" : "text-black/18"
-                        }`}
-                        aria-label={summary.myFavorite ? "Favorit entfernen" : "Als Favorit"}
-                        onClick={() =>
-                          saveRating(spot.id, { isFavorite: !summary.myFavorite })
-                        }
-                      >
-                        {summary.myFavorite ? "♥" : "♡"}
-                      </button>
+                      <div className="mt-0.5 flex shrink-0 items-center gap-1.5">
+                        <Stars
+                          value={summary.myRating}
+                          onChange={(value) => saveRating(spot.id, { rating: value })}
+                          size="sm"
+                        />
+                        <button
+                          type="button"
+                          className={`text-[16px] leading-none ${
+                            summary.myFavorite ? "text-[var(--sun)]" : "text-black/18"
+                          }`}
+                          aria-label={summary.myFavorite ? "Favorit entfernen" : "Als Favorit"}
+                          onClick={() =>
+                            saveRating(spot.id, { isFavorite: !summary.myFavorite })
+                          }
+                        >
+                          {summary.myFavorite ? "♥" : "♡"}
+                        </button>
+                      </div>
                     </div>
 
                     {spot.description && (
@@ -548,52 +518,7 @@ export function SpotList({
                       ))}
                     </div>
 
-                    {ratingOpen && (
-                      <div className="mt-3 border-t border-[var(--separator)] pt-3">
-                        <div className="flex flex-wrap items-center gap-3">
-                          <Stars
-                            value={summary.myRating}
-                            onChange={(value) => saveRating(spot.id, { rating: value })}
-                            size="sm"
-                          />
-                          {summary.myRating != null && (
-                            <button
-                              type="button"
-                              className="text-[11px] font-semibold text-[var(--ink-soft)]"
-                              onClick={() => saveRating(spot.id, { rating: null })}
-                            >
-                              Entfernen
-                            </button>
-                          )}
-                        </div>
-                        <p className="mt-2 text-[12px] text-[var(--ink-faint)]">
-                          {summary.count > 0
-                            ? `Team Ø ${formatAvg(summary.average)} · ${summary.count} Bewertung${summary.count === 1 ? "" : "en"}`
-                            : "Noch keine Team-Bewertung"}
-                          {summary.favoriteCount > 0
-                            ? ` · ${summary.favoriteCount}× Favorit`
-                            : ""}
-                        </p>
-                        {teammates && (
-                          <p className="mt-1 text-[12px] text-[var(--ink-soft)]">{teammates}</p>
-                        )}
-                      </div>
-                    )}
-
                     <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1">
-                      <button
-                        type="button"
-                        className="text-[12px] font-semibold text-[var(--fjord)]"
-                        onClick={() =>
-                          setRatingId((current) => (current === spot.id ? null : spot.id))
-                        }
-                      >
-                        {ratingOpen
-                          ? "Schließen"
-                          : summary.myRating != null
-                            ? "Bewertung"
-                            : "Bewerten"}
-                      </button>
                       <button
                         type="button"
                         className="text-[12px] font-semibold text-[var(--fjord)]"
