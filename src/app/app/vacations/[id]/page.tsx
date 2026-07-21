@@ -6,6 +6,7 @@ import { useParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import type { Database } from "@/lib/database.types";
 import { CreateSpotForm, SpotList } from "./spot-ui";
+import { SpotMap } from "./spot-map";
 import { summarizeRatings, type RaterOption, type SpotRating } from "@/lib/ratings";
 
 type Vacation = Database["public"]["Tables"]["vacations"]["Row"];
@@ -29,6 +30,7 @@ export default function VacationDetailPage() {
   const [inviting, setInviting] = useState(false);
   const [showSpotForm, setShowSpotForm] = useState(false);
   const [spotFormKey, setSpotFormKey] = useState(0);
+  const [spotsView, setSpotsView] = useState<"list" | "map">("list");
 
   const load = useCallback(async () => {
     const supabase = createClient();
@@ -134,7 +136,11 @@ export default function VacationDetailPage() {
   }
 
   return (
-    <main className="shell mx-auto min-h-screen w-full max-w-3xl px-5 py-8">
+    <main
+      className={`shell mx-auto min-h-screen w-full px-5 py-8 ${
+        spotsView === "map" ? "max-w-4xl" : "max-w-3xl"
+      }`}
+    >
       <Link href="/app" className="text-[13px] font-semibold text-[var(--fjord)]">
         ← Urlaube
       </Link>
@@ -150,10 +156,34 @@ export default function VacationDetailPage() {
       )}
 
       <section className="mt-8">
-        <div className="flex items-center justify-between gap-3">
+        <div className="flex flex-wrap items-center justify-between gap-3">
           <h2 className="display text-xl">Spots</h2>
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2">
             <span className="text-[13px] text-[var(--ink-soft)]">{spots.length}</span>
+            <div className="flex rounded-full bg-black/5 p-0.5">
+              <button
+                type="button"
+                className={`rounded-full px-3 py-1.5 text-[12px] font-semibold ${
+                  spotsView === "list"
+                    ? "bg-[var(--fjord)] text-white"
+                    : "text-[var(--ink-soft)]"
+                }`}
+                onClick={() => setSpotsView("list")}
+              >
+                Liste
+              </button>
+              <button
+                type="button"
+                className={`rounded-full px-3 py-1.5 text-[12px] font-semibold ${
+                  spotsView === "map"
+                    ? "bg-[var(--fjord)] text-white"
+                    : "text-[var(--ink-soft)]"
+                }`}
+                onClick={() => setSpotsView("map")}
+              >
+                Karte
+              </button>
+            </div>
             <button
               type="button"
               className="cta !px-3 !py-2 text-[13px]"
@@ -176,15 +206,19 @@ export default function VacationDetailPage() {
           />
         )}
 
-        <SpotList
-          vacationId={vacationId}
-          spots={spots}
-          ratings={ratings}
-          summaries={summaries}
-          raters={raters}
-          currentUserId={currentUserId}
-          onChanged={load}
-        />
+        {spotsView === "list" ? (
+          <SpotList
+            vacationId={vacationId}
+            spots={spots}
+            ratings={ratings}
+            summaries={summaries}
+            raters={raters}
+            currentUserId={currentUserId}
+            onChanged={load}
+          />
+        ) : (
+          <SpotMap spots={spots} summaries={summaries} />
+        )}
       </section>
 
       <section className="mt-8">
