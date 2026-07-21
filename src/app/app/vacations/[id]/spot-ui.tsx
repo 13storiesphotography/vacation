@@ -474,7 +474,18 @@ export function SpotList({
                   <div className="min-w-0 flex-1">
                     <div className="flex items-start justify-between gap-2">
                       <div className="min-w-0 flex-1">
-                        <p className="text-[15px] font-semibold">{spot.name}</p>
+                        {spot.maps_url ? (
+                          <a
+                            href={spot.maps_url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="text-[15px] font-semibold text-[var(--fjord)] hover:underline"
+                          >
+                            {spot.name}
+                          </a>
+                        ) : (
+                          <p className="text-[15px] font-semibold">{spot.name}</p>
+                        )}
                         <p className="mt-0.5 text-[12px] text-[var(--ink-soft)]">
                           {categoryLabels[spot.category]}
                           {spot.overnight_cost ? ` · ${spot.overnight_cost}` : ""}
@@ -486,6 +497,19 @@ export function SpotList({
                                 Ø {formatAvg(summary.average)}
                                 {summary.count > 1 ? ` · ${summary.count}` : ""}
                               </span>
+                            </>
+                          )}
+                          {spot.info_url && (
+                            <>
+                              {" · "}
+                              <a
+                                href={spot.info_url}
+                                target="_blank"
+                                rel="noreferrer"
+                                className="font-semibold text-[var(--fjord)]"
+                              >
+                                Info
+                              </a>
                             </>
                           )}
                         </p>
@@ -531,26 +555,6 @@ export function SpotList({
                     )}
 
                     <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1">
-                      {spot.maps_url && (
-                        <a
-                          href={spot.maps_url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-[12px] font-semibold text-[var(--fjord)]"
-                        >
-                          Maps
-                        </a>
-                      )}
-                      {spot.info_url && (
-                        <a
-                          href={spot.info_url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="text-[12px] font-semibold text-[var(--fjord)]"
-                        >
-                          Info
-                        </a>
-                      )}
                       <button
                         type="button"
                         className="text-[12px] font-semibold text-[var(--fjord)]"

@@ -94,37 +94,39 @@ export default function SpotMapCanvas({
           >
             <Popup>
               <div className="min-w-[160px] text-[13px]">
-                <p className="font-semibold text-[var(--ink)]">{spot.name}</p>
+                {spot.maps_url ? (
+                  <a
+                    href={spot.maps_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="font-semibold text-[var(--fjord)]"
+                  >
+                    {spot.name}
+                  </a>
+                ) : (
+                  <p className="font-semibold text-[var(--ink)]">{spot.name}</p>
+                )}
                 <p className="mt-0.5 text-[12px] text-[var(--ink-soft)]">
                   {categoryLabels[spot.category as SpotCategory]}
                   {spot.overnight_cost ? ` · ${spot.overnight_cost}` : ""}
+                  {spot.info_url && (
+                    <>
+                      {" · "}
+                      <a
+                        href={spot.info_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="font-semibold text-[var(--fjord)]"
+                      >
+                        Info
+                      </a>
+                    </>
+                  )}
                 </p>
                 <p className="mt-1 text-[12px] text-[var(--ink-soft)]">
                   {ratingLabel(summary)}
                   {summary?.myFavorite ? " · dein Favorit" : ""}
                 </p>
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {spot.maps_url && (
-                    <a
-                      href={spot.maps_url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="font-semibold text-[var(--fjord)]"
-                    >
-                      Maps
-                    </a>
-                  )}
-                  {spot.info_url && (
-                    <a
-                      href={spot.info_url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="font-semibold text-[var(--ink-soft)]"
-                    >
-                      Info
-                    </a>
-                  )}
-                </div>
               </div>
             </Popup>
           </CircleMarker>
