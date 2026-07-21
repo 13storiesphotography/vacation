@@ -19,6 +19,7 @@ import { VacationTabPanel } from "@/components/app/vacation-tab-panel";
 import { DayPlanPanel } from "./day-plan-ui";
 import { isCompleteEmail } from "@/lib/email";
 import { MFA_ENROLL_GRACE_DAYS } from "@/lib/mfa";
+import { isStaleServerActionError } from "@/lib/stale-action";
 
 type Vacation = Database["public"]["Tables"]["vacations"]["Row"];
 type Member = Database["public"]["Tables"]["vacation_members"]["Row"];
@@ -167,7 +168,11 @@ export default function VacationDetailPage() {
         if (!cancelled && updated > 0) {
           await load();
         }
-      } catch {
+      } catch (error) {
+        if (isStaleServerActionError(error)) {
+          // Background heal after deploy — ignore; next full load is fine.
+          return;
+        }
         // Background heal must never break the vacation page.
       }
     })();

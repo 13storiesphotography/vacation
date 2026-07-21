@@ -9,7 +9,7 @@ import {
 import type { Database } from "@/lib/database.types";
 import { createClient } from "@/lib/supabase/client";
 import { createSpot, updateSpot, type SpotActionState } from "./spot-actions";
-import { previewSmartLink, type SmartLinkResult } from "./smart-link-actions";
+import type { SmartLinkResult } from "@/lib/smart-link";
 import {
   emptySummary,
   type RaterOption,
@@ -18,6 +18,7 @@ import {
 } from "@/lib/ratings";
 import { isOvernightCategory } from "@/lib/overnight";
 import { CategoryIcon } from "@/components/category-icon";
+import { isStaleServerActionError, reloadForStaleDeployment } from "@/lib/stale-action";
 
 type Spot = Database["public"]["Tables"]["spots"]["Row"];
 
@@ -92,14 +93,31 @@ function SmartLinkField({
     if (!trimmed) return;
     const handle = window.setTimeout(() => {
       startTransition(async () => {
-        const result = await previewSmartLink(trimmed);
-        setRemote({
-          ok: result.ok,
-          message: result.message,
-          providerLabel: result.providerLabel,
-        });
-        if (result.ok || result.provider !== "unknown") {
-          onResolved(result);
+        try {
+          const response = await fetch("/api/smart-link", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ url: trimmed }),
+          });
+          const result = (await response.json()) as SmartLinkResult;
+          setRemote({
+            ok: result.ok,
+            message: result.message,
+            providerLabel: result.providerLabel,
+          });
+          if (result.ok || result.provider !== "unknown") {
+            onResolved(result);
+          }
+        } catch (error) {
+          if (isStaleServerActionError(error)) {
+            reloadForStaleDeployment();
+            return;
+          }
+          setRemote({
+            ok: false,
+            message: "Link konnte nicht gelesen werden. Bitte später erneut versuchen.",
+            providerLabel: null,
+          });
         }
       });
     }, 420);
