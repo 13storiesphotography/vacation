@@ -47,6 +47,8 @@ html {
   overscroll-behavior-x: none;
   width: 100%;
   max-width: 100%;
+  /* Avoid double-tap zoom shifting the fixed tab menu off-screen. */
+  touch-action: manipulation;
 }
 
 body {
@@ -56,6 +58,7 @@ body {
   max-width: 100%;
   overflow-x: hidden;
   overscroll-behavior-x: none;
+  touch-action: manipulation;
   color: var(--ink);
   background:
     radial-gradient(900px 500px at 80% -10%, rgba(15, 110, 140, 0.12), transparent 55%),
@@ -222,7 +225,8 @@ textarea {
   box-shadow: 0 4px 12px rgba(12, 24, 32, 0.2);
 }
 
-/* Shared form control — matches liquid glass inputs */
+/* Shared form control — matches liquid glass inputs.
+   Keep ≥16px so iOS Safari does not auto-zoom on focus. */
 .glass-field {
   width: 100%;
   border: 1px solid rgba(255, 255, 255, 0.45);
@@ -232,7 +236,7 @@ textarea {
   color: var(--ink);
   outline: none;
   padding: 12px;
-  font-size: 15px;
+  font-size: 16px;
 }
 
 .glass-field:focus {
