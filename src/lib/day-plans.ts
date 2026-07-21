@@ -10,14 +10,15 @@ export type DayPlanWithStops = DayPlan & {
 /** Inclusive list of ISO dates (YYYY-MM-DD) between start and end. */
 export function eachDateInclusive(startDate: string, endDate: string): string[] {
   const dates: string[] = [];
-  const cursor = new Date(`${startDate}T12:00:00`);
-  const end = new Date(`${endDate}T12:00:00`);
+  // Parse as UTC noon so local timezone cannot shift the calendar day.
+  const cursor = new Date(`${startDate}T12:00:00Z`);
+  const end = new Date(`${endDate}T12:00:00Z`);
   if (Number.isNaN(cursor.getTime()) || Number.isNaN(end.getTime())) return dates;
   if (cursor > end) return dates;
 
   while (cursor <= end) {
     dates.push(cursor.toISOString().slice(0, 10));
-    cursor.setDate(cursor.getDate() + 1);
+    cursor.setUTCDate(cursor.getUTCDate() + 1);
   }
   return dates;
 }
@@ -27,7 +28,7 @@ export function formatDayLabel(date: string): string {
     weekday: "short",
     day: "numeric",
     month: "short",
-  }).format(new Date(`${date}T12:00:00`));
+  }).format(new Date(`${date}T12:00:00Z`));
 }
 
 export function defaultDayTitle(date: string, index: number): string {

@@ -4,18 +4,21 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { Database } from "@/lib/database.types";
 import { categoryLabels, type SpotCategory } from "@/lib/spots";
 import { formatDayLabel, type DayPlanWithStops } from "@/lib/day-plans";
-import { CategoryIcon } from "@/components/category-icon";
 import {
-  addSpotToDay,
-  ensureVacationDayPlans,
-  moveSpotOnDay,
-  removeSpotFromDay,
-  setDayOvernight,
-  updateDayPlanMeta,
-} from "./plan-actions";
+  addSpotToDayClient,
+  ensureAndLoadDayPlans,
+  moveSpotOnDayClient,
+  removeSpotFromDayClient,
+  setDayOvernightClient,
+  updateDayPlanMetaClient,
+} from "@/lib/day-plans-api";
+import { createClient } from "@/lib/supabase/client";
+import { CategoryIcon } from "@/components/category-icon";
 
 type Spot = Database["public"]["Tables"]["spots"]["Row"];
 type Vacation = Database["public"]["Tables"]["vacations"]["Row"];
+
+const LOAD_TIMEOUT_MS = 15000;
 
 export function DayPlanPanel({
   vacation,
@@ -56,7 +59,26 @@ export function DayPlanPanel({
   async function reload(preferId?: string | null) {
     const seq = ++reloadSeq.current;
     try {
-      const result = await ensureVacationDayPlans(vacation.id);
+      const supabase = createClient();
+      const result = await Promise.race([
+        ensureAndLoadDayPlans(
+          supabase,
+          vacation.id,
+          vacation.start_date,
+          vacation.end_date,
+        ),
+        new Promise<{ days: DayPlanWithStops[]; error: string }>((resolve) => {
+          window.setTimeout(
+            () =>
+              resolve({
+                days: [],
+                error:
+                  "Tagesplan-Timeout — Verbindung prüfen und erneut versuchen.",
+              }),
+            LOAD_TIMEOUT_MS,
+          );
+        }),
+      ]);
       // Ignore outdated responses so an older reload can't overwrite a newer one.
       if (seq !== reloadSeq.current) return;
 
@@ -238,7 +260,12 @@ export function DayPlanPanel({
                   if ((selected.title ?? "") === value) return;
                   patchSelectedDay((day) => ({ ...day, title: value.trim() || null }));
                   run(() =>
-                    updateDayPlanMeta(vacation.id, selected.id, { title: value }),
+                    updateDayPlanMetaClient(
+                      createClient(),
+                      vacation.id,
+                      selected.id,
+                      { title: value },
+                    ),
                   );
                 }}
               />
@@ -259,7 +286,12 @@ export function DayPlanPanel({
                     notes: value.trim() || null,
                   }));
                   run(() =>
-                    updateDayPlanMeta(vacation.id, selected.id, { notes: value }),
+                    updateDayPlanMetaClient(
+                      createClient(),
+                      vacation.id,
+                      selected.id,
+                      { notes: value },
+                    ),
                   );
                 }}
               />
@@ -281,7 +313,14 @@ export function DayPlanPanel({
                     ...day,
                     overnight_spot_id: value,
                   }));
-                  run(() => setDayOvernight(vacation.id, selected.id, value));
+                  run(() =>
+                    setDayOvernightClient(
+                      createClient(),
+                      vacation.id,
+                      selected.id,
+                      value,
+                    ),
+                  );
                 }}
               >
                 <option value="">Noch offen</option>
@@ -330,7 +369,13 @@ export function DayPlanPanel({
                       disabled={pending}
                       onClick={() =>
                         run(
-                          () => addSpotToDay(vacation.id, selected.id, spot.id),
+                          () =>
+                            addSpotToDayClient(
+                              createClient(),
+                              vacation.id,
+                              selected.id,
+                              spot.id,
+                            ),
                           () => {
                             patchSelectedDay((day) => ({
                               ...day,
@@ -396,8 +441,8 @@ export function DayPlanPanel({
                           onClick={() =>
                             run(
                               () =>
-                                moveSpotOnDay(
-                                  vacation.id,
+                                moveSpotOnDayClient(
+                                  createClient(),
                                   selected.id,
                                   spot.id,
                                   "up",
@@ -427,8 +472,8 @@ export function DayPlanPanel({
                           onClick={() =>
                             run(
                               () =>
-                                moveSpotOnDay(
-                                  vacation.id,
+                                moveSpotOnDayClient(
+                                  createClient(),
                                   selected.id,
                                   spot.id,
                                   "down",
@@ -457,8 +502,8 @@ export function DayPlanPanel({
                           onClick={() =>
                             run(
                               () =>
-                                removeSpotFromDay(
-                                  vacation.id,
+                                removeSpotFromDayClient(
+                                  createClient(),
                                   selected.id,
                                   spot.id,
                                 ),
