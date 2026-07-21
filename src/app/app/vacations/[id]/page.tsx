@@ -33,6 +33,8 @@ export default function VacationDetailPage() {
   const [spotFormKey, setSpotFormKey] = useState(0);
   const [spotsView, setSpotsView] = useState<"list" | "map">("list");
   const [editingVacation, setEditingVacation] = useState(false);
+  const [showTeam, setShowTeam] = useState(false);
+  const [showInvite, setShowInvite] = useState(false);
 
   const load = useCallback(async () => {
     const supabase = createClient();
@@ -257,38 +259,103 @@ export default function VacationDetailPage() {
         )}
       </section>
 
-      <section className="mt-8">
-        <h2 className="display text-xl">Team</h2>
-        <div className="ios-group mt-3">
-          {members.map((member) => (
-            <div key={member.id} className="ios-row !items-start">
-              <div>
-                <p className="text-[15px] font-semibold">{member.email}</p>
-                <p className="text-[12px] font-semibold uppercase tracking-wide text-[var(--ink-faint)]">
-                  {member.role} · {member.status}
-                </p>
-              </div>
+      <section className="mt-12 border-t border-[var(--separator)] pt-6">
+        <button
+          type="button"
+          className="flex w-full items-center justify-between gap-3 text-left"
+          onClick={() => setShowTeam((value) => !value)}
+          aria-expanded={showTeam}
+        >
+          <span className="display text-lg text-[var(--ink-soft)]">Team</span>
+          <span className="text-[13px] font-semibold text-[var(--ink-faint)]">
+            {members.length} · {showTeam ? "Einklappen" : "Anzeigen"}
+          </span>
+        </button>
+
+        {showTeam && (
+          <div className="mt-3">
+            <div className="ios-group">
+              {members.map((member) => (
+                <div key={member.id} className="ios-row !items-start">
+                  <div>
+                    <p className="text-[15px] font-semibold">{member.email}</p>
+                    <p className="text-[12px] font-semibold uppercase tracking-wide text-[var(--ink-faint)]">
+                      {member.role} · {member.status}
+                    </p>
+                  </div>
+                </div>
+              ))}
             </div>
-          ))}
-        </div>
-        <form onSubmit={onInvite} className="ios-group mt-3 p-4">
-          <p className="text-[13px] font-semibold text-[var(--ink-soft)]">Person einladen</p>
-          <div className="mt-3 flex flex-col gap-3 sm:flex-row">
-            <input
-              className="w-full rounded-[12px] border-0 bg-black/5 px-3 py-3 text-[15px] outline-none ring-[var(--fjord)] focus:ring-2"
-              type="email"
-              required
-              placeholder="email@example.com"
-              value={inviteEmail}
-              onChange={(e) => setInviteEmail(e.target.value)}
-            />
-            <button type="submit" className="cta shrink-0" disabled={inviting}>
-              {inviting ? "…" : "Einladen"}
-            </button>
+
+            {canEditVacation && (
+              <div className="mt-3">
+                {!showInvite ? (
+                  <button
+                    type="button"
+                    className="text-[13px] font-semibold text-[var(--fjord)]"
+                    onClick={() => setShowInvite(true)}
+                  >
+                    Person einladen…
+                  </button>
+                ) : (
+                  <form
+                    onSubmit={onInvite}
+                    className="ios-group p-4"
+                    autoComplete="off"
+                    data-lpignore="true"
+                    data-1p-ignore="true"
+                    data-bwignore="true"
+                    data-form-type="other"
+                  >
+                    <div className="flex items-center justify-between gap-3">
+                      <p className="text-[13px] font-semibold text-[var(--ink-soft)]">
+                        Person einladen
+                      </p>
+                      <button
+                        type="button"
+                        className="text-[12px] font-semibold text-[var(--ink-faint)]"
+                        onClick={() => {
+                          setShowInvite(false);
+                          setInviteEmail("");
+                          setMessage(null);
+                          setError(null);
+                        }}
+                      >
+                        Schließen
+                      </button>
+                    </div>
+                    <div className="mt-3 flex flex-col gap-3 sm:flex-row">
+                      <input
+                        className="w-full rounded-[12px] border-0 bg-black/5 px-3 py-3 text-[15px] outline-none ring-[var(--fjord)] focus:ring-2"
+                        type="text"
+                        inputMode="email"
+                        name="vacation-invite-email"
+                        id="vacation-invite-email"
+                        autoComplete="off"
+                        autoCorrect="off"
+                        autoCapitalize="off"
+                        spellCheck={false}
+                        data-lpignore="true"
+                        data-1p-ignore="true"
+                        data-bwignore="true"
+                        data-form-type="other"
+                        required
+                        placeholder="email@example.com"
+                        value={inviteEmail}
+                        onChange={(e) => setInviteEmail(e.target.value)}
+                      />
+                      <button type="submit" className="cta shrink-0" disabled={inviting}>
+                        {inviting ? "…" : "Einladen"}
+                      </button>
+                    </div>
+                    {message && <p className="mt-3 text-[13px] text-[var(--pine)]">{message}</p>}
+                    {error && <p className="mt-3 text-[13px] text-[var(--danger)]">{error}</p>}
+                  </form>
+                )}
+              </div>
+            )}
           </div>
-          {message && <p className="mt-3 text-[13px] text-[var(--pine)]">{message}</p>}
-          {error && <p className="mt-3 text-[13px] text-[var(--danger)]">{error}</p>}
-        </form>
+        )}
       </section>
     </main>
   );
