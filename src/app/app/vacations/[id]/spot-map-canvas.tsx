@@ -30,12 +30,14 @@ export default function SpotMapCanvas({
   selectedId,
   onSelect,
   expanded = false,
+  active = true,
 }: {
   spots: MappableSpot[];
   summaries: Record<string, SpotRatingSummary>;
   selectedId: string | null;
   onSelect: (id: string | null) => void;
   expanded?: boolean;
+  active?: boolean;
 }) {
   const useGoogle = Boolean(getBrowserGoogleMapsKey());
   if (useGoogle) {
@@ -46,6 +48,7 @@ export default function SpotMapCanvas({
         selectedId={selectedId}
         onSelect={onSelect}
         expanded={expanded}
+        active={active}
       />
     );
   }
@@ -56,6 +59,7 @@ export default function SpotMapCanvas({
       selectedId={selectedId}
       onSelect={onSelect}
       expanded={expanded}
+      active={active}
     />
   );
 }

@@ -10,18 +10,21 @@ import { useMap } from "react-leaflet";
  */
 export function LeafletGestureMode({
   mode,
+  active = true,
 }: {
   mode: "cooperative" | "greedy";
+  active?: boolean;
 }) {
   const map = useMap();
 
   useEffect(() => {
-    // Recalculate tiles after expand/collapse resize.
+    if (!active) return;
+    // Recalculate tiles after expand/collapse or returning to the map tab.
     const timer = window.setTimeout(() => {
       map.invalidateSize();
     }, 50);
     return () => window.clearTimeout(timer);
-  }, [map, mode]);
+  }, [map, mode, active]);
 
   useEffect(() => {
     const container = map.getContainer();

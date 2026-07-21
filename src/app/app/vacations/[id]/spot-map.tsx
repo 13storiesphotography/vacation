@@ -30,15 +30,23 @@ type FocusMode = "all" | "favorites" | "rated";
 export function SpotMap({
   spots,
   summaries,
+  active = true,
 }: {
   spots: Spot[];
   summaries: Record<string, SpotRatingSummary>;
+  /** False while another vacation tab is shown — collapse overlay and resize on return. */
+  active?: boolean;
 }) {
   const [filter, setFilter] = useState<MapFilter>("alle");
   const [focus, setFocus] = useState<FocusMode>("all");
   const [minAvg, setMinAvg] = useState(0);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(false);
+
+  // Collapse fullscreen map when leaving the map tab (adjust state during render).
+  if (!active && expanded) {
+    setExpanded(false);
+  }
 
   useEffect(() => {
     if (!expanded) return;
@@ -173,6 +181,7 @@ export function SpotMap({
           selectedId={selectedId}
           onSelect={setSelectedId}
           expanded={expanded}
+          active={active}
         />
       </div>
 
