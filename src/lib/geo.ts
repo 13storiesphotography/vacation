@@ -102,42 +102,92 @@ export function isShortMapsUrl(url: string): boolean {
   }
 }
 
+export function decodeHtmlEntities(value: string): string {
+  return value
+    .replace(/&amp;/gi, "&")
+    .replace(/&quot;/gi, '"')
+    .replace(/&#39;/g, "'")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&#x([0-9a-f]+);/gi, (_, hex: string) =>
+      String.fromCodePoint(Number.parseInt(hex, 16)),
+    )
+    .replace(/&#(\d+);/g, (_, num: string) =>
+      String.fromCodePoint(Number.parseInt(num, 10)),
+    );
+}
+
+function normalizeImageUrl(raw: string): string | null {
+  let value = decodeHtmlEntities(raw.trim());
+  if (!value) return null;
+  if (value.startsWith("//")) value = `https:${value}`;
+  if (!/^https?:\/\//i.test(value)) return null;
+  try {
+    // Validate URL shape
+    new URL(value);
+    return value;
+  } catch {
+    return null;
+  }
+}
+
+/** Google's own signed Static Map og:images 403 outside Google. */
+export function isUsablePreviewImage(url: string | null | undefined): boolean {
+  if (!url) return false;
+  const normalized = normalizeImageUrl(url) ?? (url.startsWith("/api/map-preview?") ? url : null);
+  if (!normalized) return false;
+  if (normalized.startsWith("/api/map-preview?")) return true;
+  try {
+    const parsed = new URL(normalized);
+    const host = parsed.hostname.toLowerCase();
+    const path = parsed.pathname.toLowerCase();
+
+    if (path.includes("/maps/about/images/icons/")) return false;
+    if (path.includes("/maps/api/staticmap")) return false;
+    if (path.includes("/maps/api/streetview")) return false;
+    if (host.includes("gstatic.com") && path.includes("/mapfiles/")) return false;
+    if (host === "maps.google.com" && parsed.searchParams.has("signature")) {
+      return false;
+    }
+    if (host.includes("wikimedia.org") && path.includes("/img/")) return false;
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 function parseOgImage(html: string): string | null {
   const patterns = [
     /<meta[^>]+property=["']og:image(?::secure_url)?["'][^>]+content=["']([^"']+)["']/i,
     /<meta[^>]+content=["']([^"']+)["'][^>]+property=["']og:image(?::secure_url)?["']/i,
     /<meta[^>]+name=["']twitter:image["'][^>]+content=["']([^"']+)["']/i,
     /<meta[^>]+content=["']([^"']+)["'][^>]+name=["']twitter:image["']/i,
+    /<meta[^>]+itemprop=["']image["'][^>]+content=["']([^"']+)["']/i,
   ];
   for (const pattern of patterns) {
     const match = html.match(pattern);
-    if (match?.[1]) {
-      try {
-        const url = decodeURIComponent(match[1].trim());
-        if (/^https?:\/\//i.test(url)) return url;
-      } catch {
-        if (/^https?:\/\//i.test(match[1].trim())) return match[1].trim();
-      }
-    }
+    if (!match?.[1]) continue;
+    const url = normalizeImageUrl(match[1]);
+    if (url && isUsablePreviewImage(url)) return url;
   }
   return null;
 }
 
-function parseResolvedUrlFromHtml(html: string, fallback: string): string {
-  const canonical = html.match(
-    /<link[^>]+rel=["']canonical["'][^>]+href=["']([^"']+)["']/i,
-  );
-  if (canonical?.[1]) return canonical[1];
-
-  const og = html.match(
-    /<meta[^>]+property=["']og:url["'][^>]+content=["']([^"']+)["']/i,
-  );
-  if (og?.[1]) return og[1];
-
-  const refresh = html.match(/content=["']\d+;\s*url=([^"']+)["']/i);
-  if (refresh?.[1]) return refresh[1];
-
-  return fallback;
+function parsePlacePhotoCandidate(html: string): string | null {
+  const patterns = [
+    /https:\/\/lh3\.googleusercontent\.com\/[^"'\\\s<>]+/gi,
+    /https:\/\/streetviewpixels-pa\.googleapis\.com\/v1\/thumbnail\?[^"'\\\s<>]+/gi,
+  ];
+  for (const pattern of patterns) {
+    const matches = html.match(pattern) ?? [];
+    for (const candidate of matches) {
+      const cleaned = candidate.replace(/[),;]+$/, "");
+      if (cleaned.includes("${")) continue;
+      const url = normalizeImageUrl(cleaned);
+      if (url && isUsablePreviewImage(url)) return url;
+    }
+  }
+  return null;
 }
 
 async function fetchMapsPage(url: string): Promise<{
@@ -145,15 +195,26 @@ async function fetchMapsPage(url: string): Promise<{
   html: string | null;
 }> {
   try {
+    // Short links often need an explicit 302 hop; fetch(redirect:follow) can stall on goo.gl.
+    if (isShortMapsUrl(url)) {
+      const head = await fetch(url, {
+        method: "GET",
+        redirect: "manual",
+        headers: browserHeaders(),
+        signal: AbortSignal.timeout(10000),
+      });
+      const location = head.headers.get("location");
+      if (location) {
+        const absolute = new URL(location, url).toString();
+        return fetchMapsPage(absolute);
+      }
+    }
+
     const response = await fetch(url, {
       method: "GET",
       redirect: "follow",
-      headers: {
-        "User-Agent":
-          "Mozilla/5.0 (compatible; VacationPlaner/1.0; +https://vacation-bice.vercel.app)",
-        Accept: "text/html,application/xhtml+xml",
-      },
-      signal: AbortSignal.timeout(10000),
+      headers: browserHeaders(),
+      signal: AbortSignal.timeout(12000),
     });
     const html = await response.text();
     return {
@@ -165,20 +226,30 @@ async function fetchMapsPage(url: string): Promise<{
   }
 }
 
-export function streetViewImageUrl(lat: number, lng: number): string | null {
-  const key = process.env.GOOGLE_MAPS_API_KEY?.trim();
-  if (!key) return null;
-  const params = new URLSearchParams({
-    size: "640x360",
-    location: `${lat},${lng}`,
-    fov: "80",
-    pitch: "0",
-    key,
-  });
-  return `https://maps.googleapis.com/maps/api/streetview?${params.toString()}`;
+function browserHeaders(): HeadersInit {
+  return {
+    "User-Agent":
+      "Mozilla/5.0 (iPhone; CPU iPhone OS 17_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/17.0 Mobile/15E148 Safari/604.1",
+    Accept: "text/html,application/xhtml+xml",
+    "Accept-Language": "de-DE,de;q=0.9,en;q=0.8",
+  };
 }
 
-/** Resolve coords + optional preview image from a Google Maps share/place URL. */
+/** App-hosted map snapshot from coordinates (works as <img src>). */
+export function appMapPreviewUrl(lat: number, lng: number): string {
+  const params = new URLSearchParams({
+    lat: String(lat),
+    lng: String(lng),
+  });
+  return `/api/map-preview?${params.toString()}`;
+}
+
+/** Coord fallback always points at our API (never stores Google keys in DB/HTML). */
+export function previewImageFromCoords(lat: number, lng: number): string {
+  return appMapPreviewUrl(lat, lng);
+}
+
+/** Resolve coords + preview image from a Google Maps share/place URL. */
 export async function enrichFromMapsUrl(
   url: string | null | undefined,
 ): Promise<MapsEnrichment> {
@@ -191,29 +262,21 @@ export async function enrichFromMapsUrl(
   let imageUrl: string | null = null;
 
   const page = await fetchMapsPage(original);
+  resolvedUrl = page.finalUrl || original;
   if (page.html) {
-    resolvedUrl = page.finalUrl !== original
-      ? page.finalUrl
-      : parseResolvedUrlFromHtml(page.html, page.finalUrl);
-    imageUrl = parseOgImage(page.html);
-  } else if (isShortMapsUrl(original)) {
-    resolvedUrl = page.finalUrl;
-  }
-
-  // If short link resolved but no image yet, fetch the long URL once more.
-  if (!imageUrl && resolvedUrl !== original && !isShortMapsUrl(resolvedUrl)) {
-    const longPage = await fetchMapsPage(resolvedUrl);
-    if (longPage.html) {
-      imageUrl = parseOgImage(longPage.html);
-      resolvedUrl = longPage.finalUrl || resolvedUrl;
-    }
+    imageUrl =
+      parsePlacePhotoCandidate(page.html) ?? parseOgImage(page.html) ?? null;
   }
 
   const coords =
     parseLatLngFromMapsUrl(resolvedUrl) ?? parseLatLngFromMapsUrl(original);
 
   if (!imageUrl && coords) {
-    imageUrl = streetViewImageUrl(coords.lat, coords.lng);
+    imageUrl = previewImageFromCoords(coords.lat, coords.lng);
+  }
+
+  if (imageUrl && !isUsablePreviewImage(imageUrl) && coords) {
+    imageUrl = previewImageFromCoords(coords.lat, coords.lng);
   }
 
   return { resolvedUrl, coords, imageUrl };
@@ -245,6 +308,26 @@ export function resolveSpotCoords(spot: {
     return { lat: spot.lat, lng: spot.lng };
   }
   return parseLatLngFromMapsUrl(spot.maps_url);
+}
+
+/** Fix broken auto-previews (e.g. signed Google staticmap 403) for display. */
+export function resolveSpotPreviewImage(spot: {
+  image_url: string | null;
+  image_manual?: boolean | null;
+  lat: number | null;
+  lng: number | null;
+}): string | null {
+  const current = spot.image_url;
+  if (spot.image_manual && current) return current;
+  if (current && isUsablePreviewImage(current)) return current;
+  if (
+    typeof spot.lat === "number" &&
+    typeof spot.lng === "number" &&
+    isValidLatLng(spot.lat, spot.lng)
+  ) {
+    return previewImageFromCoords(spot.lat, spot.lng);
+  }
+  return null;
 }
 
 /** Sweden-ish default for van-trip vacations without coords yet. */

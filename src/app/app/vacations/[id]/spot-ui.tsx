@@ -234,7 +234,7 @@ function SpotFormFields({
           placeholder="https://… (leer = automatisch aus Maps)"
         />
         <span className="mt-1 block text-[11px] font-medium text-[var(--ink-faint)]">
-          Leer lassen für automatisches Maps-Bild. Eigene URL überschreibt das.
+          Leer lassen = Kartenausschnitt zur Position. Eigene Bild-URL überschreibt das.
           {spot?.image_url && !spot.image_manual
             ? " Aktuell: automatisch gesetzt."
             : ""}
