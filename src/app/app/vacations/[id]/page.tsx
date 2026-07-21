@@ -276,6 +276,7 @@ export default function VacationDetailPage() {
     }
     setMessage(payload.note ?? "Einladung gesendet.");
     setInviteEmail("");
+    setShowInvite(false);
     await load();
   }
 
@@ -545,7 +546,7 @@ export default function VacationDetailPage() {
                           {busy
                             ? "…"
                             : member.status === "invited"
-                              ? "Zurückziehen"
+                              ? "Einladung zurückziehen"
                               : "Entfernen"}
                         </button>
                       </div>
