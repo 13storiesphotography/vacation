@@ -423,7 +423,7 @@ export default function VacationDetailPage() {
           <h1 className="display text-2xl">Team</h1>
           <p className="mt-1 text-[13px] text-[var(--ink-soft)]">
             {members.length} Mitglied{members.length === 1 ? "" : "er"} · Einladung per
-            E-Mail, danach Passwort + MFA ({MFA_ENROLL_GRACE_DAYS} Tage Schonfrist)
+            E-Mail, danach Apple oder Passwort + MFA ({MFA_ENROLL_GRACE_DAYS} Tage Schonfrist)
           </p>
 
           <div className="ios-group mt-4">
