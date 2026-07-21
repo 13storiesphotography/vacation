@@ -1,3 +1,5 @@
+import { isValidLatLng } from "@/lib/geo";
+
 export type AirbnbMetadata = {
   ok: true;
   provider: "airbnb";
@@ -152,6 +154,75 @@ function firstJsonNumber(html: string, keys: string[]): number | null {
   return null;
 }
 
+function pairCoords(lat: number | null, lng: number | null): {
+  lat: number;
+  lng: number;
+} | null {
+  if (lat == null || lng == null) return null;
+  return isValidLatLng(lat, lng) ? { lat, lng } : null;
+}
+
+/**
+ * Prefer listing-specific keys. Those often sit near the end of large PDP HTML
+ * (past the title/image scan window), so search the full document.
+ */
+export function extractAirbnbCoordsFromHtml(html: string): {
+  lat: number | null;
+  lng: number | null;
+} {
+  const listing = pairCoords(
+    firstJsonNumber(html, ["listingLat"]),
+    firstJsonNumber(html, ["listingLng"]),
+  );
+  if (listing) return listing;
+
+  const coordinateLatFirst = html.match(
+    /"coordinate"\s*:\s*\{[^{}]{0,240}?"latitude"\s*:\s*(-?\d+(?:\.\d+)?)[^{}]{0,120}?"longitude"\s*:\s*(-?\d+(?:\.\d+)?)/i,
+  );
+  if (coordinateLatFirst) {
+    const found = pairCoords(
+      Number.parseFloat(coordinateLatFirst[1]),
+      Number.parseFloat(coordinateLatFirst[2]),
+    );
+    if (found) return found;
+  }
+
+  const coordinateLngFirst = html.match(
+    /"coordinate"\s*:\s*\{[^{}]{0,240}?"longitude"\s*:\s*(-?\d+(?:\.\d+)?)[^{}]{0,120}?"latitude"\s*:\s*(-?\d+(?:\.\d+)?)/i,
+  );
+  if (coordinateLngFirst) {
+    const found = pairCoords(
+      Number.parseFloat(coordinateLngFirst[2]),
+      Number.parseFloat(coordinateLngFirst[1]),
+    );
+    if (found) return found;
+  }
+
+  const latLngPair = html.match(
+    /"lat"\s*:\s*(-?\d+(?:\.\d+)?)\s*,\s*"lng"\s*:\s*(-?\d+(?:\.\d+)?)/i,
+  );
+  if (latLngPair) {
+    const found = pairCoords(
+      Number.parseFloat(latLngPair[1]),
+      Number.parseFloat(latLngPair[2]),
+    );
+    if (found) return found;
+  }
+
+  const latitudeLongitude = html.match(
+    /"latitude"\s*:\s*(-?\d+(?:\.\d+)?)\s*,\s*"longitude"\s*:\s*(-?\d+(?:\.\d+)?)/i,
+  );
+  if (latitudeLongitude) {
+    const found = pairCoords(
+      Number.parseFloat(latitudeLongitude[1]),
+      Number.parseFloat(latitudeLongitude[2]),
+    );
+    if (found) return found;
+  }
+
+  return { lat: null, lng: null };
+}
+
 /**
  * Airbnb no longer always ships `__NEXT_DATA__`; listing fields often live in
  * embedded Niobe/GraphQL JSON. Search the full HTML for known keys.
@@ -167,7 +238,8 @@ function extractFromPageData(html: string): {
   const nextMatch = html.match(
     /<script[^>]+id=["']__NEXT_DATA__["'][^>]*>([\s\S]*?)<\/script>/i,
   );
-  // Cap scan size — full Airbnb pages can be huge and stress serverless.
+  // Cap text/image scan size — full Airbnb pages can be huge and stress serverless.
+  // Coordinates are extracted separately from the full HTML (keys often appear late).
   const blob = (nextMatch?.[1] ?? html).slice(0, 450_000);
 
   try {
@@ -189,16 +261,15 @@ function extractFromPageData(html: string): {
       "localizedCityName",
       "city",
     ]);
-    const lat = firstJsonNumber(blob, ["listingLat"]);
-    const lng = firstJsonNumber(blob, ["listingLng"]);
+    const coords = extractAirbnbCoordsFromHtml(html);
 
     return {
       title,
       description,
       imageUrl: unescapeJsonString(imageUrl)?.replace(/\\\//g, "/"),
       locationHint,
-      lat,
-      lng,
+      lat: coords.lat,
+      lng: coords.lng,
     };
   } catch (error) {
     console.error("[airbnb] extractFromPageData failed:", error);
