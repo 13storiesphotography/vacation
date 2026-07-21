@@ -141,7 +141,10 @@ function SpotThumb({
   return (
     <button
       type="button"
-      onClick={onOpen}
+      onClick={(event) => {
+        event.stopPropagation();
+        onOpen?.();
+      }}
       aria-label={`${spot.name} bearbeiten`}
       className={`relative shrink-0 overflow-hidden rounded-[12px] bg-[linear-gradient(160deg,#c5d5d0,#8aa4ad)] ${
         selected ? "ring-2 ring-[var(--fjord)]" : ""
@@ -575,7 +578,12 @@ export function SpotList({
             }
             return (
               <div key={spot.id}>
-                <div className="ios-row !items-center !py-2.5">
+                <div
+                  className={`ios-row !items-center !py-2.5 cursor-pointer ${
+                    isOpen ? "bg-[rgba(15,110,140,0.06)]" : ""
+                  }`}
+                  onClick={openEdit}
+                >
                   <SpotThumb
                     spot={spot}
                     size={52}
@@ -585,30 +593,11 @@ export function SpotList({
                   <div className="min-w-0 flex-1">
                     <div className="flex items-start gap-2">
                       <div className="min-w-0 flex-1">
-                        {spot.maps_url ? (
-                          <a
-                            href={spot.maps_url}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="block truncate text-[15px] font-semibold leading-tight text-[var(--fjord)] hover:underline"
-                          >
-                            {spot.name}
-                          </a>
-                        ) : (
-                          <button
-                            type="button"
-                            onClick={openEdit}
-                            className="block w-full truncate text-left text-[15px] font-semibold leading-tight"
-                          >
-                            {spot.name}
-                          </button>
-                        )}
-                        <div className="mt-0.5 flex min-w-0 items-baseline gap-1.5 text-[12px] leading-snug text-[var(--ink-soft)]">
-                          <button
-                            type="button"
-                            onClick={openEdit}
-                            className="min-w-0 truncate text-left"
-                          >
+                        <p className="truncate text-[15px] font-semibold leading-tight">
+                          {spot.name}
+                        </p>
+                        <div className="mt-0.5 flex min-w-0 flex-wrap items-baseline gap-x-1.5 gap-y-0.5 text-[12px] leading-snug text-[var(--ink-soft)]">
+                          <span className="min-w-0 truncate">
                             {categoryLabels[spot.category]}
                             {spot.overnight_cost ? ` · ${spot.overnight_cost}` : ""}
                             {spot.price_hint ? ` · ${spot.price_hint}` : ""}
@@ -621,20 +610,36 @@ export function SpotList({
                                 </span>
                               </>
                             )}
-                          </button>
+                          </span>
+                          {spot.maps_url ? (
+                            <a
+                              href={spot.maps_url}
+                              target="_blank"
+                              rel="noreferrer"
+                              className="shrink-0 font-semibold text-[var(--fjord)]"
+                              onClick={(event) => event.stopPropagation()}
+                            >
+                              Maps
+                            </a>
+                          ) : null}
                           {spot.info_url ? (
                             <a
                               href={spot.info_url}
                               target="_blank"
                               rel="noreferrer"
                               className="shrink-0 font-semibold text-[var(--fjord)]"
+                              onClick={(event) => event.stopPropagation()}
                             >
                               Info
                             </a>
                           ) : null}
                         </div>
                       </div>
-                      <div className="flex shrink-0 items-center gap-0.5 pt-0.5">
+                      <div
+                        className="flex shrink-0 items-center gap-0.5 pt-0.5"
+                        onClick={(event) => event.stopPropagation()}
+                        onKeyDown={(event) => event.stopPropagation()}
+                      >
                         <Stars
                           value={summary.myRating}
                           onChange={(value) => saveRating(spot.id, { rating: value })}
@@ -656,13 +661,9 @@ export function SpotList({
                     </div>
 
                     {spot.description ? (
-                      <button
-                        type="button"
-                        onClick={openEdit}
-                        className="mt-1 line-clamp-1 w-full text-left text-[12px] leading-snug text-[var(--ink-soft)]"
-                      >
+                      <p className="mt-1 line-clamp-1 text-[12px] leading-snug text-[var(--ink-soft)]">
                         {spot.description}
-                      </button>
+                      </p>
                     ) : null}
                   </div>
                 </div>
