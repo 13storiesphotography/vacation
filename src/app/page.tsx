@@ -17,9 +17,6 @@ export default function HomePage() {
         <Link href="/login" className="cta">
           Anmelden
         </Link>
-        <Link href="/signup" className="cta cta-secondary">
-          Konto erstellen
-        </Link>
         <Link href="/konzept" className="cta cta-secondary">
           Konzept ansehen
         </Link>
