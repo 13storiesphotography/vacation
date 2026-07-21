@@ -18,7 +18,6 @@ import {
 import { VacationTabPanel } from "@/components/app/vacation-tab-panel";
 import { DayPlanPanel } from "./day-plan-ui";
 import { isCompleteEmail } from "@/lib/email";
-import { MFA_ENROLL_GRACE_DAYS } from "@/lib/mfa";
 import { isStaleServerActionError } from "@/lib/stale-action";
 
 type Vacation = Database["public"]["Tables"]["vacations"]["Row"];
@@ -259,47 +258,98 @@ export default function VacationDetailPage() {
     }
 
     setInviting(true);
-    const response = await fetch("/api/invite", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ vacationId, email: inviteEmail }),
-    });
-    const payload = (await response.json()) as {
-      error?: string;
-      ok?: boolean;
-      note?: string;
-    };
-    setInviting(false);
-    if (!response.ok) {
-      setError(payload.error ?? "Einladung fehlgeschlagen");
-      return;
+    try {
+      const supabase = createClient();
+      const redirectTo = `${window.location.origin}/auth/callback?next=/auth/set-password`;
+      const { data, error: fnError } = await supabase.functions.invoke("invite-member", {
+        body: {
+          vacationId,
+          email: inviteEmail.trim().toLowerCase(),
+          redirectTo,
+        },
+      });
+      const payload = (data ?? {}) as { error?: string; ok?: boolean; note?: string };
+
+      if (fnError || payload.error) {
+        // Fallback to Next API (Edge Function + service role paths).
+        const response = await fetch("/api/invite", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ vacationId, email: inviteEmail }),
+        });
+        const apiPayload = (await response.json()) as {
+          error?: string;
+          ok?: boolean;
+          note?: string;
+        };
+        if (!response.ok) {
+          setError(apiPayload.error ?? payload.error ?? fnError?.message ?? "Einladung fehlgeschlagen");
+          return;
+        }
+        setMessage(apiPayload.note ?? "Einladung gesendet.");
+      } else if (payload.note && /invite:/i.test(payload.note)) {
+        setMessage(
+          "Person ist eingeladen, aber die E-Mail konnte nicht gesendet werden. Bitte erneut versuchen.",
+        );
+      } else {
+        setMessage("Einladung per E-Mail gesendet.");
+      }
+
+      setInviteEmail("");
+      setShowInvite(false);
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Einladung fehlgeschlagen");
+    } finally {
+      setInviting(false);
     }
-    setMessage(payload.note ?? "Einladung gesendet.");
-    setInviteEmail("");
-    setShowInvite(false);
-    await load();
   }
 
   async function onResendInvite(member: Member) {
     setError(null);
     setMessage(null);
     setMemberBusyId(member.id);
-    const response = await fetch("/api/members", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({
-        vacationId,
-        memberId: member.id,
-        action: "resend",
-      }),
-    });
-    const payload = (await response.json()) as { error?: string; note?: string };
-    setMemberBusyId(null);
-    if (!response.ok) {
-      setError(payload.error ?? "Erneutes Senden fehlgeschlagen");
-      return;
+    try {
+      const supabase = createClient();
+      const redirectTo = `${window.location.origin}/auth/callback?next=/auth/set-password`;
+      const { data, error: fnError } = await supabase.functions.invoke("invite-member", {
+        body: {
+          vacationId,
+          email: member.email,
+          redirectTo,
+        },
+      });
+      const payload = (data ?? {}) as { error?: string; note?: string };
+
+      if (fnError || payload.error) {
+        const response = await fetch("/api/members", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            vacationId,
+            memberId: member.id,
+            action: "resend",
+          }),
+        });
+        const apiPayload = (await response.json()) as { error?: string; note?: string };
+        if (!response.ok) {
+          setError(apiPayload.error ?? payload.error ?? "Erneutes Senden fehlgeschlagen");
+          return;
+        }
+        setMessage(apiPayload.note ?? "Einladung erneut gesendet.");
+        return;
+      }
+
+      if (payload.note && /invite:/i.test(payload.note)) {
+        setError("E-Mail konnte nicht gesendet werden. Bitte später erneut versuchen.");
+        return;
+      }
+      setMessage("Einladung erneut gesendet.");
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erneutes Senden fehlgeschlagen");
+    } finally {
+      setMemberBusyId(null);
     }
-    setMessage(payload.note ?? "Einladung erneut gesendet.");
   }
 
   async function onRemoveMember(member: Member) {
@@ -505,8 +555,7 @@ export default function VacationDetailPage() {
         <VacationTabPanel id="team" active={tab === "team"}>
           <h1 className="display text-2xl">Team</h1>
           <p className="tab-subtitle">
-            {members.length} Mitglied{members.length === 1 ? "" : "er"} · Einladung per
-            E-Mail, danach Apple oder Passwort + MFA ({MFA_ENROLL_GRACE_DAYS} Tage Schonfrist)
+            {members.length} Mitglied{members.length === 1 ? "" : "er"}
           </p>
 
           <div className="ios-group mt-4">
