@@ -1,8 +1,7 @@
 name: Deploy GitHub Pages
 
 on:
-  push:
-    branches: [main, cursor/vacation-planer-konzept-214a]
+  # App is no longer fully static (Auth/API). Concept snapshot deploy is manual only.
   workflow_dispatch:
 
 permissions:
