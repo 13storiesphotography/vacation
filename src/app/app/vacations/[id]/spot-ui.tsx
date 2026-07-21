@@ -354,11 +354,32 @@ export function EditSpotForm({
   }, [state.ok, onDone]);
 
   return (
-    <div className="border-t border-[var(--separator)] p-4">
+    <div className="border-t border-[var(--separator)] bg-black/[0.015] p-4">
       <form action={action}>
         <input type="hidden" name="vacation_id" value={vacationId} />
         <input type="hidden" name="spot_id" value={spot.id} />
-        <p className="text-[13px] font-semibold text-[var(--ink-soft)]">Spot bearbeiten</p>
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <p className="text-[13px] font-semibold text-[var(--ink-soft)]">
+            Spot bearbeiten
+          </p>
+          <button
+            type="button"
+            className="shrink-0 rounded-[10px] px-2.5 py-1 text-[13px] font-semibold text-[var(--danger)] transition hover:bg-[var(--danger)]/8 disabled:opacity-50"
+            disabled={deleting || pending}
+            onClick={() => {
+              if (
+                !window.confirm(
+                  `„${spot.name}“ wirklich löschen? Das lässt sich nicht rückgängig machen.`,
+                )
+              ) {
+                return;
+              }
+              onDelete();
+            }}
+          >
+            {deleting ? "Löschen…" : "Löschen"}
+          </button>
+        </div>
         <SpotFormFields
           spot={spot}
           category={category}
@@ -370,19 +391,11 @@ export function EditSpotForm({
           <button type="button" className="cta cta-secondary flex-1" onClick={onDone}>
             Abbrechen
           </button>
-          <button type="submit" className="cta flex-1" disabled={pending}>
+          <button type="submit" className="cta flex-1" disabled={pending || deleting}>
             {pending ? "…" : "Speichern"}
           </button>
         </div>
       </form>
-      <button
-        type="button"
-        className="mt-4 w-full text-center text-[13px] font-semibold text-[var(--danger)]"
-        disabled={deleting}
-        onClick={onDelete}
-      >
-        {deleting ? "Wird gelöscht…" : "Löschen"}
-      </button>
     </div>
   );
 }
