@@ -75,52 +75,62 @@ export default function VacationDetailPage() {
   }
 
   const load = useCallback(async () => {
-    const supabase = createClient();
-    const {
-      data: { user },
-    } = await supabase.auth.getUser();
-    setCurrentUserId(user?.id ?? null);
+    try {
+      const supabase = createClient();
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      setCurrentUserId(user?.id ?? null);
 
-    const [{ data: vacationData }, { data: memberData }, { data: spotData }] =
-      await Promise.all([
-        supabase.from("vacations").select("*").eq("id", vacationId).single(),
-        supabase
-          .from("vacation_members")
-          .select("*")
-          .eq("vacation_id", vacationId)
-          .order("created_at"),
-        supabase
-          .from("spots")
-          .select("*")
-          .eq("vacation_id", vacationId)
-          .order("created_at", { ascending: false }),
+      const [{ data: vacationData }, { data: memberData }, { data: spotData }] =
+        await Promise.all([
+          supabase.from("vacations").select("*").eq("id", vacationId).single(),
+          supabase
+            .from("vacation_members")
+            .select("*")
+            .eq("vacation_id", vacationId)
+            .order("created_at"),
+          supabase
+            .from("spots")
+            .select("*")
+            .eq("vacation_id", vacationId)
+            .order("created_at", { ascending: false }),
+        ]);
+
+      const spotIds = (spotData ?? []).map((spot) => spot.id);
+      const userIds = (memberData ?? [])
+        .map((member) => member.user_id)
+        .filter((id): id is string => Boolean(id));
+
+      const [{ data: ratingData }, { data: profileData }] = await Promise.all([
+        spotIds.length
+          ? supabase.from("spot_ratings").select("*").in("spot_id", spotIds)
+          : Promise.resolve({ data: [] as SpotRating[] }),
+        userIds.length
+          ? supabase.from("profiles").select("*").in("id", userIds)
+          : Promise.resolve({ data: [] as Profile[] }),
       ]);
 
-    const spotIds = (spotData ?? []).map((spot) => spot.id);
-    const userIds = (memberData ?? [])
-      .map((member) => member.user_id)
-      .filter((id): id is string => Boolean(id));
-
-    const [{ data: ratingData }, { data: profileData }] = await Promise.all([
-      spotIds.length
-        ? supabase.from("spot_ratings").select("*").in("spot_id", spotIds)
-        : Promise.resolve({ data: [] as SpotRating[] }),
-      userIds.length
-        ? supabase.from("profiles").select("*").in("id", userIds)
-        : Promise.resolve({ data: [] as Profile[] }),
-    ]);
-
-    setVacation(vacationData);
-    setMembers(memberData ?? []);
-    setSpots(
-      (spotData ?? []).map((spot) => ({
-        ...spot,
-        image_url: resolveSpotPreviewImage(spot),
-      })),
-    );
-    setRatings(ratingData ?? []);
-    setProfiles(profileData ?? []);
-    setLoading(false);
+      setVacation(vacationData);
+      setMembers(memberData ?? []);
+      setSpots(
+        (spotData ?? []).map((spot) => ({
+          ...spot,
+          image_url: resolveSpotPreviewImage(spot),
+        })),
+      );
+      setRatings(ratingData ?? []);
+      setProfiles(profileData ?? []);
+      setError(null);
+    } catch (err) {
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Urlaub konnte nicht geladen werden.",
+      );
+    } finally {
+      setLoading(false);
+    }
   }, [vacationId]);
 
   useEffect(() => {
@@ -137,9 +147,13 @@ export default function VacationDetailPage() {
       // private mode — still attempt once this mount
     }
     void (async () => {
-      const { updated } = await healVacationSpotCoords(vacationId);
-      if (!cancelled && updated > 0) {
-        await load();
+      try {
+        const { updated } = await healVacationSpotCoords(vacationId);
+        if (!cancelled && updated > 0) {
+          await load();
+        }
+      } catch {
+        // Background heal must never break the vacation page.
       }
     })();
     return () => {
