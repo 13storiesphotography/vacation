@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { isWithinMfaEnrollGrace } from "@/lib/mfa";
 
 export async function updateSession(request: NextRequest) {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
@@ -57,13 +58,16 @@ export async function updateSession(request: NextRequest) {
       const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
       const needsEnroll = aal?.currentLevel === "aal1" && aal?.nextLevel === "aal1";
       const needsVerify = aal?.currentLevel === "aal1" && aal?.nextLevel === "aal2";
+      const enrollGrace = needsEnroll && isWithinMfaEnrollGrace(user.created_at);
 
-      if (needsEnroll && path !== "/app/mfa/enroll") {
+      // First-time MFA setup: allow /app during grace; hard-require after.
+      if (needsEnroll && !enrollGrace && path !== "/app/mfa/enroll") {
         const redirectUrl = request.nextUrl.clone();
         redirectUrl.pathname = "/app/mfa/enroll";
         return NextResponse.redirect(redirectUrl);
       }
 
+      // Already enrolled: always step-up to AAL2 (no grace).
       if (needsVerify && path !== "/app/mfa/verify") {
         const redirectUrl = request.nextUrl.clone();
         redirectUrl.pathname = "/app/mfa/verify";
