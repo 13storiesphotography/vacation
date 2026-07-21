@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useMemo, useState, useTransition } from "react";
+import { useActionState, useEffect, useMemo, useState, useTransition, type ReactNode } from "react";
 import {
   categoryLabels,
   categoryOptions,
@@ -298,6 +298,67 @@ export function EditSpotForm({
 
 type SortMode = "newest" | "favorites" | "avg" | "mine";
 
+function IconButton({
+  label,
+  onClick,
+  disabled,
+  tone = "soft",
+  children,
+}: {
+  label: string;
+  onClick: () => void;
+  disabled?: boolean;
+  tone?: "soft" | "danger" | "active";
+  children: ReactNode;
+}) {
+  const color =
+    tone === "danger"
+      ? "text-[var(--danger)]"
+      : tone === "active"
+        ? "text-[var(--fjord)]"
+        : "text-[var(--ink-faint)] hover:text-[var(--ink-soft)]";
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      title={label}
+      disabled={disabled}
+      onClick={onClick}
+      className={`inline-flex h-8 w-8 items-center justify-center rounded-[10px] ${color} disabled:opacity-40`}
+    >
+      {children}
+    </button>
+  );
+}
+
+function PencilIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 20 20" fill="none" aria-hidden>
+      <path
+        d="M12.4 4.4 15.6 7.6M4 16l1.1-4.2L13.3 3.6a1.5 1.5 0 0 1 2.1 0l1 1a1.5 1.5 0 0 1 0 2.1L7.2 14.9 4 16Z"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
+function TrashIcon() {
+  return (
+    <svg width="15" height="15" viewBox="0 0 20 20" fill="none" aria-hidden>
+      <path
+        d="M4.5 6.2h11M8.2 6.2V4.8a1 1 0 0 1 1-1h1.6a1 1 0 0 1 1 1v1.4M7.4 9v5M10 9v5M12.6 9v5M6.2 6.2l.6 9.1a1.2 1.2 0 0 0 1.2 1.1h4a1.2 1.2 0 0 0 1.2-1.1l.6-9.1"
+        stroke="currentColor"
+        strokeWidth="1.6"
+        strokeLinecap="round"
+        strokeLinejoin="round"
+      />
+    </svg>
+  );
+}
+
 function formatAvg(value: number | null): string {
   if (value == null) return "–";
   return value.toLocaleString("de-DE", {
@@ -512,7 +573,7 @@ export function SpotList({
                           )}
                         </p>
                       </div>
-                      <div className="mt-0.5 flex shrink-0 items-center gap-1.5">
+                      <div className="mt-0.5 flex shrink-0 items-center gap-0.5">
                         <Stars
                           value={summary.myRating}
                           onChange={(value) => saveRating(spot.id, { rating: value })}
@@ -520,7 +581,7 @@ export function SpotList({
                         />
                         <button
                           type="button"
-                          className={`text-[16px] leading-none ${
+                          className={`inline-flex h-8 w-8 items-center justify-center text-[16px] leading-none ${
                             summary.myFavorite ? "text-[var(--sun)]" : "text-black/18"
                           }`}
                           aria-label={summary.myFavorite ? "Favorit entfernen" : "Als Favorit"}
@@ -530,17 +591,35 @@ export function SpotList({
                         >
                           {summary.myFavorite ? "♥" : "♡"}
                         </button>
+                        <span className="mx-0.5 h-4 w-px bg-[var(--separator)]" aria-hidden />
+                        <IconButton
+                          label={editingId === spot.id ? "Bearbeiten schließen" : "Bearbeiten"}
+                          tone={editingId === spot.id ? "active" : "soft"}
+                          onClick={() =>
+                            setEditingId((current) => (current === spot.id ? null : spot.id))
+                          }
+                        >
+                          <PencilIcon />
+                        </IconButton>
+                        <IconButton
+                          label="Löschen"
+                          tone="danger"
+                          disabled={deletingId === spot.id}
+                          onClick={() => onDelete(spot.id)}
+                        >
+                          <TrashIcon />
+                        </IconButton>
                       </div>
                     </div>
 
                     {spot.description && (
-                      <p className="mt-2 text-[13px] leading-relaxed text-[var(--ink-soft)]">
+                      <p className="mt-1.5 text-[13px] leading-relaxed text-[var(--ink-soft)]">
                         {spot.description}
                       </p>
                     )}
 
                     {(spot.tags ?? []).length > 0 && (
-                      <div className="mt-2 flex flex-wrap gap-1.5">
+                      <div className="mt-1.5 flex flex-wrap gap-1.5">
                         {(spot.tags ?? []).map((tag) => (
                           <span
                             key={tag}
@@ -551,26 +630,6 @@ export function SpotList({
                         ))}
                       </div>
                     )}
-
-                    <div className="mt-3 flex flex-wrap gap-x-3 gap-y-1">
-                      <button
-                        type="button"
-                        className="text-[12px] font-semibold text-[var(--fjord)]"
-                        onClick={() =>
-                          setEditingId((current) => (current === spot.id ? null : spot.id))
-                        }
-                      >
-                        {editingId === spot.id ? "Schließen" : "Bearbeiten"}
-                      </button>
-                      <button
-                        type="button"
-                        className="text-[12px] font-semibold text-[var(--danger)]"
-                        disabled={deletingId === spot.id}
-                        onClick={() => onDelete(spot.id)}
-                      >
-                        {deletingId === spot.id ? "…" : "Löschen"}
-                      </button>
-                    </div>
                   </div>
                 </div>
                 {editingId === spot.id && (
