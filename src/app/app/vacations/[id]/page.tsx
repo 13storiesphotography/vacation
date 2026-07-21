@@ -11,11 +11,30 @@ import { EditVacationForm } from "./vacation-edit";
 import { summarizeRatings, type RaterOption, type SpotRating } from "@/lib/ratings";
 import { resolveSpotPreviewImage } from "@/lib/geo";
 import { healVacationSpotCoords } from "./maps-coords-actions";
+import {
+  VacationTabBar,
+  type VacationTabId,
+} from "@/components/app/vacation-tabbar";
 
 type Vacation = Database["public"]["Tables"]["vacations"]["Row"];
 type Member = Database["public"]["Tables"]["vacation_members"]["Row"];
 type Spot = Database["public"]["Tables"]["spots"]["Row"];
 type Profile = Database["public"]["Tables"]["profiles"]["Row"];
+
+function readInitialTab(): VacationTabId {
+  if (typeof window === "undefined") return "spots";
+  const value = new URLSearchParams(window.location.search).get("tab");
+  if (
+    value === "urlaub" ||
+    value === "spots" ||
+    value === "karte" ||
+    value === "plan" ||
+    value === "team"
+  ) {
+    return value;
+  }
+  return "spots";
+}
 
 export default function VacationDetailPage() {
   const params = useParams<{ id: string }>();
@@ -33,10 +52,26 @@ export default function VacationDetailPage() {
   const [inviting, setInviting] = useState(false);
   const [showSpotForm, setShowSpotForm] = useState(false);
   const [spotFormKey, setSpotFormKey] = useState(0);
-  const [spotsView, setSpotsView] = useState<"list" | "map">("list");
   const [editingVacation, setEditingVacation] = useState(false);
-  const [showTeam, setShowTeam] = useState(false);
   const [showInvite, setShowInvite] = useState(false);
+  const [tab, setTab] = useState<VacationTabId>("spots");
+
+  useEffect(() => {
+    setTab(readInitialTab());
+  }, []);
+
+  function changeTab(next: VacationTabId) {
+    setTab(next);
+    if (next !== "spots") setShowSpotForm(false);
+    if (next !== "urlaub") setEditingVacation(false);
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.set("tab", next);
+      window.history.replaceState({}, "", url.toString());
+    } catch {
+      // ignore
+    }
+  }
 
   const load = useCallback(async () => {
     const supabase = createClient();
@@ -188,7 +223,11 @@ export default function VacationDetailPage() {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ vacationId, email: inviteEmail }),
     });
-    const payload = (await response.json()) as { error?: string; ok?: boolean; note?: string };
+    const payload = (await response.json()) as {
+      error?: string;
+      ok?: boolean;
+      note?: string;
+    };
     setInviting(false);
     if (!response.ok) {
       setError(payload.error ?? "Einladung fehlgeschlagen");
@@ -219,73 +258,95 @@ export default function VacationDetailPage() {
   }
 
   return (
-    <main className="shell mx-auto min-h-screen w-full max-w-6xl px-5 py-8 md:px-8">
-      <Link href="/app" className="text-[13px] font-semibold text-[var(--fjord)]">
-        ← Urlaube
-      </Link>
-
-      {!editingVacation ? (
-        <div className="mt-3">
-          <div className="flex items-start justify-between gap-3">
-            <h1 className="display text-3xl">{vacation.title}</h1>
-            {canEditVacation && (
-              <button
-                type="button"
-                className="shrink-0 text-[13px] font-semibold text-[var(--fjord)]"
-                onClick={() => setEditingVacation(true)}
-              >
-                Bearbeiten
-              </button>
-            )}
-          </div>
-          <p className="mt-2 text-[14px] text-[var(--ink-soft)]">
-            {vacation.start_date} – {vacation.end_date}
-            {vacation.region ? ` · ${vacation.region}` : ""} · {vacation.type}
+    <main className="shell app-with-tabbar mx-auto min-h-screen w-full max-w-6xl px-5 py-6 md:px-8 md:py-8">
+      <div className="mb-4 flex items-center justify-between gap-3">
+        <Link href="/app" className="text-[13px] font-semibold text-[var(--fjord)]">
+          ← Urlaube
+        </Link>
+        {tab !== "urlaub" && (
+          <p className="truncate text-[13px] font-semibold text-[var(--ink-soft)]">
+            {vacation.title}
           </p>
-          {vacation.description && (
-            <p className="mt-3 text-[15px] leading-relaxed text-[var(--ink-soft)]">
-              {vacation.description}
-            </p>
+        )}
+      </div>
+
+      {/* Desktop: tab bar on top. Mobile: fixed at bottom via CSS. */}
+      <div className="hidden md:block">
+        <VacationTabBar active={tab} onChange={changeTab} />
+      </div>
+
+      {tab === "urlaub" && (
+        <section>
+          {!editingVacation ? (
+            <div>
+              <div className="flex items-start justify-between gap-3">
+                <h1 className="display text-3xl">{vacation.title}</h1>
+                {canEditVacation && (
+                  <button
+                    type="button"
+                    className="shrink-0 text-[13px] font-semibold text-[var(--fjord)]"
+                    onClick={() => setEditingVacation(true)}
+                  >
+                    Bearbeiten
+                  </button>
+                )}
+              </div>
+              <p className="mt-2 text-[14px] text-[var(--ink-soft)]">
+                {vacation.start_date} – {vacation.end_date}
+                {vacation.region ? ` · ${vacation.region}` : ""} · {vacation.type}
+              </p>
+              {vacation.description && (
+                <p className="mt-3 text-[15px] leading-relaxed text-[var(--ink-soft)]">
+                  {vacation.description}
+                </p>
+              )}
+              <div className="ios-group mt-6">
+                <button
+                  type="button"
+                  className="ios-row ios-chevron"
+                  onClick={() => changeTab("spots")}
+                >
+                  <div>
+                    <p className="text-[15px] font-semibold">
+                      {spots.length} Spot{spots.length === 1 ? "" : "s"} gesammelt
+                    </p>
+                    <p className="text-[13px] text-[var(--ink-soft)]">Zur Sammlung</p>
+                  </div>
+                </button>
+                <button
+                  type="button"
+                  className="ios-row ios-chevron"
+                  onClick={() => changeTab("team")}
+                >
+                  <div>
+                    <p className="text-[15px] font-semibold">
+                      {members.length} Person{members.length === 1 ? "" : "en"}
+                    </p>
+                    <p className="text-[13px] text-[var(--ink-soft)]">Team & Einladungen</p>
+                  </div>
+                </button>
+              </div>
+            </div>
+          ) : (
+            <EditVacationForm
+              vacation={vacation}
+              onDone={async () => {
+                setEditingVacation(false);
+                await load();
+              }}
+            />
           )}
-        </div>
-      ) : (
-        <EditVacationForm
-          vacation={vacation}
-          onDone={async () => {
-            setEditingVacation(false);
-            await load();
-          }}
-        />
+        </section>
       )}
 
-      <section className="mt-8">
-        <div className="flex flex-wrap items-center justify-between gap-3">
-          <h2 className="display text-xl">Spots</h2>
-          <div className="flex items-center gap-2">
-            <span className="text-[13px] text-[var(--ink-soft)]">{spots.length}</span>
-            <div className="flex rounded-full bg-black/5 p-0.5">
-              <button
-                type="button"
-                className={`rounded-full px-3 py-1.5 text-[12px] font-semibold ${
-                  spotsView === "list"
-                    ? "bg-[var(--fjord)] text-white"
-                    : "text-[var(--ink-soft)]"
-                }`}
-                onClick={() => setSpotsView("list")}
-              >
-                Liste
-              </button>
-              <button
-                type="button"
-                className={`rounded-full px-3 py-1.5 text-[12px] font-semibold ${
-                  spotsView === "map"
-                    ? "bg-[var(--fjord)] text-white"
-                    : "text-[var(--ink-soft)]"
-                }`}
-                onClick={() => setSpotsView("map")}
-              >
-                Karte
-              </button>
+      {tab === "spots" && (
+        <section>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h1 className="display text-2xl">Spots</h1>
+              <p className="mt-1 text-[13px] text-[var(--ink-soft)]">
+                {spots.length} in der Sammlung
+              </p>
             </div>
             <button
               type="button"
@@ -295,21 +356,19 @@ export default function VacationDetailPage() {
               {showSpotForm ? "Schließen" : "Hinzufügen"}
             </button>
           </div>
-        </div>
 
-        {showSpotForm && (
-          <CreateSpotForm
-            key={spotFormKey}
-            vacationId={vacationId}
-            onCreated={async () => {
-              setSpotFormKey((value) => value + 1);
-              setShowSpotForm(false);
-              await load();
-            }}
-          />
-        )}
+          {showSpotForm && (
+            <CreateSpotForm
+              key={spotFormKey}
+              vacationId={vacationId}
+              onCreated={async () => {
+                setSpotFormKey((value) => value + 1);
+                setShowSpotForm(false);
+                await load();
+              }}
+            />
+          )}
 
-        {spotsView === "list" ? (
           <SpotList
             vacationId={vacationId}
             spots={spots}
@@ -320,109 +379,132 @@ export default function VacationDetailPage() {
             onChanged={load}
             onMyRatingPatch={applyMyRating}
           />
-        ) : (
+        </section>
+      )}
+
+      {tab === "karte" && (
+        <section>
+          <h1 className="display text-2xl">Karte</h1>
+          <p className="mt-1 text-[13px] text-[var(--ink-soft)]">
+            Alle Spots mit Position
+          </p>
           <SpotMap spots={spots} summaries={summaries} />
-        )}
-      </section>
+        </section>
+      )}
 
-      <section className="mt-12 border-t border-[var(--separator)] pt-6">
-        <button
-          type="button"
-          className="flex w-full items-center justify-between gap-3 text-left"
-          onClick={() => setShowTeam((value) => !value)}
-          aria-expanded={showTeam}
-        >
-          <span className="display text-lg text-[var(--ink-soft)]">Team</span>
-          <span className="text-[13px] font-semibold text-[var(--ink-faint)]">
-            {members.length} · {showTeam ? "Einklappen" : "Anzeigen"}
-          </span>
-        </button>
-
-        {showTeam && (
-          <div className="mt-3">
-            <div className="ios-group">
-              {members.map((member) => (
-                <div key={member.id} className="ios-row !items-start">
-                  <div>
-                    <p className="text-[15px] font-semibold">{member.email}</p>
-                    <p className="text-[12px] font-semibold uppercase tracking-wide text-[var(--ink-faint)]">
-                      {member.role} · {member.status}
-                    </p>
-                  </div>
-                </div>
-              ))}
-            </div>
-
-            {canEditVacation && (
-              <div className="mt-3">
-                {!showInvite ? (
-                  <button
-                    type="button"
-                    className="text-[13px] font-semibold text-[var(--fjord)]"
-                    onClick={() => setShowInvite(true)}
-                  >
-                    Person einladen…
-                  </button>
-                ) : (
-                  <form
-                    onSubmit={onInvite}
-                    className="ios-group p-4"
-                    autoComplete="off"
-                    data-lpignore="true"
-                    data-1p-ignore="true"
-                    data-bwignore="true"
-                    data-form-type="other"
-                  >
-                    <div className="flex items-center justify-between gap-3">
-                      <p className="text-[13px] font-semibold text-[var(--ink-soft)]">
-                        Person einladen
-                      </p>
-                      <button
-                        type="button"
-                        className="text-[12px] font-semibold text-[var(--ink-faint)]"
-                        onClick={() => {
-                          setShowInvite(false);
-                          setInviteEmail("");
-                          setMessage(null);
-                          setError(null);
-                        }}
-                      >
-                        Schließen
-                      </button>
-                    </div>
-                    <div className="mt-3 flex flex-col gap-3 sm:flex-row">
-                      <input
-                        className="w-full rounded-[12px] border-0 bg-black/5 px-3 py-3 text-[15px] outline-none ring-[var(--fjord)] focus:ring-2"
-                        type="text"
-                        inputMode="email"
-                        name="vacation-invite-email"
-                        id="vacation-invite-email"
-                        autoComplete="off"
-                        autoCorrect="off"
-                        autoCapitalize="off"
-                        spellCheck={false}
-                        data-lpignore="true"
-                        data-1p-ignore="true"
-                        data-bwignore="true"
-                        data-form-type="other"
-                        required
-                        placeholder="email@example.com"
-                        value={inviteEmail}
-                        onChange={(e) => setInviteEmail(e.target.value)}
-                      />
-                      <button type="submit" className="cta shrink-0" disabled={inviting}>
-                        {inviting ? "…" : "Einladen"}
-                      </button>
-                    </div>
-                    {message && <p className="mt-3 text-[13px] text-[var(--pine)]">{message}</p>}
-                    {error && <p className="mt-3 text-[13px] text-[var(--danger)]">{error}</p>}
-                  </form>
-                )}
-              </div>
-            )}
+      {tab === "plan" && (
+        <section>
+          <h1 className="display text-2xl">Tagesplan</h1>
+          <div className="ios-group mt-4 p-5">
+            <p className="text-[15px] font-semibold">Als Nächstes im Konzept</p>
+            <p className="mt-2 text-[14px] leading-relaxed text-[var(--ink-soft)]">
+              Hier weist ihr Spots konkreten Reisetagen zu — inkl. optionaler Übernachtung
+              für Van-Tage. Die Sammlung bleibt unabhängig; der Plan referenziert nur.
+            </p>
+            <button
+              type="button"
+              className="cta mt-5 w-full"
+              onClick={() => changeTab("spots")}
+            >
+              Weiter Spots sammeln
+            </button>
           </div>
-        )}
-      </section>
+        </section>
+      )}
+
+      {tab === "team" && (
+        <section>
+          <h1 className="display text-2xl">Team</h1>
+          <p className="mt-1 text-[13px] text-[var(--ink-soft)]">
+            {members.length} Mitglied{members.length === 1 ? "" : "er"}
+          </p>
+
+          <div className="ios-group mt-4">
+            {members.map((member) => (
+              <div key={member.id} className="ios-row !items-start">
+                <div>
+                  <p className="text-[15px] font-semibold">{member.email}</p>
+                  <p className="text-[12px] font-semibold uppercase tracking-wide text-[var(--ink-faint)]">
+                    {member.role} · {member.status}
+                  </p>
+                </div>
+              </div>
+            ))}
+          </div>
+
+          {canEditVacation && (
+            <div className="mt-4">
+              {!showInvite ? (
+                <button
+                  type="button"
+                  className="cta w-full"
+                  onClick={() => setShowInvite(true)}
+                >
+                  Person einladen
+                </button>
+              ) : (
+                <form
+                  onSubmit={onInvite}
+                  className="ios-group p-4"
+                  autoComplete="off"
+                  data-lpignore="true"
+                  data-1p-ignore="true"
+                  data-bwignore="true"
+                  data-form-type="other"
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="text-[13px] font-semibold text-[var(--ink-soft)]">
+                      Person einladen
+                    </p>
+                    <button
+                      type="button"
+                      className="text-[12px] font-semibold text-[var(--ink-faint)]"
+                      onClick={() => {
+                        setShowInvite(false);
+                        setInviteEmail("");
+                        setMessage(null);
+                        setError(null);
+                      }}
+                    >
+                      Schließen
+                    </button>
+                  </div>
+                  <div className="mt-3 flex flex-col gap-3 sm:flex-row">
+                    <input
+                      className="w-full rounded-[12px] border-0 bg-black/5 px-3 py-3 text-[15px] outline-none ring-[var(--fjord)] focus:ring-2"
+                      type="text"
+                      inputMode="email"
+                      name="vacation-invite-email"
+                      id="vacation-invite-email"
+                      autoComplete="off"
+                      autoCorrect="off"
+                      autoCapitalize="off"
+                      spellCheck={false}
+                      data-lpignore="true"
+                      data-1p-ignore="true"
+                      data-bwignore="true"
+                      data-form-type="other"
+                      required
+                      placeholder="email@example.com"
+                      value={inviteEmail}
+                      onChange={(e) => setInviteEmail(e.target.value)}
+                    />
+                    <button type="submit" className="cta shrink-0" disabled={inviting}>
+                      {inviting ? "…" : "Einladen"}
+                    </button>
+                  </div>
+                  {message && <p className="mt-3 text-[13px] text-[var(--pine)]">{message}</p>}
+                  {error && <p className="mt-3 text-[13px] text-[var(--danger)]">{error}</p>}
+                </form>
+              )}
+            </div>
+          )}
+        </section>
+      )}
+
+      <div className="md:hidden">
+        <VacationTabBar active={tab} onChange={changeTab} />
+      </div>
     </main>
   );
 }
