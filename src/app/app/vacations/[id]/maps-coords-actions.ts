@@ -5,7 +5,9 @@ import { createClient } from "@/lib/supabase/server";
 import {
   enrichFromMapsUrl,
   extractCoordsFromMapsUrl,
+  isAppMapPreviewUrl,
   isShortMapsUrl,
+  isUsablePreviewImage,
   isValidLatLng,
   parseLatLngFromMapsUrl,
 } from "@/lib/geo";
@@ -72,7 +74,17 @@ function previousCoords(spot: {
   return null;
 }
 
-/** Re-parse Maps links and correct stored lat/lng when the pin drifted (e.g. camera @ vs place !3d). */
+function needsImageRefresh(spot: {
+  image_url: string | null;
+  image_manual: boolean | null;
+}): boolean {
+  if (spot.image_manual) return false;
+  if (!spot.image_url) return true;
+  if (!isUsablePreviewImage(spot.image_url)) return true;
+  return isAppMapPreviewUrl(spot.image_url);
+}
+
+/** Re-parse Maps links: fix drifted pins and upgrade tile previews to Place photos. */
 export async function healVacationSpotCoords(vacationId: string): Promise<{
   updated: number;
 }> {
@@ -89,30 +101,48 @@ export async function healVacationSpotCoords(vacationId: string): Promise<{
 
   const { data: spots } = await supabase
     .from("spots")
-    .select("id, lat, lng, maps_url")
+    .select("id, lat, lng, maps_url, image_url, image_manual")
     .eq("vacation_id", vacationId);
 
   let updated = 0;
   for (const spot of spots ?? []) {
     if (!spot.maps_url) continue;
 
-    let coords = parseLatLngFromMapsUrl(spot.maps_url);
-    // Short links need expansion to reveal the place pin.
-    if (!coords || isShortMapsUrl(spot.maps_url)) {
-      const enriched = await enrichFromMapsUrl(spot.maps_url);
-      coords = enriched.coords;
+    const refreshImage = needsImageRefresh(spot);
+    const syncCoords = parseLatLngFromMapsUrl(spot.maps_url);
+    const needsEnrich =
+      refreshImage ||
+      !syncCoords ||
+      isShortMapsUrl(spot.maps_url);
+
+    const enriched = needsEnrich
+      ? await enrichFromMapsUrl(spot.maps_url)
+      : { coords: syncCoords, imageUrl: null as string | null };
+
+    const coords = enriched.coords;
+    const patch: { lat?: number; lng?: number; image_url?: string } = {};
+
+    if (coords && isValidLatLng(coords.lat, coords.lng)) {
+      const previous = previousCoords(spot);
+      if (!previous || haversineMeters(previous, coords) > driftMeters) {
+        patch.lat = coords.lat;
+        patch.lng = coords.lng;
+      }
     }
-    if (!coords || !isValidLatLng(coords.lat, coords.lng)) continue;
 
-    const previous = previousCoords(spot);
-    const needsUpdate =
-      !previous || haversineMeters(previous, coords) > driftMeters;
-    if (!needsUpdate) continue;
+    if (
+      refreshImage &&
+      enriched.imageUrl &&
+      isUsablePreviewImage(enriched.imageUrl) &&
+      !isAppMapPreviewUrl(enriched.imageUrl) &&
+      enriched.imageUrl !== spot.image_url
+    ) {
+      patch.image_url = enriched.imageUrl;
+    }
 
-    const { error } = await supabase
-      .from("spots")
-      .update({ lat: coords.lat, lng: coords.lng })
-      .eq("id", spot.id);
+    if (Object.keys(patch).length === 0) continue;
+
+    const { error } = await supabase.from("spots").update(patch).eq("id", spot.id);
     if (!error) updated += 1;
   }
 
