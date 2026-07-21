@@ -53,7 +53,7 @@ export function formatStayRange(
   });
   const from = fmt.format(new Date(`${checkIn}T12:00:00Z`));
   const to = fmt.format(new Date(`${checkOut}T12:00:00Z`));
-  return `${nights} Nacht${nights === 1 ? "" : "e"} · ${from} → ${to}`;
+  return `${nights === 1 ? "1 Nacht" : `${nights} Nächte`} · ${from} → ${to}`;
 }
 
 export function parseStayStatus(value: string): StayStatus | null {
