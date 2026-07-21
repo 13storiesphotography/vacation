@@ -7,6 +7,8 @@ export type AirbnbMetadata = {
   imageUrl: string | null;
   locationHint: string | null;
   canonicalUrl: string;
+  lat: number | null;
+  lng: number | null;
 };
 
 export type AirbnbMetadataError = {
@@ -72,10 +74,29 @@ export function cleanAirbnbTitle(title: string | null): string | null {
   let cleaned = title.trim();
   cleaned = cleaned.replace(/\s*[-–|]\s*Airbnb\s*$/i, "");
   cleaned = cleaned.replace(
-    /\s*[-–|]\s*(?:Apartments?|Homes?|Places?|Rooms?|Houses?|Cabins?|Condos?|Villas?).{0,80}$/i,
+    /\s*[-–|]\s*(?:Apartments?|Homes?|Places?|Rooms?|Houses?|Cabins?|Condos?|Villas?|Blockhütten).{0,80}$/i,
     "",
   );
   cleaned = cleaned.replace(/\s*[-–|]\s*.{0,40}\s+for Rent in .{0,80}$/i, "");
+  cleaned = cleaned.replace(/\s*[-–|]\s*.{0,40}\s+zur Miete in .{0,80}$/i, "");
+  // OG titles often look like: "Blockhütte · Alnö · ★5,0 · 2 Schlafzimmer · …"
+  if (/·/.test(cleaned) && /★|Schlafzimmer|Betten|Badezimmer|bedroom|beds|bath/i.test(cleaned)) {
+    const parts = cleaned
+      .split("·")
+      .map((part) => part.trim())
+      .filter(Boolean)
+      .filter(
+        (part) =>
+          !/★/.test(part) &&
+          !/\d+\s*(Schlafzimmer|Betten|Badezimmer|bedroom|beds|bath)/i.test(part) &&
+          !/privates?\s+Badezimmer/i.test(part),
+      );
+    if (parts.length >= 2) {
+      cleaned = `${parts[0]} in ${parts[1]}`;
+    } else if (parts.length === 1) {
+      cleaned = parts[0];
+    }
+  }
   cleaned = cleaned.trim();
   return cleaned || null;
 }
@@ -107,49 +128,87 @@ function unescapeJsonString(value?: string): string | undefined {
   );
 }
 
-function extractFromNextData(html: string): {
+function firstJsonString(html: string, keys: string[]): string | undefined {
+  for (const key of keys) {
+    const match = html.match(
+      new RegExp(`"${key}"\\s*:\\s*"((?:\\\\.|[^"\\\\])*)"`, "i"),
+    );
+    if (match?.[1]) {
+      const value = unescapeJsonString(match[1]);
+      if (value?.trim()) return value.trim();
+    }
+  }
+  return undefined;
+}
+
+function firstJsonNumber(html: string, keys: string[]): number | null {
+  for (const key of keys) {
+    const match = html.match(new RegExp(`"${key}"\\s*:\\s*(-?\\d+(?:\\.\\d+)?)`));
+    if (match?.[1]) {
+      const value = Number.parseFloat(match[1]);
+      if (Number.isFinite(value)) return value;
+    }
+  }
+  return null;
+}
+
+/**
+ * Airbnb no longer always ships `__NEXT_DATA__`; listing fields often live in
+ * embedded Niobe/GraphQL JSON. Search the full HTML for known keys.
+ */
+function extractFromPageData(html: string): {
   title?: string;
   description?: string;
   imageUrl?: string;
   locationHint?: string;
+  lat?: number | null;
+  lng?: number | null;
 } {
-  const match = html.match(
+  const nextMatch = html.match(
     /<script[^>]+id=["']__NEXT_DATA__["'][^>]*>([\s\S]*?)<\/script>/i,
   );
-  if (!match?.[1]) return {};
-  try {
-    const blob = match[1];
-    const title =
-      blob.match(/"seoTitle"\s*:\s*"((?:\\.|[^"\\])*)"/)?.[1] ||
-      blob.match(/"listingTitle"\s*:\s*"((?:\\.|[^"\\])*)"/)?.[1] ||
-      blob.match(/"shareName"\s*:\s*"((?:\\.|[^"\\])*)"/)?.[1] ||
-      undefined;
-    const description =
-      blob.match(/"seoDescription"\s*:\s*"((?:\\.|[^"\\])*)"/)?.[1] ||
-      undefined;
-    const imageUrl =
-      blob.match(/"pictureUrl"\s*:\s*"(https:[^"]+muscache[^"]+)"/)?.[1] ||
-      blob.match(/"(https:\\\/\\\/a0\.muscache\.com[^"]+\.(?:jpg|jpeg|png|webp)[^"]*)"/i)?.[1] ||
-      undefined;
-    const locationHint =
-      blob.match(/"localizedCityName"\s*:\s*"((?:\\.|[^"\\])*)"/)?.[1] ||
-      blob.match(/"city"\s*:\s*"((?:\\.|[^"\\])*)"/)?.[1] ||
-      undefined;
+  const blob = nextMatch?.[1] ?? html;
 
-    return {
-      title: unescapeJsonString(title),
-      description: unescapeJsonString(description),
-      imageUrl: unescapeJsonString(imageUrl)?.replace(/\\\//g, "/"),
-      locationHint: unescapeJsonString(locationHint),
-    };
-  } catch {
-    return {};
-  }
+  const title = firstJsonString(blob, [
+    "listingTitle",
+    "seoTitle",
+    "shareName",
+    "pdpListingTitle",
+  ]);
+  const description = firstJsonString(blob, ["seoDescription", "sectionedDescription"]);
+  const imageUrl =
+    firstJsonString(blob, ["pictureUrl"]) ||
+    blob.match(/"baseUrl"\s*:\s*"(https:[^"]+muscache[^"]+)"/i)?.[1] ||
+    blob.match(
+      /"(https:\\\/\\\/a0\.muscache\.com[^"]+\.(?:jpg|jpeg|png|webp)[^"]*)"/i,
+    )?.[1];
+  const locationHint = firstJsonString(blob, [
+    "localizedLocation",
+    "localizedCityName",
+    "city",
+  ]);
+  const lat = firstJsonNumber(blob, ["listingLat"]);
+  const lng = firstJsonNumber(blob, ["listingLng"]);
+
+  return {
+    title,
+    description,
+    imageUrl: unescapeJsonString(imageUrl)?.replace(/\\\//g, "/"),
+    locationHint,
+    lat,
+    lng,
+  };
+}
+
+function titleFromDocumentTitle(html: string): string | null {
+  const raw = html.match(/<title[^>]*>([^<]+)<\/title>/i)?.[1];
+  if (!raw) return null;
+  return cleanAirbnbTitle(decodeHtml(raw.trim()));
 }
 
 /**
  * Fetch public Airbnb listing metadata via Open Graph / embedded page data.
- * Exact address/coords are intentionally not relied on.
+ * Exact address is intentionally not relied on; approximate coords when present.
  */
 export async function fetchAirbnbMetadata(
   rawUrl: string,
@@ -200,13 +259,10 @@ export async function fetchAirbnbMetadata(
     };
   }
 
-  const fromNext = extractFromNextData(html);
+  const fromPage = extractFromPageData(html);
   const ogTitle = metaContent(html, ["og:title", "twitter:title"]);
-  const ogDescription = metaContent(html, [
-    "og:description",
-    "twitter:description",
-    "description",
-  ]);
+  const ogDescription = metaContent(html, ["og:description", "twitter:description"]);
+  const metaDescription = metaContent(html, ["description"]);
   const ogImage = metaContent(html, ["og:image", "twitter:image", "og:image:url"]);
   const canonical =
     html.match(
@@ -215,11 +271,38 @@ export async function fetchAirbnbMetadata(
     metaContent(html, ["og:url"]) ||
     fetchUrl;
 
-  const title = cleanAirbnbTitle(fromNext.title || ogTitle);
-  const description = (fromNext.description || ogDescription || "").trim() || null;
-  const imageUrl = (fromNext.imageUrl || ogImage || "").trim() || null;
+  const title =
+    cleanAirbnbTitle(fromPage.title ?? null) ||
+    titleFromDocumentTitle(html) ||
+    cleanAirbnbTitle(ogTitle);
+
+  const descriptionCandidates = [fromPage.description, metaDescription, ogDescription]
+    .map((value) => value?.trim() || null)
+    .filter((value): value is string => Boolean(value));
+  let description =
+    descriptionCandidates.find(
+      (value) =>
+        value.length > 40 &&
+        value.toLowerCase() !== (title ?? "").toLowerCase(),
+    ) ||
+    descriptionCandidates.find(
+      (value) => value.toLowerCase() !== (title ?? "").toLowerCase(),
+    ) ||
+    null;
+  if (description) {
+    description = description
+      .replace(
+        /^(?:\d{1,2}\.\s+[A-Za-zäöüÄÖÜ]+\s+\d{4}|[A-Za-z]{3,9}\s+\d{1,2},?\s+\d{4})\s*·\s*/u,
+        "",
+      )
+      .trim();
+  }
+
+  const imageUrl = (fromPage.imageUrl || ogImage || "").trim() || null;
   const locationHint =
-    fromNext.locationHint || extractLocationHint(title, description);
+    fromPage.locationHint || extractLocationHint(title, description);
+  const lat = fromPage.lat ?? null;
+  const lng = fromPage.lng ?? null;
 
   if (!title && !imageUrl && !listingId) {
     return {
@@ -241,5 +324,7 @@ export async function fetchAirbnbMetadata(
     imageUrl,
     locationHint,
     canonicalUrl: canonical,
+    lat,
+    lng,
   };
 }

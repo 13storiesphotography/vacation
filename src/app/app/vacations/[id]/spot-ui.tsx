@@ -420,7 +420,8 @@ function applySmartLinkResult(
 ) {
   const fillEmptyOnly = options.fillEmptyOnly ?? false;
   options.setCategory(result.suggestedCategory);
-  options.setPasteUrl(result.mapsUrl || result.infoUrl || "");
+  // Keep the pasted source link visible when we also derived a Maps URL (e.g. Airbnb coords).
+  options.setPasteUrl(result.infoUrl || result.mapsUrl || "");
 
   if (result.mapsUrl) options.setMapsUrl(result.mapsUrl);
   if (result.infoUrl) options.setInfoUrl(result.infoUrl);
