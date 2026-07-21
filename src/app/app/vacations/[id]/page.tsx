@@ -409,9 +409,9 @@ export default function VacationDetailPage() {
 
       {tab === "plan" && (
         <section>
-          <h1 className="display text-2xl">Tagesplan</h1>
+          <h1 className="display text-2xl">Plan</h1>
           <p className="mt-1 text-[13px] text-[var(--ink-soft)]">
-            Spots den Reisetagen zuweisen — Sammlung bleibt unabhängig
+            Tag wählen, Spots tippen — fertig
           </p>
           <DayPlanPanel vacation={vacation} spots={spots} />
         </section>
