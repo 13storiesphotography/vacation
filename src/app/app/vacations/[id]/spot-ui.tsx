@@ -10,6 +10,7 @@ import type { Database } from "@/lib/database.types";
 import { createClient } from "@/lib/supabase/client";
 import { createSpot, updateSpot, type SpotActionState } from "./spot-actions";
 import { previewMapsCoords } from "./maps-coords-actions";
+import { previewAirbnbListing } from "./airbnb-actions";
 import {
   emptySummary,
   type RaterOption,
@@ -17,6 +18,8 @@ import {
   type SpotRatingSummary,
 } from "@/lib/ratings";
 import { parseLatLngFromMapsUrl } from "@/lib/geo";
+import { isOvernightCategory } from "@/lib/overnight";
+import { isAirbnbUrl } from "@/lib/airbnb";
 import { CategoryIcon } from "@/components/category-icon";
 
 type Spot = Database["public"]["Tables"]["spots"]["Row"];
@@ -65,47 +68,59 @@ function Stars({
   );
 }
 
-function MapsUrlField({ defaultValue = "" }: { defaultValue?: string }) {
+function MapsUrlField({
+  defaultValue = "",
+  required = true,
+}: {
+  defaultValue?: string;
+  required?: boolean;
+}) {
   const [url, setUrl] = useState(defaultValue);
-  const [message, setMessage] = useState<string | null>(null);
-  const [ok, setOk] = useState<boolean | null>(null);
+  const [remote, setRemote] = useState<{
+    ok: boolean | null;
+    message: string | null;
+  }>({ ok: null, message: null });
   const [pending, startTransition] = useTransition();
 
-  useEffect(() => {
-    const trimmed = url.trim();
-    if (!trimmed) {
-      setMessage("Position kommt automatisch aus dem Maps-Link.");
-      setOk(null);
-      return;
-    }
+  const trimmed = url.trim();
+  const local = trimmed ? parseLatLngFromMapsUrl(trimmed) : null;
+  const idleMessage = required
+    ? "Position kommt automatisch aus dem Maps-Link."
+    : "Optional — für die Karte empfohlen, bei Airbnb nicht zwingend.";
+  const ok = !trimmed ? null : local ? true : remote.ok;
+  const message = !trimmed
+    ? idleMessage
+    : local
+      ? `Position erkannt: ${local.lat.toFixed(5)}, ${local.lng.toFixed(5)}`
+      : remote.message;
 
-    const local = parseLatLngFromMapsUrl(trimmed);
-    if (local) {
-      setOk(true);
-      setMessage(`Position erkannt: ${local.lat.toFixed(5)}, ${local.lng.toFixed(5)}`);
+  useEffect(() => {
+    if (!trimmed || local) {
       return;
     }
 
     const handle = window.setTimeout(() => {
       startTransition(async () => {
         const result = await previewMapsCoords(trimmed);
-        setOk(result.ok);
-        setMessage(result.message);
+        setRemote({ ok: result.ok, message: result.message });
       });
     }, 400);
 
     return () => window.clearTimeout(handle);
-  }, [url]);
+  }, [trimmed, local]);
 
   return (
     <label className="form-label mt-3">
-      Google Maps Link
+      Google Maps Link{required ? "" : " (optional)"}
       <input
         name="maps_url"
         type="url"
-        required
+        required={required}
         value={url}
-        onChange={(e) => setUrl(e.target.value)}
+        onChange={(e) => {
+          setUrl(e.target.value);
+          setRemote({ ok: null, message: null });
+        }}
         className="glass-field mt-1.5 px-3 py-3"
         placeholder="https://maps.app.goo.gl/… oder maps.google.com/…"
       />
@@ -173,27 +188,143 @@ function SpotThumb({
   );
 }
 
+function ListingUrlField({
+  value,
+  onChange,
+  onAirbnbApplied,
+}: {
+  value: string;
+  onChange: (value: string) => void;
+  onAirbnbApplied: (meta: {
+    title?: string | null;
+    description?: string | null;
+    imageUrl?: string | null;
+    locationHint?: string | null;
+    canonicalUrl?: string;
+  }) => void;
+}) {
+  const [message, setMessage] = useState<string | null>(null);
+  const [ok, setOk] = useState<boolean | null>(null);
+  const [pending, startTransition] = useTransition();
+
+  const trimmed = value.trim();
+  const idleMessage =
+    "Airbnb-Link für Unterkunft — oder park4night / Buchungsseite als Info.";
+  const nonAirbnbMessage = "Als Info-/Buchungslink gespeichert.";
+  const displayOk = !trimmed || !isAirbnbUrl(trimmed) ? null : ok;
+  const displayMessage = !trimmed
+    ? idleMessage
+    : !isAirbnbUrl(trimmed)
+      ? nonAirbnbMessage
+      : message;
+
+  useEffect(() => {
+    if (!trimmed || !isAirbnbUrl(trimmed)) {
+      return;
+    }
+
+    const handle = window.setTimeout(() => {
+      startTransition(async () => {
+        const result = await previewAirbnbListing(trimmed);
+        setOk(result.ok);
+        setMessage(result.message);
+        if (result.ok) {
+          onAirbnbApplied({
+            title: result.title,
+            description: result.description,
+            imageUrl: result.imageUrl,
+            locationHint: result.locationHint,
+            canonicalUrl: result.canonicalUrl ?? trimmed,
+          });
+        }
+      });
+    }, 450);
+
+    return () => window.clearTimeout(handle);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [trimmed]);
+
+  return (
+    <label className="form-label mt-3">
+      Airbnb / Buchungslink
+      <input
+        name="info_url"
+        type="url"
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className="glass-field mt-1.5 px-3 py-3"
+        placeholder="https://www.airbnb.de/rooms/… oder park4night.com/…"
+      />
+      <span
+        className={`mt-1 block text-[11px] font-medium ${
+          displayOk === true
+            ? "text-[var(--pine)]"
+            : displayOk === false
+              ? "text-[var(--danger)]"
+              : "text-[var(--ink-faint)]"
+        }`}
+      >
+        {pending ? "Airbnb wird gelesen…" : (displayMessage ?? "")}
+      </span>
+    </label>
+  );
+}
+
 function SpotFormFields({
   spot,
   showOvernight,
   category,
   onCategoryChange,
+  name,
+  onNameChange,
+  description,
+  onDescriptionChange,
+  imageUrl,
+  onImageUrlChange,
+  infoUrl,
+  onInfoUrlChange,
+  onAirbnbApplied,
 }: {
   spot?: Spot | null;
   showOvernight: boolean;
   category: SpotCategory;
   onCategoryChange: (value: SpotCategory) => void;
+  name: string;
+  onNameChange: (value: string) => void;
+  description: string;
+  onDescriptionChange: (value: string) => void;
+  imageUrl: string;
+  onImageUrlChange: (value: string) => void;
+  infoUrl: string;
+  onInfoUrlChange: (value: string) => void;
+  onAirbnbApplied: (meta: {
+    title?: string | null;
+    description?: string | null;
+    imageUrl?: string | null;
+    locationHint?: string | null;
+    canonicalUrl?: string;
+  }) => void;
 }) {
+  const airbnbMode = isAirbnbUrl(infoUrl);
+  const mapsRequired = !airbnbMode;
+
   return (
     <>
+      <ListingUrlField
+        value={infoUrl}
+        onChange={onInfoUrlChange}
+        onAirbnbApplied={onAirbnbApplied}
+      />
+
       <label className="form-label mt-3">
         Name
         <input
           name="name"
           required
-          defaultValue={spot?.name ?? ""}
+          value={name}
+          onChange={(e) => onNameChange(e.target.value)}
           className="glass-field mt-1.5 px-3 py-3"
-          placeholder="z. B. Stellplatz Söderåsen"
+          placeholder="z. B. Airbnb am See oder Stellplatz Söderåsen"
         />
       </label>
 
@@ -217,53 +348,41 @@ function SpotFormFields({
         Beschreibung
         <textarea
           name="description"
-          defaultValue={spot?.description ?? ""}
+          value={description}
+          onChange={(e) => onDescriptionChange(e.target.value)}
           className="glass-field mt-1.5 min-h-20 px-3 py-3"
         />
       </label>
 
-      <MapsUrlField defaultValue={spot?.maps_url ?? ""} />
+      <MapsUrlField defaultValue={spot?.maps_url ?? ""} required={mapsRequired} />
 
       <label className="form-label mt-3">
         Vorschaubild (optional)
-        {spot?.image_url && !spot.image_manual ? (
+        {spot?.image_url && !spot.image_manual && !imageUrl ? (
           <input type="hidden" name="previous_image_url" value={spot.image_url} />
         ) : null}
         <input
           name="image_url"
           type="url"
-          defaultValue={spot?.image_manual ? (spot.image_url ?? "") : ""}
+          value={imageUrl}
+          onChange={(e) => onImageUrlChange(e.target.value)}
           className="glass-field mt-1.5 px-3 py-3"
-          placeholder="https://… (leer = automatisch aus Maps)"
+          placeholder="https://… (leer = automatisch aus Maps/Airbnb)"
         />
         <span className="mt-1 block text-[11px] font-medium text-[var(--ink-faint)]">
-          Leer lassen = Kartenausschnitt zur Position. Eigene Bild-URL überschreibt das.
-          {spot?.image_url && !spot.image_manual
-            ? " Aktuell: automatisch gesetzt."
-            : ""}
+          Bei Airbnb oft automatisch. Sonst Kartenausschnitt zur Position.
         </span>
-        {spot?.image_url && !spot.image_manual ? (
+        {(imageUrl || (spot?.image_url && !spot.image_manual)) && (
           <span className="mt-2 block overflow-hidden rounded-[12px]">
             {/* eslint-disable-next-line @next/next/no-img-element */}
             <img
-              src={spot.image_url}
+              src={imageUrl || spot?.image_url || ""}
               alt=""
               className="h-28 w-full object-cover"
               referrerPolicy="no-referrer"
             />
           </span>
-        ) : null}
-      </label>
-
-      <label className="form-label mt-3">
-        Buchung / Info Link
-        <input
-          name="info_url"
-          type="url"
-          defaultValue={spot?.info_url ?? ""}
-          className="glass-field mt-1.5 px-3 py-3"
-          placeholder="https://park4night.com/..."
-        />
+        )}
       </label>
 
       {showOvernight && (
@@ -272,7 +391,9 @@ function SpotFormFields({
             Übernachtung
             <select
               name="overnight_cost"
-              defaultValue={spot?.overnight_cost ?? ""}
+              defaultValue={
+                spot?.overnight_cost ?? (airbnbMode ? "kostenpflichtig" : "")
+              }
               className="glass-field mt-1.5 px-3 py-3"
             >
               <option value="">Keine Angabe</option>
@@ -286,7 +407,7 @@ function SpotFormFields({
               name="price_hint"
               defaultValue={spot?.price_hint ?? ""}
               className="glass-field mt-1.5 px-3 py-3"
-              placeholder="ab 280 SEK"
+              placeholder="ab 280 SEK / Nacht"
             />
           </label>
         </>
@@ -314,10 +435,29 @@ export function CreateSpotForm({
 }) {
   const [state, action, pending] = useActionState(createSpot, initialState);
   const [category, setCategory] = useState<SpotCategory>("stellplatz");
+  const [name, setName] = useState("");
+  const [description, setDescription] = useState("");
+  const [imageUrl, setImageUrl] = useState("");
+  const [infoUrl, setInfoUrl] = useState("");
 
   useEffect(() => {
     if (state.ok) onCreated();
   }, [state.ok, onCreated]);
+
+  function applyAirbnb(meta: {
+    title?: string | null;
+    description?: string | null;
+    imageUrl?: string | null;
+    locationHint?: string | null;
+    canonicalUrl?: string;
+  }) {
+    setCategory("unterkunft");
+    if (meta.canonicalUrl) setInfoUrl(meta.canonicalUrl);
+    if (meta.title) setName(meta.title);
+    else if (meta.locationHint) setName(`Airbnb · ${meta.locationHint}`);
+    if (meta.description) setDescription(meta.description);
+    if (meta.imageUrl) setImageUrl(meta.imageUrl);
+  }
 
   return (
     <form action={action} className="ios-group mt-3 p-4">
@@ -326,7 +466,16 @@ export function CreateSpotForm({
       <SpotFormFields
         category={category}
         onCategoryChange={setCategory}
-        showOvernight={category === "stellplatz"}
+        showOvernight={isOvernightCategory(category)}
+        name={name}
+        onNameChange={setName}
+        description={description}
+        onDescriptionChange={setDescription}
+        imageUrl={imageUrl}
+        onImageUrlChange={setImageUrl}
+        infoUrl={infoUrl}
+        onInfoUrlChange={setInfoUrl}
+        onAirbnbApplied={applyAirbnb}
       />
       {state.error && <p className="mt-3 text-[13px] text-[var(--danger)]">{state.error}</p>}
       <button type="submit" className="cta mt-4 w-full" disabled={pending}>
@@ -351,10 +500,30 @@ export function EditSpotForm({
 }) {
   const [state, action, pending] = useActionState(updateSpot, initialState);
   const [category, setCategory] = useState<SpotCategory>(spot.category);
+  const [name, setName] = useState(spot.name);
+  const [description, setDescription] = useState(spot.description ?? "");
+  const [imageUrl, setImageUrl] = useState(
+    spot.image_manual ? (spot.image_url ?? "") : "",
+  );
+  const [infoUrl, setInfoUrl] = useState(spot.info_url ?? "");
 
   useEffect(() => {
     if (state.ok) onDone();
   }, [state.ok, onDone]);
+
+  function applyAirbnb(meta: {
+    title?: string | null;
+    description?: string | null;
+    imageUrl?: string | null;
+    locationHint?: string | null;
+    canonicalUrl?: string;
+  }) {
+    setCategory("unterkunft");
+    if (meta.canonicalUrl) setInfoUrl(meta.canonicalUrl);
+    if (meta.title && (!name.trim() || name === spot.name)) setName(meta.title);
+    if (meta.description && !description.trim()) setDescription(meta.description);
+    if (meta.imageUrl) setImageUrl(meta.imageUrl);
+  }
 
   return (
     <div className="glass-subpanel-flush">
@@ -387,7 +556,16 @@ export function EditSpotForm({
           spot={spot}
           category={category}
           onCategoryChange={setCategory}
-          showOvernight={category === "stellplatz"}
+          showOvernight={isOvernightCategory(category)}
+          name={name}
+          onNameChange={setName}
+          description={description}
+          onDescriptionChange={setDescription}
+          imageUrl={imageUrl}
+          onImageUrlChange={setImageUrl}
+          infoUrl={infoUrl}
+          onInfoUrlChange={setInfoUrl}
+          onAirbnbApplied={applyAirbnb}
         />
         {state.error && <p className="mt-3 text-[13px] text-[var(--danger)]">{state.error}</p>}
         <div className="mt-4 flex gap-2">

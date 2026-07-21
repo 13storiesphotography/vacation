@@ -2,7 +2,9 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { isAirbnbUrl } from "@/lib/airbnb";
 import { enrichFromMapsUrl, isAppMapPreviewUrl, isUsablePreviewImage, previewImageFromCoords } from "@/lib/geo";
+import { isOvernightCategory } from "@/lib/overnight";
 import { parseTags, type OvernightCost, type SpotCategory } from "@/lib/spots";
 
 export type SpotActionState = {
@@ -41,6 +43,7 @@ async function readSpotFields(formData: FormData) {
   const tags = parseTags(String(formData.get("tags") ?? ""));
   const imageUrlManual = String(formData.get("image_url") ?? "").trim();
   const previousAutoImage = String(formData.get("previous_image_url") ?? "").trim();
+  const airbnbListing = isAirbnbUrl(infoUrl);
 
   let lat: number | null = null;
   let lng: number | null = null;
@@ -80,6 +83,9 @@ async function readSpotFields(formData: FormData) {
         (lat != null && lng != null ? previewImageFromCoords(lat, lng) : null);
       imageManual = false;
     }
+  } else if (imageManual) {
+    // Airbnb / manual image without Maps coords.
+    imageManual = true;
   }
 
   return {
@@ -89,15 +95,32 @@ async function readSpotFields(formData: FormData) {
       description: description || null,
       maps_url: storedMapsUrl,
       info_url: infoUrl || null,
-      overnight_cost: category === "stellplatz" ? overnightCost : null,
-      price_hint: category === "stellplatz" ? priceHint || null : null,
+      overnight_cost: isOvernightCategory(category) ? overnightCost : null,
+      price_hint: isOvernightCategory(category) ? priceHint || null : null,
       tags,
       lat,
       lng,
       image_url: imageUrl,
-      image_manual: imageManual,
+      image_manual: imageManual || (airbnbListing && Boolean(imageUrlManual)),
     },
+    airbnbListing,
   } as const;
+}
+
+function requireLocationOrListing(
+  parsed: Awaited<ReturnType<typeof readSpotFields>>,
+): { error: string } | null {
+  if ("error" in parsed) {
+    return { error: parsed.error || "Spot konnte nicht gelesen werden." };
+  }
+  if (!parsed.fields.name) return { error: "Name ist Pflicht." };
+  if (!parsed.fields.maps_url && !parsed.airbnbListing) {
+    return {
+      error:
+        "Google-Maps-Link oder Airbnb-Link ist Pflicht — Position bzw. Unterkunft brauchen wir.",
+    };
+  }
+  return null;
 }
 
 export async function createSpot(
@@ -109,11 +132,9 @@ export async function createSpot(
   if (error || !user) return { error: error ?? "Nicht angemeldet." };
 
   const parsed = await readSpotFields(formData);
+  const invalid = requireLocationOrListing(parsed);
+  if (invalid) return invalid;
   if ("error" in parsed) return { error: parsed.error };
-  if (!parsed.fields.name) return { error: "Name ist Pflicht." };
-  if (!parsed.fields.maps_url) {
-    return { error: "Google-Maps-Link ist Pflicht — daraus kommt die Position." };
-  }
 
   const { error: insertError } = await supabase.from("spots").insert({
     vacation_id: vacationId,
@@ -137,11 +158,9 @@ export async function updateSpot(
   if (error) return { error };
 
   const parsed = await readSpotFields(formData);
+  const invalid = requireLocationOrListing(parsed);
+  if (invalid) return invalid;
   if ("error" in parsed) return { error: parsed.error };
-  if (!parsed.fields.name) return { error: "Name ist Pflicht." };
-  if (!parsed.fields.maps_url) {
-    return { error: "Google-Maps-Link ist Pflicht — daraus kommt die Position." };
-  }
 
   const { error: updateError } = await supabase
     .from("spots")

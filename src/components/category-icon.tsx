@@ -11,6 +11,11 @@ export const categoryIconMarkup: Record<SpotCategory, string> = {
     <circle cx="13.3" cy="14.5" r="1.2" />
     <path d="M6.5 11h4.2" />
   `,
+  unterkunft: `
+    <path d="M4 15.5V8.4L10 4.2l6 4.2v7.3" />
+    <path d="M8 15.5v-3.4h4v3.4" />
+    <path d="M7.5 9.2h.1M12.5 9.2h.1" />
+  `,
   sehenswuerdigkeit: `
     <path d="M10 3.5 11.4 7h3.6l-2.9 2.2 1.1 3.5L10 10.8 6.8 12.7l1.1-3.5L5 7h3.6L10 3.5Z" />
   `,
@@ -37,6 +42,13 @@ const paths: Record<SpotCategory, ReactNode> = {
       <circle cx="7.2" cy="14.5" r="1.2" />
       <circle cx="13.3" cy="14.5" r="1.2" />
       <path d="M6.5 11h4.2" />
+    </>
+  ),
+  unterkunft: (
+    <>
+      <path d="M4 15.5V8.4L10 4.2l6 4.2v7.3" />
+      <path d="M8 15.5v-3.4h4v3.4" />
+      <path d="M7.5 9.2h.1M12.5 9.2h.1" />
     </>
   ),
   sehenswuerdigkeit: (
