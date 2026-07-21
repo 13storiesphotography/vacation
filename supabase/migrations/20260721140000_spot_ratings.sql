@@ -1,0 +1,2 @@
+-- Applied remotely as add_spot_ratings_favorites / relax_spot_ratings_check
+-- spot_ratings: per-user rating (1-5), note, is_favorite with RLS for vacation members

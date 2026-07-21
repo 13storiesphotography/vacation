@@ -156,6 +156,39 @@ export type Database = {
         };
         Relationships: [];
       };
+      spot_ratings: {
+        Row: {
+          id: string;
+          spot_id: string;
+          user_id: string;
+          rating: number | null;
+          note: string | null;
+          is_favorite: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          spot_id: string;
+          user_id: string;
+          rating?: number | null;
+          note?: string | null;
+          is_favorite?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          spot_id?: string;
+          user_id?: string;
+          rating?: number | null;
+          note?: string | null;
+          is_favorite?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
       day_plans: {
         Row: {
           id: string;
@@ -209,6 +242,7 @@ export type Database = {
     Functions: {
       is_vacation_member: { Args: { p_vacation_id: string }; Returns: boolean };
       is_vacation_admin: { Args: { p_vacation_id: string }; Returns: boolean };
+      is_spot_vacation_member: { Args: { p_spot_id: string }; Returns: boolean };
     };
     Enums: {
       member_role: "admin" | "member";
