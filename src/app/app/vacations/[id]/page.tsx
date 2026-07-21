@@ -478,7 +478,7 @@ export default function VacationDetailPage() {
                   </div>
                   <div className="mt-3 flex flex-col gap-3 sm:flex-row">
                     <input
-                      className="w-full rounded-[12px] border-0 bg-black/5 px-3 py-3 text-[15px] outline-none ring-[var(--fjord)] focus:ring-2"
+                      className="glass-field px-3 py-3"
                       type="text"
                       inputMode="email"
                       name="vacation-invite-email"

@@ -57,7 +57,7 @@ export default function VerifyMfaPage() {
         <label className="mt-6 block text-[13px] font-semibold text-[var(--ink-soft)]">
           6-stelliger Code
           <input
-            className="mt-1.5 w-full rounded-[12px] border-0 bg-black/5 px-3 py-3 text-center text-[20px] tracking-[0.3em] outline-none ring-[var(--fjord)] focus:ring-2"
+            className="glass-field mt-1.5 px-3 py-3 text-center text-[20px] tracking-[0.3em]"
             inputMode="numeric"
             pattern="[0-9]*"
             maxLength={6}
