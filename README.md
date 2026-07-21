@@ -25,6 +25,15 @@ npm run dev
 4. Auf der App-URL anmelden → MFA einrichten → Urlaub anlegen.
 5. Weitere Personen nur über **Einladen** im Urlaub.
 6. Optional: **Apple Sign-In** aktivieren (siehe unten) — gleiche E-Mail wie bei der Einladung.
+7. Spots: Airbnb-Link unter **Airbnb / Buchungslink** einfügen → Titel/Bild werden erkannt, Kategorie **Unterkunft / Airbnb**. Danach im Plan als Übernachtung wählbar. Maps-Link bleibt optional für die Karte.
+
+Nach dem Deploy ggf. Migration anwenden:
+
+```sql
+alter type public.spot_category add value if not exists 'unterkunft';
+```
+
+(Datei: `supabase/migrations/20260721170000_spot_category_unterkunft.sql`)
 
 Im Supabase Dashboard unter **Authentication → URL Configuration** die Site URL und Redirect URLs setzen, z. B.:
 

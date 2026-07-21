@@ -3,6 +3,7 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Database } from "@/lib/database.types";
 import { categoryLabels, type SpotCategory } from "@/lib/spots";
+import { isOvernightCategory } from "@/lib/overnight";
 import { formatDayLabel, type DayPlanWithStops } from "@/lib/day-plans";
 import {
   addSpotToDayClient,
@@ -83,7 +84,7 @@ export function DayPlanPanel({
   );
 
   const overnightCandidates = useMemo(
-    () => spots.filter((spot) => spot.category === "stellplatz"),
+    () => spots.filter((spot) => isOvernightCategory(spot.category as SpotCategory)),
     [spots],
   );
 
@@ -293,8 +294,10 @@ export function DayPlanPanel({
   const overnight = selected?.overnight_spot_id
     ? spotsById.get(selected.overnight_spot_id)
     : null;
-  const needsVanOvernight =
-    vacation.type === "van" || vacation.type === "camping";
+  const needsOvernight =
+    vacation.type === "van" ||
+    vacation.type === "camping" ||
+    vacation.type === "hotel";
 
   return (
     <div className="mt-3 space-y-4">
@@ -339,7 +342,7 @@ export function DayPlanPanel({
               <span className="plan-day-chip-date">{formatDayLabel(day.date)}</span>
               <span className="plan-day-chip-dots" aria-hidden>
                 <i data-on={hasStops} />
-                {needsVanOvernight && <i data-on={hasNight} data-kind="night" />}
+                {needsOvernight && <i data-on={hasNight} data-kind="night" />}
               </span>
             </button>
           );
@@ -634,8 +637,8 @@ export function DayPlanPanel({
             )}
           </div>
 
-          {/* Overnight — only for van/camping */}
-          {needsVanOvernight && (
+          {/* Overnight — van / camping / hotel */}
+          {needsOvernight && (
             <div className="ios-group p-4">
               <p className="text-[12px] font-semibold uppercase tracking-wide text-[var(--fjord)]">
                 Übernachtung
@@ -670,7 +673,7 @@ export function DayPlanPanel({
               </select>
               {overnightCandidates.length === 0 ? (
                 <p className="mt-2 text-[12px] text-[var(--ink-faint)]">
-                  Stellplätze unter Spots anlegen — dann erscheinen sie hier.
+                  Stellplätze oder Airbnbs unter Spots anlegen — dann erscheinen sie hier.
                 </p>
               ) : overnight ? (
                 <p className="mt-2 text-[12px] text-[var(--ink-soft)]">

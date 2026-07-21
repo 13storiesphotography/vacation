@@ -97,6 +97,7 @@ export type Database = {
           name: string;
           category:
             | "stellplatz"
+            | "unterkunft"
             | "sehenswuerdigkeit"
             | "ort"
             | "freizeit"
@@ -120,6 +121,7 @@ export type Database = {
           name: string;
           category:
             | "stellplatz"
+            | "unterkunft"
             | "sehenswuerdigkeit"
             | "ort"
             | "freizeit"
@@ -143,6 +145,7 @@ export type Database = {
           name?: string;
           category?:
             | "stellplatz"
+            | "unterkunft"
             | "sehenswuerdigkeit"
             | "ort"
             | "freizeit"
@@ -259,6 +262,7 @@ export type Database = {
       member_status: "invited" | "active";
       spot_category:
         | "stellplatz"
+        | "unterkunft"
         | "sehenswuerdigkeit"
         | "ort"
         | "freizeit"
