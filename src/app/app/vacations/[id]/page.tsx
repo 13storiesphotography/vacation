@@ -407,22 +407,27 @@ export default function VacationDetailPage() {
   }
 
   return (
-    <main className="shell app-with-tabbar mx-auto min-h-screen w-full max-w-6xl px-5 py-6 md:px-8 md:py-8">
-      <div className="mb-4 flex items-center justify-between gap-3">
-        <Link href="/app" className="text-[13px] font-semibold text-[var(--fjord)]">
-          ← Urlaube
-        </Link>
-        {tab !== "urlaub" && (
-          <p className="truncate text-[13px] font-semibold text-[var(--ink-soft)]">
-            {vacation.title}
-          </p>
-        )}
-      </div>
+    <>
+      <header className="app-topbar">
+        <div className="app-topbar-inner">
+          <Link href="/app" className="text-[13px] font-semibold text-[var(--fjord)]">
+            ← Urlaube
+          </Link>
+          {tab !== "urlaub" ? (
+            <p className="truncate text-[13px] font-semibold text-[var(--ink-soft)]">
+              {vacation.title}
+            </p>
+          ) : (
+            <span />
+          )}
+        </div>
+      </header>
 
-      {/* Desktop: tab bar on top. Mobile: fixed at bottom via CSS. */}
-      <div className="hidden md:block">
-        <VacationTabBar active={tab} onChange={changeTab} />
-      </div>
+      <main className="shell app-with-chrome mx-auto min-h-screen w-full max-w-6xl px-5 pb-6 pt-3 md:px-8 md:pb-8 md:pt-4">
+        {/* Desktop: tab bar on top. Mobile: fixed at bottom via CSS. */}
+        <div className="hidden md:block">
+          <VacationTabBar active={tab} onChange={changeTab} />
+        </div>
 
       {visitedTabs.has("urlaub") && (
         <VacationTabPanel id="urlaub" active={tab === "urlaub"}>
@@ -692,9 +697,11 @@ export default function VacationDetailPage() {
         </VacationTabPanel>
       )}
 
+      </main>
+
       <div className="md:hidden">
         <VacationTabBar active={tab} onChange={changeTab} />
       </div>
-    </main>
+    </>
   );
 }
