@@ -249,6 +249,10 @@ export type Database = {
       is_vacation_member: { Args: { p_vacation_id: string }; Returns: boolean };
       is_vacation_admin: { Args: { p_vacation_id: string }; Returns: boolean };
       is_spot_vacation_member: { Args: { p_spot_id: string }; Returns: boolean };
+      is_day_plan_vacation_member: {
+        Args: { p_day_plan_id: string };
+        Returns: boolean;
+      };
     };
     Enums: {
       member_role: "admin" | "member";
