@@ -1,7 +1,7 @@
 "use client";
 
 import dynamic from "next/dynamic";
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   categoryLabels,
   categoryOptions,
@@ -38,6 +38,21 @@ export function SpotMap({
   const [focus, setFocus] = useState<FocusMode>("all");
   const [minAvg, setMinAvg] = useState(0);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [expanded, setExpanded] = useState(false);
+
+  useEffect(() => {
+    if (!expanded) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const onKeyDown = (event: KeyboardEvent) => {
+      if (event.key === "Escape") setExpanded(false);
+    };
+    window.addEventListener("keydown", onKeyDown);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      window.removeEventListener("keydown", onKeyDown);
+    };
+  }, [expanded]);
 
   const { mappable, withoutCoords } = useMemo(() => {
     const withCoords: MappableSpot[] = [];
@@ -128,14 +143,36 @@ export function SpotMap({
         {process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
           ? " · Google Maps"
           : " · OpenStreetMap (Google-Key fehlt)"}
+        {" · "}
+        {expanded
+          ? "Ein Finger zum Verschieben"
+          : "Zwei Finger zum Verschieben"}
       </p>
 
-      <div className="h-[min(68vh,640px)] overflow-hidden rounded-[22px] border border-white/55 shadow-[var(--shadow-soft)] backdrop-blur-sm">
+      <div
+        className={
+          expanded
+            ? "spot-map-frame spot-map-frame--expanded"
+            : "spot-map-frame"
+        }
+      >
+        <div className="spot-map-toolbar">
+          <button
+            type="button"
+            className="glass-chip"
+            data-active={expanded}
+            onClick={() => setExpanded((value) => !value)}
+            aria-pressed={expanded}
+          >
+            {expanded ? "Schließen" : "Vergrößern"}
+          </button>
+        </div>
         <SpotMapCanvas
           spots={visible}
           summaries={summaries}
           selectedId={selectedId}
           onSelect={setSelectedId}
+          expanded={expanded}
         />
       </div>
 

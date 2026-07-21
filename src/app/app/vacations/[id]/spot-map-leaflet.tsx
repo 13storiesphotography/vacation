@@ -9,6 +9,7 @@ import { DEFAULT_MAP_CENTER, DEFAULT_MAP_ZOOM } from "@/lib/geo";
 import type { SpotRatingSummary } from "@/lib/ratings";
 import type { MappableSpot } from "@/lib/google-maps";
 import { categoryIconSvg } from "@/components/category-icon";
+import { LeafletGestureMode } from "./map-gestures";
 
 const iconCache = new Map<string, L.DivIcon>();
 
@@ -82,11 +83,13 @@ export default function SpotMapLeaflet({
   summaries,
   selectedId,
   onSelect,
+  expanded = false,
 }: {
   spots: MappableSpot[];
   summaries: Record<string, SpotRatingSummary>;
   selectedId: string | null;
   onSelect: (id: string | null) => void;
+  expanded?: boolean;
 }) {
   const markers = useMemo(
     () =>
@@ -108,12 +111,14 @@ export default function SpotMapLeaflet({
       center={DEFAULT_MAP_CENTER}
       zoom={DEFAULT_MAP_ZOOM}
       className="h-full w-full rounded-[18px]"
-      scrollWheelZoom
+      scrollWheelZoom={expanded}
+      dragging={expanded}
     >
       <TileLayer
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'
         url="https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png"
       />
+      <LeafletGestureMode mode={expanded ? "greedy" : "cooperative"} />
       <FitBounds spots={spots} />
       {markers.map(({ spot, selected, icon, summary }) => (
         <Marker
