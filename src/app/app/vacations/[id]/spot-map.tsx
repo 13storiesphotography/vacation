@@ -145,38 +145,40 @@ export function SpotMap({
           <div className="flex items-start gap-3">
             <CategoryIcon category={selected.category} size={18} className="mt-0.5" />
             <div className="min-w-0 flex-1">
-              <p className="text-[15px] font-semibold">{selected.name}</p>
+              {selected.maps_url ? (
+                <a
+                  href={selected.maps_url}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="text-[15px] font-semibold text-[var(--fjord)] hover:underline"
+                >
+                  {selected.name}
+                </a>
+              ) : (
+                <p className="text-[15px] font-semibold">{selected.name}</p>
+              )}
               <p className="text-[12px] text-[var(--ink-soft)]">
                 {categoryLabels[selected.category]}
                 {selected.overnight_cost ? ` · ${selected.overnight_cost}` : ""}
+                {selected.info_url && (
+                  <>
+                    {" · "}
+                    <a
+                      href={selected.info_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="font-semibold text-[var(--fjord)]"
+                    >
+                      Info
+                    </a>
+                  </>
+                )}
               </p>
               {selected.description && (
                 <p className="mt-2 text-[13px] leading-relaxed text-[var(--ink-soft)]">
                   {selected.description}
                 </p>
               )}
-              <div className="mt-2 flex flex-wrap gap-2">
-                {selected.maps_url && (
-                  <a
-                    href={selected.maps_url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="rounded-full bg-[var(--fjord-soft)] px-2.5 py-1 text-[11px] font-semibold text-[var(--fjord)]"
-                  >
-                    Maps öffnen
-                  </a>
-                )}
-                {selected.info_url && (
-                  <a
-                    href={selected.info_url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="rounded-full bg-black/5 px-2.5 py-1 text-[11px] font-semibold text-[var(--ink-soft)]"
-                  >
-                    Info / Buchung
-                  </a>
-                )}
-              </div>
             </div>
           </div>
         </div>
