@@ -55,23 +55,33 @@ export function DayPlanPanel({
 
   async function reload(preferId?: string | null) {
     const seq = ++reloadSeq.current;
-    const result = await ensureVacationDayPlans(vacation.id);
-    // Ignore outdated responses so an older reload can't overwrite a newer one.
-    if (seq !== reloadSeq.current) return;
+    try {
+      const result = await ensureVacationDayPlans(vacation.id);
+      // Ignore outdated responses so an older reload can't overwrite a newer one.
+      if (seq !== reloadSeq.current) return;
 
-    if (result.error) {
-      setError(result.error);
+      if (result.error) {
+        setError(result.error);
+        setLoading(false);
+        return;
+      }
+      setDays(result.days);
+      setSelectedId((current) => {
+        const next = preferId ?? current;
+        if (next && result.days.some((day) => day.id === next)) return next;
+        return result.days[0]?.id ?? null;
+      });
       setLoading(false);
-      return;
+      setError(null);
+    } catch (err) {
+      if (seq !== reloadSeq.current) return;
+      setError(
+        err instanceof Error
+          ? err.message
+          : "Tagesplan konnte nicht geladen werden. Bitte neu laden.",
+      );
+      setLoading(false);
     }
-    setDays(result.days);
-    setSelectedId((current) => {
-      const next = preferId ?? current;
-      if (next && result.days.some((day) => day.id === next)) return next;
-      return result.days[0]?.id ?? null;
-    });
-    setLoading(false);
-    setError(null);
   }
 
   useEffect(() => {
@@ -139,6 +149,26 @@ export function DayPlanPanel({
 
   if (loading) {
     return <p className="mt-4 text-[14px] text-[var(--ink-soft)]">Tagesplan wird geladen…</p>;
+  }
+
+  if (error && days.length === 0) {
+    return (
+      <div className="ios-group mt-4 p-5">
+        <p className="text-[15px] font-semibold text-[var(--danger)]">Tagesplan-Fehler</p>
+        <p className="mt-2 text-[14px] text-[var(--ink-soft)]">{error}</p>
+        <button
+          type="button"
+          className="mt-4 text-[14px] font-semibold text-[var(--fjord)]"
+          onClick={() => {
+            setLoading(true);
+            setError(null);
+            void reload();
+          }}
+        >
+          Erneut versuchen
+        </button>
+      </div>
+    );
   }
 
   if (days.length === 0) {

@@ -88,66 +88,77 @@ function needsImageRefresh(spot: {
 export async function healVacationSpotCoords(vacationId: string): Promise<{
   updated: number;
 }> {
-  const supabase = await createClient();
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-  if (!user) return { updated: 0 };
+  try {
+    const supabase = await createClient();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
+    if (!user) return { updated: 0 };
 
-  const { data: isMember } = await supabase.rpc("is_vacation_member", {
-    p_vacation_id: vacationId,
-  });
-  if (!isMember) return { updated: 0 };
+    const { data: isMember } = await supabase.rpc("is_vacation_member", {
+      p_vacation_id: vacationId,
+    });
+    if (!isMember) return { updated: 0 };
 
-  const { data: spots } = await supabase
-    .from("spots")
-    .select("id, lat, lng, maps_url, image_url, image_manual")
-    .eq("vacation_id", vacationId);
+    const { data: spots } = await supabase
+      .from("spots")
+      .select("id, lat, lng, maps_url, image_url, image_manual")
+      .eq("vacation_id", vacationId);
 
-  let updated = 0;
-  for (const spot of spots ?? []) {
-    if (!spot.maps_url) continue;
+    let updated = 0;
+    for (const spot of spots ?? []) {
+      if (!spot.maps_url) continue;
 
-    const refreshImage = needsImageRefresh(spot);
-    const syncCoords = parseLatLngFromMapsUrl(spot.maps_url);
-    const needsEnrich =
-      refreshImage ||
-      !syncCoords ||
-      isShortMapsUrl(spot.maps_url);
+      try {
+        const refreshImage = needsImageRefresh(spot);
+        const syncCoords = parseLatLngFromMapsUrl(spot.maps_url);
+        const needsEnrich =
+          refreshImage ||
+          !syncCoords ||
+          isShortMapsUrl(spot.maps_url);
 
-    const enriched = needsEnrich
-      ? await enrichFromMapsUrl(spot.maps_url)
-      : { coords: syncCoords, imageUrl: null as string | null };
+        const enriched = needsEnrich
+          ? await enrichFromMapsUrl(spot.maps_url)
+          : { coords: syncCoords, imageUrl: null as string | null };
 
-    const coords = enriched.coords;
-    const patch: { lat?: number; lng?: number; image_url?: string } = {};
+        const coords = enriched.coords;
+        const patch: { lat?: number; lng?: number; image_url?: string } = {};
 
-    if (coords && isValidLatLng(coords.lat, coords.lng)) {
-      const previous = previousCoords(spot);
-      if (!previous || haversineMeters(previous, coords) > driftMeters) {
-        patch.lat = coords.lat;
-        patch.lng = coords.lng;
+        if (coords && isValidLatLng(coords.lat, coords.lng)) {
+          const previous = previousCoords(spot);
+          if (!previous || haversineMeters(previous, coords) > driftMeters) {
+            patch.lat = coords.lat;
+            patch.lng = coords.lng;
+          }
+        }
+
+        if (
+          refreshImage &&
+          enriched.imageUrl &&
+          isUsablePreviewImage(enriched.imageUrl) &&
+          !isAppMapPreviewUrl(enriched.imageUrl) &&
+          enriched.imageUrl !== spot.image_url
+        ) {
+          patch.image_url = enriched.imageUrl;
+        }
+
+        if (Object.keys(patch).length === 0) continue;
+
+        const { error } = await supabase
+          .from("spots")
+          .update(patch)
+          .eq("id", spot.id);
+        if (!error) updated += 1;
+      } catch {
+        // Skip individual spots that fail enrichment; never fail the page load.
       }
     }
 
-    if (
-      refreshImage &&
-      enriched.imageUrl &&
-      isUsablePreviewImage(enriched.imageUrl) &&
-      !isAppMapPreviewUrl(enriched.imageUrl) &&
-      enriched.imageUrl !== spot.image_url
-    ) {
-      patch.image_url = enriched.imageUrl;
+    if (updated > 0) {
+      revalidatePath(`/app/vacations/${vacationId}`);
     }
-
-    if (Object.keys(patch).length === 0) continue;
-
-    const { error } = await supabase.from("spots").update(patch).eq("id", spot.id);
-    if (!error) updated += 1;
+    return { updated };
+  } catch {
+    return { updated: 0 };
   }
-
-  if (updated > 0) {
-    revalidatePath(`/app/vacations/${vacationId}`);
-  }
-  return { updated };
 }

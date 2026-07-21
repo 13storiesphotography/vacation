@@ -42,59 +42,69 @@ function revalidateVacation(vacationId: string) {
 export async function ensureVacationDayPlans(
   vacationId: string,
 ): Promise<{ days: DayPlanWithStops[]; error?: string }> {
-  const { supabase, error } = await requireMember(vacationId);
-  if (error) return { days: [], error };
+  try {
+    const { supabase, error } = await requireMember(vacationId);
+    if (error) return { days: [], error };
 
-  const { data: vacation, error: vacationError } = await supabase
-    .from("vacations")
-    .select("start_date, end_date")
-    .eq("id", vacationId)
-    .single();
+    const { data: vacation, error: vacationError } = await supabase
+      .from("vacations")
+      .select("start_date, end_date")
+      .eq("id", vacationId)
+      .single();
 
-  if (vacationError || !vacation) {
-    return { days: [], error: vacationError?.message ?? "Urlaub nicht gefunden." };
-  }
+    if (vacationError || !vacation) {
+      return { days: [], error: vacationError?.message ?? "Urlaub nicht gefunden." };
+    }
 
-  const dates = eachDateInclusive(vacation.start_date, vacation.end_date);
-  if (dates.length === 0) {
-    return { days: [], error: "Ungültiger Zeitraum." };
-  }
+    const dates = eachDateInclusive(vacation.start_date, vacation.end_date);
+    if (dates.length === 0) {
+      return { days: [], error: "Ungültiger Zeitraum." };
+    }
 
-  const { data: existing, error: existingError } = await supabase
-    .from("day_plans")
-    .select("*")
-    .eq("vacation_id", vacationId)
-    .order("date", { ascending: true });
-
-  if (existingError) return { days: [], error: existingError.message };
-
-  const byDate = new Map((existing ?? []).map((day) => [day.date, day]));
-  const missing = dates.filter((date) => !byDate.has(date));
-
-  if (missing.length > 0) {
-    const { error: insertError } = await supabase.from("day_plans").insert(
-      missing.map((date, index) => ({
-        vacation_id: vacationId,
-        date,
-        title: defaultDayTitle(date, dates.indexOf(date)),
-      })),
-    );
-    if (insertError) return { days: [], error: insertError.message };
-  }
-
-  const outside = (existing ?? []).filter((day) => !dates.includes(day.date));
-  if (outside.length > 0) {
-    const { error: deleteError } = await supabase
+    const { data: existing, error: existingError } = await supabase
       .from("day_plans")
-      .delete()
-      .in(
-        "id",
-        outside.map((day) => day.id),
-      );
-    if (deleteError) return { days: [], error: deleteError.message };
-  }
+      .select("*")
+      .eq("vacation_id", vacationId)
+      .order("date", { ascending: true });
 
-  return loadDayPlans(vacationId);
+    if (existingError) return { days: [], error: existingError.message };
+
+    const byDate = new Map((existing ?? []).map((day) => [day.date, day]));
+    const missing = dates.filter((date) => !byDate.has(date));
+
+    if (missing.length > 0) {
+      const { error: insertError } = await supabase.from("day_plans").insert(
+        missing.map((date) => ({
+          vacation_id: vacationId,
+          date,
+          title: defaultDayTitle(date, dates.indexOf(date)),
+        })),
+      );
+      if (insertError) return { days: [], error: insertError.message };
+    }
+
+    const outside = (existing ?? []).filter((day) => !dates.includes(day.date));
+    if (outside.length > 0) {
+      const { error: deleteError } = await supabase
+        .from("day_plans")
+        .delete()
+        .in(
+          "id",
+          outside.map((day) => day.id),
+        );
+      if (deleteError) return { days: [], error: deleteError.message };
+    }
+
+    return loadDayPlans(vacationId);
+  } catch (err) {
+    return {
+      days: [],
+      error:
+        err instanceof Error
+          ? err.message
+          : "Tagesplan konnte nicht vorbereitet werden.",
+    };
+  }
 }
 
 export async function loadDayPlans(
