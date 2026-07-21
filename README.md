@@ -15,12 +15,15 @@ npm run dev
 
 Öffne [http://localhost:3000](http://localhost:3000).
 
-## Erster Start
+## Erster Start (Invite-only)
 
-1. `/signup` – Admin-Konto anlegen
-2. MFA (TOTP) einrichten
-3. Urlaub anlegen unter `/app`
-4. Team einladen (braucht `SUPABASE_SERVICE_ROLE_KEY` oder Dashboard-Invite)
+Öffentliche Selbst-Registrierung ist absichtlich aus.
+
+1. In Vercel Env-Vars: `NEXT_PUBLIC_SUPABASE_*` **ohne** Leerzeichen/Zeilenumbruch speichern (nicht als Sensitive markieren).
+2. In Supabase → Authentication → Providers → Email: **Confirm email** aus, **Enable sign ups** aus.
+3. Ersten Admin anlegen: Authentication → Users → **Add user** (E-Mail + Passwort).
+4. Auf der App-URL anmelden → MFA einrichten → Urlaub anlegen.
+5. Weitere Personen nur über **Einladen** im Urlaub.
 
 Im Supabase Dashboard unter **Authentication → URL Configuration** die Site URL und Redirect URLs setzen, z. B.:
 

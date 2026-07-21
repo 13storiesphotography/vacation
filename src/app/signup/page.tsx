@@ -1,110 +1,22 @@
-"use client";
-
 import Link from "next/link";
-import { useRouter } from "next/navigation";
-import { FormEvent, useState } from "react";
-import { createClient } from "@/lib/supabase/client";
 
 export default function SignupPage() {
-  const router = useRouter();
-  const [displayName, setDisplayName] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [error, setError] = useState<string | null>(null);
-  const [info, setInfo] = useState<string | null>(null);
-  const [loading, setLoading] = useState(false);
-
-  async function onSubmit(event: FormEvent) {
-    event.preventDefault();
-    setLoading(true);
-    setError(null);
-    setInfo(null);
-
-    try {
-      const supabase = createClient();
-      const { data, error: signUpError } = await supabase.auth.signUp({
-        email,
-        password,
-        options: {
-          data: { display_name: displayName },
-          emailRedirectTo: `${window.location.origin}/auth/callback?next=/app/mfa/enroll`,
-        },
-      });
-
-      if (signUpError) {
-        setError(signUpError.message);
-        return;
-      }
-
-      // Email confirmation enabled → no session until link is clicked
-      if (!data.session) {
-        setInfo(
-          "Konto angelegt. Bitte bestätige den Link in deiner E-Mail, danach kannst du dich anmelden und MFA einrichten.",
-        );
-        return;
-      }
-
-      router.replace("/app/mfa/enroll");
-      router.refresh();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Unbekannter Fehler beim Registrieren.");
-    } finally {
-      setLoading(false);
-    }
-  }
-
   return (
     <main className="shell flex min-h-screen items-center px-5 py-12">
-      <form onSubmit={onSubmit} className="ios-group mx-auto w-full max-w-md p-6">
-        <h1 className="display text-2xl">Konto erstellen</h1>
-        <p className="mt-2 text-[14px] text-[var(--ink-soft)]">
-          Für den ersten Admin-Account. Danach MFA einrichten. Weitere Personen kommen per
-          Einladung.
+      <div className="ios-group mx-auto w-full max-w-md p-6">
+        <h1 className="display text-2xl">Nur per Einladung</h1>
+        <p className="mt-3 text-[15px] leading-relaxed text-[var(--ink-soft)]">
+          Neue Konten können sich nicht selbst registrieren. Ein Admin lädt dich ein — danach
+          setzt du Passwort und MFA.
         </p>
-        <label className="mt-6 block text-[13px] font-semibold text-[var(--ink-soft)]">
-          Name
-          <input
-            className="mt-1.5 w-full rounded-[12px] border-0 bg-black/5 px-3 py-3 text-[15px] outline-none ring-[var(--fjord)] focus:ring-2"
-            required
-            value={displayName}
-            onChange={(e) => setDisplayName(e.target.value)}
-          />
-        </label>
-        <label className="mt-4 block text-[13px] font-semibold text-[var(--ink-soft)]">
-          E-Mail
-          <input
-            className="mt-1.5 w-full rounded-[12px] border-0 bg-black/5 px-3 py-3 text-[15px] outline-none ring-[var(--fjord)] focus:ring-2"
-            type="email"
-            autoComplete="email"
-            required
-            value={email}
-            onChange={(e) => setEmail(e.target.value)}
-          />
-        </label>
-        <label className="mt-4 block text-[13px] font-semibold text-[var(--ink-soft)]">
-          Passwort
-          <input
-            className="mt-1.5 w-full rounded-[12px] border-0 bg-black/5 px-3 py-3 text-[15px] outline-none ring-[var(--fjord)] focus:ring-2"
-            type="password"
-            autoComplete="new-password"
-            minLength={8}
-            required
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-          />
-        </label>
-        {error && <p className="mt-4 text-[14px] text-[var(--danger)]">{error}</p>}
-        {info && <p className="mt-4 text-[14px] text-[var(--pine)]">{info}</p>}
-        <button type="submit" className="cta mt-6 w-full" disabled={loading}>
-          {loading ? "…" : "Registrieren"}
-        </button>
-        <p className="mt-4 text-center text-[13px] text-[var(--ink-soft)]">
-          Schon registriert?{" "}
-          <Link href="/login" className="font-semibold text-[var(--fjord)]">
-            Anmelden
-          </Link>
+        <p className="mt-4 text-[14px] leading-relaxed text-[var(--ink-soft)]">
+          Bist du der erste Admin? Lege den Account einmalig im Supabase Dashboard an
+          (Authentication → Users → Add user), melde dich hier an und richte MFA ein.
         </p>
-      </form>
+        <Link href="/login" className="cta mt-6 inline-flex w-full">
+          Zur Anmeldung
+        </Link>
+      </div>
     </main>
   );
 }

@@ -64,12 +64,12 @@ function LoginForm() {
       <button type="submit" className="cta mt-6 w-full" disabled={loading}>
         {loading ? "…" : "Weiter"}
       </button>
-      <p className="mt-4 text-center text-[13px] text-[var(--ink-soft)]">
-        Noch kein Konto?{" "}
-        <Link href="/signup" className="font-semibold text-[var(--fjord)]">
-          Registrieren
-        </Link>
-      </p>
+        <p className="mt-4 text-center text-[13px] text-[var(--ink-soft)]">
+          Zugang nur per Einladung.{" "}
+          <Link href="/signup" className="font-semibold text-[var(--fjord)]">
+            Mehr Infos
+          </Link>
+        </p>
     </form>
   );
 }
