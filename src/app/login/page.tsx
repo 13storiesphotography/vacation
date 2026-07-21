@@ -114,7 +114,7 @@ function LoginForm() {
       </div>
 
       <form onSubmit={onSubmit} className="mt-5">
-        <label className="block text-[13px] font-semibold text-[var(--ink-soft)]">
+        <label className="form-label">
           E-Mail
           <input
             className="glass-field mt-1.5 px-3 py-3"
@@ -125,7 +125,7 @@ function LoginForm() {
             onChange={(e) => setEmail(e.target.value)}
           />
         </label>
-        <label className="mt-4 block text-[13px] font-semibold text-[var(--ink-soft)]">
+        <label className="form-label mt-4">
           Passwort
           <input
             className="glass-field mt-1.5 px-3 py-3"

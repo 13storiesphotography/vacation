@@ -98,7 +98,7 @@ function MapsUrlField({ defaultValue = "" }: { defaultValue?: string }) {
   }, [url]);
 
   return (
-    <label className="mt-3 block text-[13px] font-semibold text-[var(--ink-soft)]">
+    <label className="form-label mt-3">
       Google Maps Link
       <input
         name="maps_url"
@@ -146,7 +146,7 @@ function SpotThumb({
         onOpen?.();
       }}
       aria-label={`${spot.name} bearbeiten`}
-      className={`relative shrink-0 overflow-hidden rounded-[12px] bg-[linear-gradient(160deg,#c5d5d0,#8aa4ad)] ${
+      className={`relative shrink-0 overflow-hidden rounded-[12px] media-fallback ${
         selected ? "ring-2 ring-[var(--fjord)]" : ""
       }`}
       style={{ width: size, height: size }}
@@ -166,7 +166,7 @@ function SpotThumb({
           <CategoryIcon category={spot.category} size={Math.round(size * 0.36)} tone="#ffffff" />
         </div>
       )}
-      <span className="absolute bottom-0.5 left-0.5 inline-flex rounded-full bg-white/95 p-0.5 shadow-sm">
+      <span className="absolute bottom-0.5 left-0.5 inline-flex rounded-full bg-[var(--surface-strong)] p-0.5 shadow-sm">
         <CategoryIcon category={spot.category} size={11} />
       </span>
     </button>
@@ -186,7 +186,7 @@ function SpotFormFields({
 }) {
   return (
     <>
-      <label className="mt-3 block text-[13px] font-semibold text-[var(--ink-soft)]">
+      <label className="form-label mt-3">
         Name
         <input
           name="name"
@@ -197,7 +197,7 @@ function SpotFormFields({
         />
       </label>
 
-      <label className="mt-3 block text-[13px] font-semibold text-[var(--ink-soft)]">
+      <label className="form-label mt-3">
         Kategorie
         <select
           name="category"
@@ -213,7 +213,7 @@ function SpotFormFields({
         </select>
       </label>
 
-      <label className="mt-3 block text-[13px] font-semibold text-[var(--ink-soft)]">
+      <label className="form-label mt-3">
         Beschreibung
         <textarea
           name="description"
@@ -224,7 +224,7 @@ function SpotFormFields({
 
       <MapsUrlField defaultValue={spot?.maps_url ?? ""} />
 
-      <label className="mt-3 block text-[13px] font-semibold text-[var(--ink-soft)]">
+      <label className="form-label mt-3">
         Vorschaubild (optional)
         {spot?.image_url && !spot.image_manual ? (
           <input type="hidden" name="previous_image_url" value={spot.image_url} />
@@ -255,7 +255,7 @@ function SpotFormFields({
         ) : null}
       </label>
 
-      <label className="mt-3 block text-[13px] font-semibold text-[var(--ink-soft)]">
+      <label className="form-label mt-3">
         Buchung / Info Link
         <input
           name="info_url"
@@ -268,7 +268,7 @@ function SpotFormFields({
 
       {showOvernight && (
         <>
-          <label className="mt-3 block text-[13px] font-semibold text-[var(--ink-soft)]">
+          <label className="form-label mt-3">
             Übernachtung
             <select
               name="overnight_cost"
@@ -280,7 +280,7 @@ function SpotFormFields({
               <option value="kostenpflichtig">Kostenpflichtig</option>
             </select>
           </label>
-          <label className="mt-3 block text-[13px] font-semibold text-[var(--ink-soft)]">
+          <label className="form-label mt-3">
             Preis-Hinweis
             <input
               name="price_hint"
@@ -292,7 +292,7 @@ function SpotFormFields({
         </>
       )}
 
-      <label className="mt-3 block text-[13px] font-semibold text-[var(--ink-soft)]">
+      <label className="form-label mt-3">
         Tags (kommagetrennt)
         <input
           name="tags"
@@ -357,7 +357,7 @@ export function EditSpotForm({
   }, [state.ok, onDone]);
 
   return (
-    <div className="border-t border-[var(--separator)] bg-black/[0.015] p-4">
+    <div className="glass-subpanel-flush">
       <form action={action}>
         <input type="hidden" name="vacation_id" value={vacationId} />
         <input type="hidden" name="spot_id" value={spot.id} />
@@ -367,7 +367,7 @@ export function EditSpotForm({
           </p>
           <button
             type="button"
-            className="shrink-0 rounded-[10px] px-2.5 py-1 text-[13px] font-semibold text-[var(--danger)] transition hover:bg-[var(--danger)]/8 disabled:opacity-50"
+            className="glass-chip glass-chip-danger shrink-0"
             disabled={deleting || pending}
             onClick={() => {
               if (
@@ -549,7 +549,7 @@ export function SpotList({
           value={sortMode}
           onChange={(e) => setSortMode(e.target.value as SortMode)}
           aria-label="Sortierung"
-          className="glass-field max-w-[10rem] px-3 py-1.5 text-[12px] font-semibold"
+          className="glass-field max-w-[11rem] px-3 py-2 text-[13px] font-semibold"
         >
           <option value="newest">Neueste</option>
           <option value="favorites">Favoriten</option>

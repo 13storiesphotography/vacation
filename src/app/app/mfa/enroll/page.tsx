@@ -112,14 +112,14 @@ export default function EnrollMfaPage() {
             className="mx-auto mt-6 h-48 w-48 rounded-[16px] bg-white p-3"
           />
         ) : (
-          <div className="mx-auto mt-6 h-48 w-48 animate-pulse rounded-[16px] bg-black/5" />
+          <div className="mx-auto mt-6 h-48 w-48 animate-pulse rounded-[16px] bg-[var(--surface-strong)]" />
         )}
         {secret && (
           <p className="mt-3 break-all text-center text-[12px] text-[var(--ink-faint)]">
             Secret: {secret}
           </p>
         )}
-        <label className="mt-6 block text-[13px] font-semibold text-[var(--ink-soft)]">
+        <label className="form-label mt-6">
           6-stelliger Code
           <input
             className="glass-field mt-1.5 px-3 py-3 text-center text-[20px] tracking-[0.3em]"
@@ -136,10 +136,7 @@ export default function EnrollMfaPage() {
           {loading ? "…" : "Aktivieren"}
         </button>
         {canSkip && (
-          <Link
-            href="/app"
-            className="mt-3 block text-center text-[14px] font-semibold text-[var(--fjord)]"
-          >
+          <Link href="/app" className="cta cta-secondary mt-3 w-full">
             Später einrichten
           </Link>
         )}

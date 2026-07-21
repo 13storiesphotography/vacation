@@ -16,7 +16,7 @@ export default function NewVacationPage() {
       </Link>
       <form action={action} className="ios-group mt-4 p-6">
         <h1 className="display text-2xl">Neuer Urlaub</h1>
-        <label className="mt-5 block text-[13px] font-semibold text-[var(--ink-soft)]">
+        <label className="form-label mt-5">
           Titel
           <input
             name="title"
@@ -25,7 +25,7 @@ export default function NewVacationPage() {
             defaultValue="Schweden Van Trip"
           />
         </label>
-        <label className="mt-4 block text-[13px] font-semibold text-[var(--ink-soft)]">
+        <label className="form-label mt-4">
           Art
           <select
             name="type"
@@ -38,7 +38,7 @@ export default function NewVacationPage() {
             <option value="other">Sonstiges</option>
           </select>
         </label>
-        <label className="mt-4 block text-[13px] font-semibold text-[var(--ink-soft)]">
+        <label className="form-label mt-4">
           Region
           <input
             name="region"
@@ -47,7 +47,7 @@ export default function NewVacationPage() {
           />
         </label>
         <div className="mt-4 grid grid-cols-2 gap-3">
-          <label className="block text-[13px] font-semibold text-[var(--ink-soft)]">
+          <label className="form-label">
             Start
             <input
               name="start_date"
@@ -57,7 +57,7 @@ export default function NewVacationPage() {
               defaultValue="2026-07-10"
             />
           </label>
-          <label className="block text-[13px] font-semibold text-[var(--ink-soft)]">
+          <label className="form-label">
             Ende
             <input
               name="end_date"
@@ -68,7 +68,7 @@ export default function NewVacationPage() {
             />
           </label>
         </div>
-        <label className="mt-4 block text-[13px] font-semibold text-[var(--ink-soft)]">
+        <label className="form-label mt-4">
           Beschreibung
           <textarea
             name="description"

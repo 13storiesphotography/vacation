@@ -18,7 +18,7 @@ type Spot = Database["public"]["Tables"]["spots"]["Row"];
 const SpotMapCanvas = dynamic(() => import("./spot-map-canvas"), {
   ssr: false,
   loading: () => (
-    <div className="flex h-full items-center justify-center rounded-[18px] bg-[linear-gradient(160deg,#c5d5d0,#8aa4ad)] text-[14px] font-semibold text-white">
+    <div className="flex h-full items-center justify-center rounded-[18px] media-fallback text-[14px] font-semibold text-white">
       Karte lädt…
     </div>
   ),
@@ -116,24 +116,24 @@ export function SpotMap({
       </div>
 
       <div className="mb-3 grid gap-2 sm:grid-cols-2">
-        <label className="block text-[12px] font-semibold text-[var(--ink-soft)]">
+        <label className="form-label">
           Fokus
           <select
             value={focus}
             onChange={(e) => setFocus(e.target.value as FocusMode)}
-            className="glass-field mt-1 px-3 py-2.5 text-[14px]"
+            className="glass-field mt-1.5 px-3 py-2.5 text-[14px]"
           >
             <option value="all">Alle Spots mit Koordinaten</option>
             <option value="favorites">Nur meine Favoriten</option>
             <option value="rated">Nur von mir bewertet</option>
           </select>
         </label>
-        <label className="block text-[12px] font-semibold text-[var(--ink-soft)]">
+        <label className="form-label">
           Min. Gesamtbewertung
           <select
             value={minAvg}
             onChange={(e) => setMinAvg(Number(e.target.value))}
-            className="glass-field mt-1 px-3 py-2.5 text-[14px]"
+            className="glass-field mt-1.5 px-3 py-2.5 text-[14px]"
           >
             <option value={0}>Keine Mindestnote</option>
             <option value={3}>ab 3★</option>
@@ -143,7 +143,7 @@ export function SpotMap({
         </label>
       </div>
 
-      <p className="mb-2 text-[12px] text-[var(--ink-soft)]">
+      <p className="meta-text mb-2">
         {visible.length} Spot{visible.length === 1 ? "" : "s"} auf der Karte
         {withoutCoords.length > 0
           ? ` · ${withoutCoords.length} ohne Koordinaten`
@@ -188,7 +188,7 @@ export function SpotMap({
       {selected && (
         <div className="ios-group mt-3 overflow-hidden">
           {selected.image_url ? (
-            <div className="relative aspect-[16/7] w-full bg-[linear-gradient(160deg,#c5d5d0,#8aa4ad)]">
+            <div className="relative aspect-[16/7] w-full media-fallback">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 src={selected.image_url}
@@ -196,7 +196,7 @@ export function SpotMap({
                 className="h-full w-full object-cover"
                 referrerPolicy="no-referrer"
               />
-              <span className="absolute bottom-2 left-2 inline-flex rounded-full bg-white/95 p-1.5 shadow-sm">
+              <span className="absolute bottom-2 left-2 inline-flex rounded-full bg-[var(--surface-strong)] p-1.5 shadow-sm">
                 <CategoryIcon category={selected.category} size={14} />
               </span>
             </div>

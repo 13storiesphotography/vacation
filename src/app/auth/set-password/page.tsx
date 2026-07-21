@@ -38,7 +38,7 @@ export default function SetPasswordPage() {
           </Link>{" "}
           (gleiche E-Mail).
         </p>
-        <label className="mt-6 block text-[13px] font-semibold text-[var(--ink-soft)]">
+        <label className="form-label mt-6">
           Neues Passwort
           <input
             className="glass-field mt-1.5 px-3 py-3"

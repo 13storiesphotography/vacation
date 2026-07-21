@@ -22,11 +22,11 @@ export function EditVacationForm({
   }, [state.ok, onDone]);
 
   return (
-    <form action={action} className="ios-group mt-4 p-4">
+    <form action={action} className="ios-group mt-3 p-5">
       <input type="hidden" name="vacation_id" value={vacation.id} />
-      <p className="text-[13px] font-semibold text-[var(--ink-soft)]">Urlaub bearbeiten</p>
+      <h2 className="display text-2xl">Urlaub bearbeiten</h2>
 
-      <label className="mt-3 block text-[13px] font-semibold text-[var(--ink-soft)]">
+      <label className="form-label mt-4">
         Titel
         <input
           name="title"
@@ -36,7 +36,7 @@ export function EditVacationForm({
         />
       </label>
 
-      <label className="mt-3 block text-[13px] font-semibold text-[var(--ink-soft)]">
+      <label className="form-label mt-4">
         Art
         <select
           name="type"
@@ -50,7 +50,7 @@ export function EditVacationForm({
         </select>
       </label>
 
-      <label className="mt-3 block text-[13px] font-semibold text-[var(--ink-soft)]">
+      <label className="form-label mt-4">
         Region
         <input
           name="region"
@@ -59,8 +59,8 @@ export function EditVacationForm({
         />
       </label>
 
-      <div className="mt-3 grid grid-cols-2 gap-3">
-        <label className="block text-[13px] font-semibold text-[var(--ink-soft)]">
+      <div className="mt-4 grid grid-cols-2 gap-3">
+        <label className="form-label">
           Start
           <input
             name="start_date"
@@ -70,7 +70,7 @@ export function EditVacationForm({
             className="glass-field mt-1.5 px-3 py-3"
           />
         </label>
-        <label className="block text-[13px] font-semibold text-[var(--ink-soft)]">
+        <label className="form-label">
           Ende
           <input
             name="end_date"
@@ -82,7 +82,7 @@ export function EditVacationForm({
         </label>
       </div>
 
-      <label className="mt-3 block text-[13px] font-semibold text-[var(--ink-soft)]">
+      <label className="form-label mt-4">
         Beschreibung
         <textarea
           name="description"

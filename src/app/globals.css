@@ -268,6 +268,83 @@ textarea {
   box-shadow: 0 4px 14px rgba(12, 24, 32, 0.22);
 }
 
+.glass-chip-danger {
+  color: var(--danger);
+}
+
+.glass-chip-danger:hover:not(:disabled) {
+  background: rgba(217, 74, 58, 0.1);
+}
+
+.glass-chip:disabled {
+  opacity: 0.45;
+}
+
+/* Nested panel inside ios-group / list rows */
+.glass-subpanel {
+  border-radius: var(--radius-m);
+  background: var(--surface-strong);
+  border: 1px solid rgba(255, 255, 255, 0.4);
+  box-shadow: var(--glass-inset);
+}
+
+.glass-subpanel.border-dashed {
+  border-style: dashed;
+  border-color: var(--separator);
+  background: transparent;
+  box-shadow: none;
+}
+
+.glass-subpanel-flush {
+  border-top: var(--hairline) solid var(--separator);
+  background: rgba(255, 255, 255, 0.18);
+  padding: 16px;
+}
+
+/* Editable day/section title without looking like a boxed field */
+.inline-title-field {
+  width: 100%;
+  margin-top: 4px;
+  border: 0;
+  background: transparent;
+  padding: 0;
+  font-size: 22px;
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  color: var(--ink);
+  outline: none;
+}
+
+.inline-title-field::placeholder {
+  color: var(--ink-faint);
+}
+
+.inline-title-field:disabled {
+  opacity: 0.55;
+}
+
+.media-fallback {
+  background: linear-gradient(160deg, #c5d5d0, #8aa4ad);
+}
+
+.form-label {
+  display: block;
+  font-size: 13px;
+  font-weight: 650;
+  color: var(--ink-soft);
+}
+
+.tab-subtitle {
+  margin-top: 4px;
+  font-size: 13px;
+  color: var(--ink-soft);
+}
+
+.meta-text {
+  font-size: 12px;
+  color: var(--ink-soft);
+}
+
 .apple-sign-in {
   display: inline-flex;
   align-items: center;
