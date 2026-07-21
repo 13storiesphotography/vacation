@@ -2,12 +2,24 @@ import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
 
 export async function updateSession(request: NextRequest) {
-  let supabaseResponse = NextResponse.next({ request });
+  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
+  const anonKey = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;
 
-  const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
-    {
+  // Missing env on Vercel causes MIDDLEWARE_INVOCATION_FAILED — fail soft.
+  if (!url || !anonKey) {
+    if (request.nextUrl.pathname.startsWith("/app")) {
+      const login = request.nextUrl.clone();
+      login.pathname = "/login";
+      login.searchParams.set("error", "missing_supabase_env");
+      return NextResponse.redirect(login);
+    }
+    return NextResponse.next({ request });
+  }
+
+  try {
+    let supabaseResponse = NextResponse.next({ request });
+
+    const supabase = createServerClient(url, anonKey, {
       cookies: {
         getAll() {
           return request.cookies.getAll();
@@ -20,61 +32,54 @@ export async function updateSession(request: NextRequest) {
           );
         },
       },
-    },
-  );
+    });
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
+    const {
+      data: { user },
+    } = await supabase.auth.getUser();
 
-  const path = request.nextUrl.pathname;
-  const isAuthRoute =
-    path.startsWith("/login") ||
-    path.startsWith("/signup") ||
-    path.startsWith("/auth") ||
-    path.startsWith("/konzept");
+    const path = request.nextUrl.pathname;
 
-  if (!user && path.startsWith("/app")) {
-    const url = request.nextUrl.clone();
-    url.pathname = "/login";
-    url.searchParams.set("next", path);
-    return NextResponse.redirect(url);
-  }
-
-  if (user && (path === "/login" || path === "/signup")) {
-    const url = request.nextUrl.clone();
-    url.pathname = "/app";
-    return NextResponse.redirect(url);
-  }
-
-  if (user && path.startsWith("/app")) {
-    const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
-    const needsEnroll = aal?.currentLevel === "aal1" && aal?.nextLevel === "aal1";
-    const needsVerify = aal?.currentLevel === "aal1" && aal?.nextLevel === "aal2";
-
-    if (needsEnroll && path !== "/app/mfa/enroll") {
-      const url = request.nextUrl.clone();
-      url.pathname = "/app/mfa/enroll";
-      return NextResponse.redirect(url);
+    if (!user && path.startsWith("/app")) {
+      const redirectUrl = request.nextUrl.clone();
+      redirectUrl.pathname = "/login";
+      redirectUrl.searchParams.set("next", path);
+      return NextResponse.redirect(redirectUrl);
     }
 
-    if (needsVerify && path !== "/app/mfa/verify") {
-      const url = request.nextUrl.clone();
-      url.pathname = "/app/mfa/verify";
-      return NextResponse.redirect(url);
+    if (user && (path === "/login" || path === "/signup")) {
+      const redirectUrl = request.nextUrl.clone();
+      redirectUrl.pathname = "/app";
+      return NextResponse.redirect(redirectUrl);
     }
 
-    if (!needsEnroll && !needsVerify && path.startsWith("/app/mfa")) {
-      const url = request.nextUrl.clone();
-      url.pathname = "/app";
-      return NextResponse.redirect(url);
+    if (user && path.startsWith("/app")) {
+      const { data: aal } = await supabase.auth.mfa.getAuthenticatorAssuranceLevel();
+      const needsEnroll = aal?.currentLevel === "aal1" && aal?.nextLevel === "aal1";
+      const needsVerify = aal?.currentLevel === "aal1" && aal?.nextLevel === "aal2";
+
+      if (needsEnroll && path !== "/app/mfa/enroll") {
+        const redirectUrl = request.nextUrl.clone();
+        redirectUrl.pathname = "/app/mfa/enroll";
+        return NextResponse.redirect(redirectUrl);
+      }
+
+      if (needsVerify && path !== "/app/mfa/verify") {
+        const redirectUrl = request.nextUrl.clone();
+        redirectUrl.pathname = "/app/mfa/verify";
+        return NextResponse.redirect(redirectUrl);
+      }
+
+      if (!needsEnroll && !needsVerify && path.startsWith("/app/mfa")) {
+        const redirectUrl = request.nextUrl.clone();
+        redirectUrl.pathname = "/app";
+        return NextResponse.redirect(redirectUrl);
+      }
     }
-  }
 
-  if (!user && path === "/") {
-    // public landing ok
+    return supabaseResponse;
+  } catch (error) {
+    console.error("middleware updateSession failed", error);
+    return NextResponse.next({ request });
   }
-
-  void isAuthRoute;
-  return supabaseResponse;
 }
