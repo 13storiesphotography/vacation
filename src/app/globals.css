@@ -278,6 +278,57 @@ textarea {
   background: var(--fjord);
 }
 
+.tab-glyph {
+  display: inline-flex;
+  width: 22px;
+  height: 22px;
+  align-items: center;
+  justify-content: center;
+  color: inherit;
+  opacity: 0.55;
+}
+
+.tabbar button[data-active="true"] .tab-glyph {
+  opacity: 1;
+  color: var(--fjord);
+}
+
+/* Live app: iOS-style bottom bar on phones, top strip on desktop */
+.app-tabbar {
+  position: fixed;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 40;
+  padding-bottom: calc(10px + env(safe-area-inset-bottom, 0px));
+  background: rgba(247, 248, 248, 0.92);
+  box-shadow: 0 -8px 28px rgba(17, 24, 39, 0.06);
+}
+
+@media (min-width: 768px) {
+  .app-tabbar {
+    position: sticky;
+    top: 0;
+    bottom: auto;
+    margin: 0 0 1.25rem;
+    border: var(--hairline) solid var(--separator);
+    border-radius: 18px;
+    box-shadow: var(--shadow-soft);
+    padding: 8px 10px;
+    background: rgba(255, 255, 255, 0.92);
+  }
+}
+
+.app-with-tabbar {
+  padding-bottom: calc(5.5rem + env(safe-area-inset-bottom, 0px));
+}
+
+@media (min-width: 768px) {
+  .app-with-tabbar {
+    padding-bottom: 2rem;
+  }
+}
+
 .pill {
   display: inline-flex;
   align-items: center;
