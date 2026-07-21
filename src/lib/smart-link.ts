@@ -118,12 +118,17 @@ export async function enrichSmartLink(rawUrl: string): Promise<SmartLinkResult> 
         overnightCost: "kostenpflichtig",
       };
     }
+    const mapsUrl =
+      meta.lat != null && meta.lng != null
+        ? `https://www.google.com/maps?q=${meta.lat},${meta.lng}`
+        : null;
     return {
       ok: true,
       message: summarize([
         providerLabel,
         meta.title,
         meta.locationHint,
+        mapsUrl ? "Position" : null,
         meta.imageUrl ? "Bild" : null,
       ]),
       provider: "airbnb",
@@ -132,10 +137,10 @@ export async function enrichSmartLink(rawUrl: string): Promise<SmartLinkResult> 
       description: meta.description,
       imageUrl: meta.imageUrl,
       locationHint: meta.locationHint,
-      mapsUrl: null,
+      mapsUrl,
       infoUrl: meta.canonicalUrl || trimmed,
-      lat: null,
-      lng: null,
+      lat: meta.lat,
+      lng: meta.lng,
       suggestedCategory: "unterkunft",
       overnightCost: "kostenpflichtig",
     };
