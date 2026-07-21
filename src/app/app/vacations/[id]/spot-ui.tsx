@@ -22,8 +22,9 @@ import { CategoryIcon } from "@/components/category-icon";
 import { isStaleServerActionError, reloadForStaleDeployment } from "@/lib/stale-action";
 import {
   checkoutFromNights,
-  formatStayRange,
-  stayNightCount,
+  formatStaySummary,
+  resolveStayNights,
+  stayNightCountFromDates,
   stayStatusLabels,
   type StayStatus,
 } from "@/lib/stay";
@@ -271,6 +272,8 @@ function SpotFormFields({
   onStayCheckInChange,
   stayCheckOut,
   onStayCheckOutChange,
+  stayNights,
+  onStayNightsChange,
   stayStatus,
   onStayStatusChange,
   onSmartResolved,
@@ -299,14 +302,26 @@ function SpotFormFields({
   onStayCheckInChange: (value: string) => void;
   stayCheckOut: string;
   onStayCheckOutChange: (value: string) => void;
+  stayNights: string;
+  onStayNightsChange: (value: string) => void;
   stayStatus: string;
   onStayStatusChange: (value: string) => void;
   onSmartResolved: (result: SmartLinkResult) => void;
   detailsOpen: boolean;
   onDetailsOpenChange: (value: boolean) => void;
 }) {
-  const nights = stayNightCount(stayCheckIn || null, stayCheckOut || null);
-  const staySummary = formatStayRange(stayCheckIn || null, stayCheckOut || null);
+  const derivedNights = stayNightCountFromDates(stayCheckIn || null, stayCheckOut || null);
+  const nightsValue =
+    stayNights !== ""
+      ? stayNights
+      : derivedNights > 0
+        ? String(derivedNights)
+        : "";
+  const staySummary = formatStaySummary({
+    stay_nights: stayNights ? Number.parseInt(stayNights, 10) || null : null,
+    stay_check_in: stayCheckIn || null,
+    stay_check_out: stayCheckOut || null,
+  });
 
   return (
     <>
@@ -353,50 +368,40 @@ function SpotFormFields({
           </p>
           <div className="grid grid-cols-2 gap-3">
             <label className="form-label">
-              Anreise
-              <input
-                type="date"
-                name="stay_check_in"
-                value={stayCheckIn}
-                onChange={(e) => {
-                  const nextIn = e.target.value;
-                  onStayCheckInChange(nextIn);
-                  if (nextIn && !stayCheckOut) {
-                    onStayCheckOutChange(checkoutFromNights(nextIn, 1));
-                  } else if (nextIn && stayCheckOut && stayCheckOut <= nextIn) {
-                    onStayCheckOutChange(checkoutFromNights(nextIn, 1));
-                  }
-                }}
-                className="glass-field mt-1.5 px-3 py-3"
-              />
-            </label>
-            <label className="form-label">
-              Abreise
-              <input
-                type="date"
-                name="stay_check_out"
-                value={stayCheckOut}
-                onChange={(e) => onStayCheckOutChange(e.target.value)}
-                className="glass-field mt-1.5 px-3 py-3"
-              />
-            </label>
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <label className="form-label">
               Nächte
               <input
                 type="number"
+                name="stay_nights"
                 min={1}
                 max={60}
                 inputMode="numeric"
-                value={nights > 0 ? nights : ""}
+                value={nightsValue}
                 placeholder="z. B. 2"
                 onChange={(e) => {
-                  const raw = Number.parseInt(e.target.value, 10);
-                  if (!Number.isFinite(raw) || raw < 1) return;
-                  const base = stayCheckIn || new Date().toISOString().slice(0, 10);
-                  if (!stayCheckIn) onStayCheckInChange(base);
-                  onStayCheckOutChange(checkoutFromNights(base, raw));
+                  const next = e.target.value;
+                  // Allow clearing the field completely.
+                  if (next === "") {
+                    onStayNightsChange("");
+                    onStayCheckInChange("");
+                    onStayCheckOutChange("");
+                    return;
+                  }
+                  // Allow typing partial values like "" while editing.
+                  if (!/^\d+$/.test(next)) {
+                    onStayNightsChange(next);
+                    return;
+                  }
+                  const raw = Number.parseInt(next, 10);
+                  if (!Number.isFinite(raw) || raw < 1) {
+                    onStayNightsChange(next);
+                    return;
+                  }
+                  const capped = Math.min(60, raw);
+                  onStayNightsChange(String(capped));
+                  // Only sync checkout when Anreise is already set — nights alone is fine.
+                  if (stayCheckIn) {
+                    onStayCheckOutChange(checkoutFromNights(stayCheckIn, capped));
+                  }
                 }}
                 className="glass-field mt-1.5 px-3 py-3"
               />
@@ -415,17 +420,60 @@ function SpotFormFields({
               </select>
             </label>
           </div>
+          <div className="grid grid-cols-2 gap-3">
+            <label className="form-label">
+              Anreise
+              <input
+                type="date"
+                name="stay_check_in"
+                value={stayCheckIn}
+                onChange={(e) => {
+                  const nextIn = e.target.value;
+                  onStayCheckInChange(nextIn);
+                  if (!nextIn) {
+                    onStayCheckOutChange("");
+                    return;
+                  }
+                  const nights =
+                    Number.parseInt(stayNights || String(derivedNights || "1"), 10) || 1;
+                  onStayNightsChange(String(nights));
+                  onStayCheckOutChange(checkoutFromNights(nextIn, nights));
+                }}
+                className="glass-field mt-1.5 px-3 py-3"
+              />
+            </label>
+            <label className="form-label">
+              Abreise
+              <input
+                type="date"
+                name="stay_check_out"
+                value={stayCheckOut}
+                onChange={(e) => {
+                  const nextOut = e.target.value;
+                  onStayCheckOutChange(nextOut);
+                  if (!nextOut) return;
+                  if (stayCheckIn && nextOut > stayCheckIn) {
+                    const n = stayNightCountFromDates(stayCheckIn, nextOut);
+                    if (n > 0) onStayNightsChange(String(n));
+                  }
+                }}
+                className="glass-field mt-1.5 px-3 py-3"
+              />
+            </label>
+          </div>
           {staySummary ? (
             <p className="text-[12px] text-[var(--ink-soft)]">
               {staySummary}
               {stayStatus
                 ? ` · ${stayStatusLabels[stayStatus as StayStatus] ?? stayStatus}`
                 : ""}
-              {" · "}wird im Plan automatisch als Übernachtung gesetzt
+              {stayCheckIn && stayCheckOut
+                ? " · wird im Plan automatisch als Übernachtung gesetzt"
+                : " · Datum später ergänzen für den Plan"}
             </p>
           ) : (
             <p className="text-[12px] text-[var(--ink-faint)]">
-              Optional: Zeitraum setzen — dann landet der Spot an den richtigen Nächten im Plan.
+              Nächte allein reichen — Datum ist optional für die Planung.
             </p>
           )}
         </div>
@@ -555,6 +603,7 @@ function SpotFormFields({
             <>
               <input type="hidden" name="stay_check_in" value="" />
               <input type="hidden" name="stay_check_out" value="" />
+              <input type="hidden" name="stay_nights" value="" />
               <input type="hidden" name="stay_status" value="" />
             </>
           ) : null}
@@ -624,6 +673,7 @@ export function CreateSpotForm({
   const [overnightCost, setOvernightCost] = useState("");
   const [stayCheckIn, setStayCheckIn] = useState("");
   const [stayCheckOut, setStayCheckOut] = useState("");
+  const [stayNights, setStayNights] = useState("");
   const [stayStatus, setStayStatus] = useState("");
   const [detailsOpen, setDetailsOpen] = useState(false);
 
@@ -660,6 +710,8 @@ export function CreateSpotForm({
         onStayCheckInChange={setStayCheckIn}
         stayCheckOut={stayCheckOut}
         onStayCheckOutChange={setStayCheckOut}
+        stayNights={stayNights}
+        onStayNightsChange={setStayNights}
         stayStatus={stayStatus}
         onStayStatusChange={setStayStatus}
         detailsOpen={detailsOpen}
@@ -711,6 +763,13 @@ export function EditSpotForm({
   const [overnightCost, setOvernightCost] = useState(spot.overnight_cost ?? "");
   const [stayCheckIn, setStayCheckIn] = useState(spot.stay_check_in ?? "");
   const [stayCheckOut, setStayCheckOut] = useState(spot.stay_check_out ?? "");
+  const [stayNights, setStayNights] = useState(
+    spot.stay_nights != null
+      ? String(spot.stay_nights)
+      : resolveStayNights(spot)
+        ? String(resolveStayNights(spot))
+        : "",
+  );
   const [stayStatus, setStayStatus] = useState(spot.stay_status ?? "");
   const [detailsOpen, setDetailsOpen] = useState(false);
 
@@ -768,6 +827,8 @@ export function EditSpotForm({
           onStayCheckInChange={setStayCheckIn}
           stayCheckOut={stayCheckOut}
           onStayCheckOutChange={setStayCheckOut}
+          stayNights={stayNights}
+          onStayNightsChange={setStayNights}
           stayStatus={stayStatus}
           onStayStatusChange={setStayStatus}
           detailsOpen={detailsOpen}
@@ -996,8 +1057,8 @@ export function SpotList({
                             {categoryLabels[spot.category]}
                             {spot.overnight_cost ? ` · ${spot.overnight_cost}` : ""}
                             {spot.price_hint ? ` · ${spot.price_hint}` : ""}
-                            {formatStayRange(spot.stay_check_in, spot.stay_check_out)
-                              ? ` · ${formatStayRange(spot.stay_check_in, spot.stay_check_out)}`
+                            {formatStaySummary(spot)
+                              ? ` · ${formatStaySummary(spot)}`
                               : ""}
                             {spot.stay_status
                               ? ` · ${stayStatusLabels[spot.stay_status]}`
