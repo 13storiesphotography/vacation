@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { isCompleteEmail, normalizeEmail } from "@/lib/email";
-import { createAdminClient } from "@/lib/supabase/admin";
+import { sendInviteEmail } from "@/lib/invite-mail";
 import { createClient as createServerSupabase } from "@/lib/supabase/server";
 
 export async function POST(request: Request) {
@@ -36,6 +36,20 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Nur Admins können einladen." }, { status: 403 });
   }
 
+  const { data: existing } = await supabase
+    .from("vacation_members")
+    .select("id, status")
+    .eq("vacation_id", vacationId)
+    .eq("email", email)
+    .maybeSingle();
+
+  if (existing?.status === "active") {
+    return NextResponse.json(
+      { error: "Diese Person ist bereits aktives Teammitglied." },
+      { status: 400 },
+    );
+  }
+
   const { error: memberError } = await supabase.from("vacation_members").upsert(
     {
       vacation_id: vacationId,
@@ -50,29 +64,18 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: memberError.message }, { status: 400 });
   }
 
-  const admin = createAdminClient();
-  if (!admin) {
-    console.error(
-      "[invite] SUPABASE_SERVICE_ROLE_KEY fehlt — Mitgliedschaft angelegt, E-Mail nicht gesendet.",
-    );
-    return NextResponse.json({
-      ok: true,
-      note: "Person ist eingeladen, aber die E-Mail konnte nicht automatisch gesendet werden. Bitte den App-Admin kontaktieren oder die Einladung manuell in Supabase senden.",
-    });
-  }
-
   const origin = new URL(request.url).origin;
-  const { error: inviteError } = await admin.auth.admin.inviteUserByEmail(email, {
-    redirectTo: `${origin}/auth/callback?next=/auth/set-password`,
-  });
+  const mail = await sendInviteEmail(
+    email,
+    `${origin}/auth/callback?next=/auth/set-password`,
+  );
 
-  if (inviteError) {
-    console.error("[invite] inviteUserByEmail failed:", inviteError.message);
+  if (!mail.ok) {
     return NextResponse.json({
       ok: true,
-      note: "Person ist eingeladen, aber der E-Mail-Versand ist fehlgeschlagen. Bitte später erneut versuchen oder manuell in Supabase einladen.",
+      note: `Person ist eingeladen, aber ${mail.note.charAt(0).toLowerCase()}${mail.note.slice(1)}`,
     });
   }
 
-  return NextResponse.json({ ok: true, note: "Einladung per E-Mail gesendet." });
+  return NextResponse.json({ ok: true, note: mail.note });
 }
