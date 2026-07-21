@@ -18,18 +18,23 @@ function LoginForm() {
     event.preventDefault();
     setLoading(true);
     setError(null);
-    const supabase = createClient();
-    const { error: signInError } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-    setLoading(false);
-    if (signInError) {
-      setError(signInError.message);
-      return;
+    try {
+      const supabase = createClient();
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+      if (signInError) {
+        setError(signInError.message);
+        return;
+      }
+      router.replace(next);
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Anmeldung fehlgeschlagen.");
+    } finally {
+      setLoading(false);
     }
-    router.replace(next);
-    router.refresh();
   }
 
   return (
@@ -64,12 +69,12 @@ function LoginForm() {
       <button type="submit" className="cta mt-6 w-full" disabled={loading}>
         {loading ? "…" : "Weiter"}
       </button>
-        <p className="mt-4 text-center text-[13px] text-[var(--ink-soft)]">
-          Zugang nur per Einladung.{" "}
-          <Link href="/signup" className="font-semibold text-[var(--fjord)]">
-            Mehr Infos
-          </Link>
-        </p>
+      <p className="mt-4 text-center text-[13px] text-[var(--ink-soft)]">
+        Zugang nur per Einladung.{" "}
+        <Link href="/signup" className="font-semibold text-[var(--fjord)]">
+          Mehr Infos
+        </Link>
+      </p>
     </form>
   );
 }
