@@ -65,11 +65,11 @@ export function SpotMap({
 
   return (
     <div className="mt-3">
-      <div className="mb-3 flex gap-2 overflow-x-auto pb-1">
+      <div className="mb-3 flex flex-wrap items-center gap-2">
         <button
           type="button"
           onClick={() => setFilter("alle")}
-          className={`shrink-0 rounded-full px-3 py-1.5 text-[12px] font-semibold ${
+          className={`rounded-full px-3 py-1.5 text-[12px] font-semibold ${
             filter === "alle" ? "bg-[var(--fjord)] text-white" : "bg-black/5 text-[var(--ink-soft)]"
           }`}
         >
@@ -80,7 +80,7 @@ export function SpotMap({
             key={option}
             type="button"
             onClick={() => setFilter(option)}
-            className={`inline-flex shrink-0 items-center gap-1.5 rounded-full px-3 py-1.5 text-[12px] font-semibold ${
+            className={`inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-[12px] font-semibold ${
               filter === option
                 ? "bg-[var(--fjord)] text-white"
                 : "bg-black/5 text-[var(--ink-soft)]"
@@ -131,7 +131,7 @@ export function SpotMap({
           : ""}
       </p>
 
-      <div className="h-[min(62vh,520px)] overflow-hidden rounded-[18px] border border-[var(--separator)] shadow-[0_8px_28px_rgba(31,53,64,0.08)]">
+      <div className="h-[min(68vh,640px)] overflow-hidden rounded-[18px] border border-[var(--separator)] shadow-[0_8px_28px_rgba(31,53,64,0.08)]">
         <SpotMapCanvas
           spots={visible}
           summaries={summaries}

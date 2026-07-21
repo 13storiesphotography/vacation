@@ -16,7 +16,7 @@ export default async function AppHomePage() {
     .order("start_date", { ascending: true });
 
   return (
-    <main className="shell mx-auto min-h-screen w-full max-w-3xl px-5 py-8">
+    <main className="shell mx-auto min-h-screen w-full max-w-6xl px-5 py-8 md:px-8">
       <header className="flex items-center justify-between gap-4">
         <div>
           <p className="section-label">Vacation Planer</p>
