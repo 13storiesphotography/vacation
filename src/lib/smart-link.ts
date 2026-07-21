@@ -45,6 +45,60 @@ function emptyResult(message: string, provider: LinkProvider = "unknown"): Smart
   };
 }
 
+export function isSmartLinkResult(value: unknown): value is SmartLinkResult {
+  if (!value || typeof value !== "object") return false;
+  const row = value as Record<string, unknown>;
+  return (
+    typeof row.ok === "boolean" &&
+    typeof row.provider === "string" &&
+    typeof row.message === "string" &&
+    typeof row.suggestedCategory === "string"
+  );
+}
+
+/** Offline/client fallback when /api/smart-link is unavailable after a deploy skew. */
+export function localSmartLinkFallback(rawUrl: string): SmartLinkResult | null {
+  const trimmed = rawUrl.trim();
+  if (!trimmed) return null;
+  try {
+    const url = new URL(trimmed);
+    if (url.protocol !== "http:" && url.protocol !== "https:") return null;
+  } catch {
+    return null;
+  }
+
+  if (isAirbnbUrl(trimmed)) {
+    const listingId = trimmed.match(/\/rooms\/(\d+)/i)?.[1] ?? null;
+    return {
+      ok: true,
+      message: listingId ? `Airbnb · Listing #${listingId}` : "Airbnb erkannt",
+      provider: "airbnb",
+      providerLabel: providerLabels.airbnb,
+      title: listingId ? `Airbnb #${listingId}` : "Airbnb",
+      description: null,
+      imageUrl: null,
+      locationHint: null,
+      mapsUrl: null,
+      infoUrl: trimmed,
+      lat: null,
+      lng: null,
+      suggestedCategory: "unterkunft",
+      overnightCost: "kostenpflichtig",
+    };
+  }
+
+  const provider = detectLinkProvider(trimmed);
+  if (provider === "unknown" || provider === "generic") return null;
+  return {
+    ...emptyResult(`${providerLabels[provider]} erkannt — Name ggf. manuell ergänzen.`, provider),
+    ok: true,
+    infoUrl: trimmed,
+    suggestedCategory: suggestedCategoryForProvider(provider),
+    overnightCost:
+      provider === "airbnb" || provider === "booking" ? "kostenpflichtig" : null,
+  };
+}
+
 function summarize(parts: Array<string | null | undefined>): string {
   const clean = parts.filter(Boolean) as string[];
   return clean.length ? clean.join(" · ") : "Link erkannt — Felder ggf. manuell ergänzen.";
@@ -52,6 +106,17 @@ function summarize(parts: Array<string | null | undefined>): string {
 
 /** Detect link type and enrich as much spot data as possible. */
 export async function enrichSmartLink(rawUrl: string): Promise<SmartLinkResult> {
+  try {
+    return await enrichSmartLinkInner(rawUrl);
+  } catch (error) {
+    console.error("[smart-link] enrich failed:", error);
+    return emptyResult(
+      "Link konnte gerade nicht gelesen werden. Name/Bild ggf. manuell eintragen.",
+    );
+  }
+}
+
+async function enrichSmartLinkInner(rawUrl: string): Promise<SmartLinkResult> {
   const trimmed = rawUrl.trim();
   if (!trimmed) {
     return emptyResult("Link einfügen — Google Maps, Airbnb, Park4Night, …");

@@ -10,6 +10,7 @@ import type { Database } from "@/lib/database.types";
 import { createClient } from "@/lib/supabase/client";
 import { createSpot, updateSpot, type SpotActionState } from "./spot-actions";
 import type { SmartLinkResult } from "@/lib/smart-link";
+import { isSmartLinkResult, localSmartLinkFallback } from "@/lib/smart-link";
 import {
   emptySummary,
   type RaterOption,
@@ -106,7 +107,27 @@ function SmartLinkField({
             headers: { "Content-Type": "application/json" },
             body: JSON.stringify({ url: trimmed }),
           });
-          const result = (await response.json()) as SmartLinkResult;
+
+          let result: SmartLinkResult | null = null;
+          if (response.ok) {
+            const payload: unknown = await response.json();
+            if (isSmartLinkResult(payload)) result = payload;
+          }
+
+          if (!result) {
+            result = localSmartLinkFallback(trimmed);
+          }
+
+          if (!result) {
+            setRemote({
+              ok: false,
+              message:
+                "Link konnte nicht gelesen werden. Name/Bild ggf. manuell eintragen.",
+              providerLabel: null,
+            });
+            return;
+          }
+
           setRemote({
             ok: result.ok,
             message: result.message,
@@ -118,6 +139,16 @@ function SmartLinkField({
         } catch (error) {
           if (isStaleServerActionError(error)) {
             reloadForStaleDeployment();
+            return;
+          }
+          const fallback = localSmartLinkFallback(trimmed);
+          if (fallback) {
+            setRemote({
+              ok: fallback.ok,
+              message: fallback.message,
+              providerLabel: fallback.providerLabel,
+            });
+            onResolved(fallback);
             return;
           }
           setRemote({

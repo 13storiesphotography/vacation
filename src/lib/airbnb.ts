@@ -167,37 +167,43 @@ function extractFromPageData(html: string): {
   const nextMatch = html.match(
     /<script[^>]+id=["']__NEXT_DATA__["'][^>]*>([\s\S]*?)<\/script>/i,
   );
-  const blob = nextMatch?.[1] ?? html;
+  // Cap scan size — full Airbnb pages can be huge and stress serverless.
+  const blob = (nextMatch?.[1] ?? html).slice(0, 450_000);
 
-  const title = firstJsonString(blob, [
-    "listingTitle",
-    "seoTitle",
-    "shareName",
-    "pdpListingTitle",
-  ]);
-  const description = firstJsonString(blob, ["seoDescription", "sectionedDescription"]);
-  const imageUrl =
-    firstJsonString(blob, ["pictureUrl"]) ||
-    blob.match(/"baseUrl"\s*:\s*"(https:[^"]+muscache[^"]+)"/i)?.[1] ||
-    blob.match(
-      /"(https:\\\/\\\/a0\.muscache\.com[^"]+\.(?:jpg|jpeg|png|webp)[^"]*)"/i,
-    )?.[1];
-  const locationHint = firstJsonString(blob, [
-    "localizedLocation",
-    "localizedCityName",
-    "city",
-  ]);
-  const lat = firstJsonNumber(blob, ["listingLat"]);
-  const lng = firstJsonNumber(blob, ["listingLng"]);
+  try {
+    const title = firstJsonString(blob, [
+      "listingTitle",
+      "seoTitle",
+      "shareName",
+      "pdpListingTitle",
+    ]);
+    const description = firstJsonString(blob, ["seoDescription", "sectionedDescription"]);
+    const imageUrl =
+      firstJsonString(blob, ["pictureUrl"]) ||
+      blob.match(/"baseUrl"\s*:\s*"(https:[^"]+muscache[^"]+)"/i)?.[1] ||
+      blob.match(
+        /"(https:\\\/\\\/a0\.muscache\.com[^"]+\.(?:jpg|jpeg|png|webp)[^"]*)"/i,
+      )?.[1];
+    const locationHint = firstJsonString(blob, [
+      "localizedLocation",
+      "localizedCityName",
+      "city",
+    ]);
+    const lat = firstJsonNumber(blob, ["listingLat"]);
+    const lng = firstJsonNumber(blob, ["listingLng"]);
 
-  return {
-    title,
-    description,
-    imageUrl: unescapeJsonString(imageUrl)?.replace(/\\\//g, "/"),
-    locationHint,
-    lat,
-    lng,
-  };
+    return {
+      title,
+      description,
+      imageUrl: unescapeJsonString(imageUrl)?.replace(/\\\//g, "/"),
+      locationHint,
+      lat,
+      lng,
+    };
+  } catch (error) {
+    console.error("[airbnb] extractFromPageData failed:", error);
+    return {};
+  }
 }
 
 function titleFromDocumentTitle(html: string): string | null {

@@ -21,6 +21,15 @@ export default function AppError({
     return () => window.clearTimeout(handle);
   }, [stale]);
 
+  // Opaque "Server Components render" digests after deploy — reload once.
+  useEffect(() => {
+    if (stale) return;
+    const message = (error.message || "").toLowerCase();
+    if (!message.includes("server components render")) return;
+    const handle = window.setTimeout(() => reloadForStaleDeployment(), 400);
+    return () => window.clearTimeout(handle);
+  }, [error.message, stale]);
+
   return (
     <main className="shell flex min-h-[60vh] items-center justify-center px-5 py-12">
       <div className="max-w-md text-center">

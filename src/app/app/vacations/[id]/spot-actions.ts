@@ -70,36 +70,44 @@ async function readSpotFields(formData: FormData) {
   let imageManual = Boolean(imageUrlManual);
 
   if (mapsUrl) {
-    const enriched = await enrichFromMapsUrl(mapsUrl);
-    if (!enriched.coords) {
+    try {
+      const enriched = await enrichFromMapsUrl(mapsUrl);
+      if (!enriched.coords) {
+        return {
+          error:
+            "Im Google-Maps-Link steckt keine Position. Ort in Maps öffnen und „Link teilen“ verwenden.",
+        } as const;
+      }
+      lat = enriched.coords.lat;
+      lng = enriched.coords.lng;
+      storedMapsUrl = mapsUrl || enriched.resolvedUrl;
+      if (!imageManual) {
+        const preferred = enriched.imageUrl;
+        const previousIsPlacePhoto =
+          previousAutoImage &&
+          isUsablePreviewImage(previousAutoImage) &&
+          !isAppMapPreviewUrl(previousAutoImage);
+        const preferredIsPlacePhoto =
+          preferred &&
+          isUsablePreviewImage(preferred) &&
+          !isAppMapPreviewUrl(preferred);
+
+        imageUrl =
+          (preferredIsPlacePhoto ? preferred : null) ||
+          (previousIsPlacePhoto ? previousAutoImage : null) ||
+          (preferred && isUsablePreviewImage(preferred) ? preferred : null) ||
+          (previousAutoImage && isUsablePreviewImage(previousAutoImage)
+            ? previousAutoImage
+            : null) ||
+          (lat != null && lng != null ? previewImageFromCoords(lat, lng) : null);
+        imageManual = false;
+      }
+    } catch (error) {
+      console.error("[spot] enrichFromMapsUrl failed:", error);
       return {
         error:
-          "Im Google-Maps-Link steckt keine Position. Ort in Maps öffnen und „Link teilen“ verwenden.",
+          "Google-Maps-Link konnte nicht gelesen werden. Bitte Link prüfen oder Position später setzen.",
       } as const;
-    }
-    lat = enriched.coords.lat;
-    lng = enriched.coords.lng;
-    storedMapsUrl = mapsUrl || enriched.resolvedUrl;
-    if (!imageManual) {
-      const preferred = enriched.imageUrl;
-      const previousIsPlacePhoto =
-        previousAutoImage &&
-        isUsablePreviewImage(previousAutoImage) &&
-        !isAppMapPreviewUrl(previousAutoImage);
-      const preferredIsPlacePhoto =
-        preferred &&
-        isUsablePreviewImage(preferred) &&
-        !isAppMapPreviewUrl(preferred);
-
-      imageUrl =
-        (preferredIsPlacePhoto ? preferred : null) ||
-        (previousIsPlacePhoto ? previousAutoImage : null) ||
-        (preferred && isUsablePreviewImage(preferred) ? preferred : null) ||
-        (previousAutoImage && isUsablePreviewImage(previousAutoImage)
-          ? previousAutoImage
-          : null) ||
-        (lat != null && lng != null ? previewImageFromCoords(lat, lng) : null);
-      imageManual = false;
     }
   } else if (imageManual) {
     // Airbnb / manual image without Maps coords.
