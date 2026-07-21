@@ -2,7 +2,7 @@ name: Deploy GitHub Pages
 
 on:
   push:
-    branches: [main, cursor/vacation-planer-konzept-214a]
+    branches: [main]
   workflow_dispatch:
 
 permissions:
