@@ -1080,17 +1080,22 @@ export function SpotList({
             {categoryLabels[option]}
           </button>
         ))}
-        <select
-          value={sortMode}
-          onChange={(e) => setSortMode(e.target.value as SortMode)}
-          aria-label="Sortierung"
-          className="glass-chip-select"
-        >
-          <option value="newest">Neueste</option>
-          <option value="favorites">Favoriten</option>
-          <option value="avg">Beste Ø</option>
-          <option value="mine">Meine Tops</option>
-        </select>
+      </div>
+
+      <div className="mb-3">
+        <label className="form-label">
+          Sortierung
+          <select
+            value={sortMode}
+            onChange={(e) => setSortMode(e.target.value as SortMode)}
+            className="glass-field mt-1.5 px-3 py-2.5 text-[14px]"
+          >
+            <option value="newest">Neueste</option>
+            <option value="favorites">Favoriten</option>
+            <option value="avg">Beste Ø</option>
+            <option value="mine">Meine Tops</option>
+          </select>
+        </label>
       </div>
 
       {error && <p className="mb-3 text-[13px] text-[var(--danger)]">{error}</p>}
