@@ -723,7 +723,7 @@ export function DayPlanPanel({
                   );
                 })}
               </ol>
-            )}
+            ) : null}
           </div>
 
           {/* Overnight — van / camping / hotel */}
