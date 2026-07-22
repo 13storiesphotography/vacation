@@ -659,8 +659,8 @@ textarea {
   }
 
   .app-with-chrome {
-    /* Topbar + fixed tab bar strip under it. */
-    padding-top: calc(3.5rem + 4.85rem + env(safe-area-inset-top, 0px));
+    /* Topbar + floating tab pill clearance (no full-width strip). */
+    padding-top: calc(3.5rem + 5.25rem + env(safe-area-inset-top, 0px));
     padding-bottom: 2rem;
   }
 }
