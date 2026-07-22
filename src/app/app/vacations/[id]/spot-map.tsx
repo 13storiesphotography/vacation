@@ -12,6 +12,7 @@ import { emptySummary, type SpotRatingSummary } from "@/lib/ratings";
 import type { Database } from "@/lib/database.types";
 import type { MappableSpot } from "@/lib/google-maps";
 import { CategoryIcon } from "@/components/category-icon";
+import { hasFinePointer } from "./map-gestures";
 
 type Spot = Database["public"]["Tables"]["spots"]["Row"];
 
@@ -42,6 +43,15 @@ export function SpotMap({
   const [minAvg, setMinAvg] = useState(0);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(false);
+  const [desktopPointer, setDesktopPointer] = useState(true);
+
+  useEffect(() => {
+    const sync = () => setDesktopPointer(hasFinePointer());
+    sync();
+    const media = window.matchMedia("(any-pointer: fine)");
+    media.addEventListener("change", sync);
+    return () => media.removeEventListener("change", sync);
+  }, []);
 
   // Collapse fullscreen map when leaving the map tab (adjust state during render).
   if (!active && expanded) {
@@ -152,8 +162,8 @@ export function SpotMap({
           ? " · Google Maps"
           : " · OpenStreetMap (Google-Key fehlt)"}
         {" · "}
-        {expanded
-          ? "Ein Finger zum Verschieben"
+        {expanded || desktopPointer
+          ? "Ziehen zum Verschieben"
           : "Zwei Finger zum Verschieben"}
       </p>
 

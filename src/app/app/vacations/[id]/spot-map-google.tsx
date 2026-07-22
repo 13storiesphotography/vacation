@@ -105,8 +105,8 @@ export default function SpotMapGoogle({
           streetViewControl: false,
           fullscreenControl: true,
           clickableIcons: false,
-          // Cooperative: one finger scrolls the page; two fingers pan the map.
-          gestureHandling: "cooperative",
+          // auto: greedy on desktop (mouse pan), cooperative on touch devices.
+          gestureHandling: "auto",
         });
         map.addListener("click", () => onSelectRef.current(null));
         fullscreenListener = map.addListener("fullscreen_changed", () => {
@@ -134,8 +134,9 @@ export default function SpotMapGoogle({
   useEffect(() => {
     const map = mapRef.current;
     if (!ready || !map) return;
+    // Expanded/fullscreen: always greedy. Otherwise auto = desktop pan, mobile two-finger.
     map.setOptions({
-      gestureHandling: expanded || nativeFullscreen ? "greedy" : "cooperative",
+      gestureHandling: expanded || nativeFullscreen ? "greedy" : "auto",
     });
     // Recalculate layout after expand/collapse or returning to the map tab.
     if (!active) return;
