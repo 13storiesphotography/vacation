@@ -284,6 +284,37 @@ textarea {
   opacity: 0.45;
 }
 
+/* Native <select> styled like a filter chip (spots sort, etc.). */
+.glass-chip-select {
+  display: inline-flex;
+  align-items: center;
+  max-width: 100%;
+  border: 1px solid rgba(255, 255, 255, 0.45);
+  border-radius: 999px;
+  padding: 7px 30px 7px 12px;
+  background-color: rgba(255, 255, 255, 0.34);
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12' fill='none'%3E%3Cpath d='M3 4.5L6 7.5L9 4.5' stroke='%23142430' stroke-opacity='0.45' stroke-width='1.5' stroke-linecap='round' stroke-linejoin='round'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 10px center;
+  background-size: 12px 12px;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.65) inset;
+  color: var(--ink-soft);
+  font-size: 12px;
+  font-weight: 650;
+  line-height: 1.2;
+  outline: none;
+  appearance: none;
+  -webkit-appearance: none;
+  cursor: pointer;
+}
+
+.glass-chip-select:focus {
+  border-color: rgba(15, 110, 140, 0.45);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.65) inset,
+    0 0 0 2px rgba(15, 110, 140, 0.18);
+}
+
 /* Nested panel inside ios-group / list rows */
 .glass-subpanel {
   border-radius: var(--radius-m);

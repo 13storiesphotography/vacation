@@ -1084,7 +1084,7 @@ export function SpotList({
           value={sortMode}
           onChange={(e) => setSortMode(e.target.value as SortMode)}
           aria-label="Sortierung"
-          className="glass-field max-w-[11rem] px-3 py-2 text-[13px] font-semibold"
+          className="glass-chip-select"
         >
           <option value="newest">Neueste</option>
           <option value="favorites">Favoriten</option>
