@@ -8,10 +8,11 @@ import {
   enrichFromMapsUrl,
   isAppMapPreviewUrl,
   isUsablePreviewImage,
+  isValidLatLng,
   parseLatLngFromMapsUrl,
   previewImageFromCoords,
 } from "@/lib/geo";
-import { parseImageFocus, withImageFocus } from "@/lib/image-focus";
+import { parseImageFocus, withImageFocus, stripImageFocus } from "@/lib/image-focus";
 import { isOvernightCategory } from "@/lib/overnight";
 import { parseTags, type OvernightCost, type SpotCategory } from "@/lib/spots";
 import { parseStayNights, parseStayStatus, validateStayRange } from "@/lib/stay";
@@ -62,7 +63,18 @@ async function readSpotFields(formData: FormData) {
       ? imageUrlRaw.replace(/#.*$/, "")
       : "";
   const previousAutoImage = String(formData.get("previous_image_url") ?? "").trim();
-  const imageFocus = parseImageFocus(String(formData.get("image_focus") ?? ""));
+  const previousMapsUrl = String(formData.get("previous_maps_url") ?? "").trim();
+  const previousLatRaw = String(formData.get("previous_lat") ?? "").trim();
+  const previousLngRaw = String(formData.get("previous_lng") ?? "").trim();
+  const previousLat = Number.parseFloat(previousLatRaw);
+  const previousLng = Number.parseFloat(previousLngRaw);
+  const hasPreviousCoords =
+    Number.isFinite(previousLat) &&
+    Number.isFinite(previousLng) &&
+    isValidLatLng(previousLat, previousLng);
+  const imageFocus = parseImageFocus(
+    String(formData.get("image_focus") ?? "") || previousAutoImage,
+  );
   const airbnbListing = isAirbnbUrl(infoUrl);
   const hasListingLink = Boolean(infoUrl);
 
@@ -81,40 +93,57 @@ async function readSpotFields(formData: FormData) {
 
   if (mapsUrl) {
     try {
+      const mapsUnchanged =
+        Boolean(previousMapsUrl) && previousMapsUrl === mapsUrl && hasPreviousCoords;
       // Prefer coords already embedded in the URL (e.g. Airbnb → maps?q=lat,lng)
       // so a flaky Maps HTML fetch cannot drop a known position.
       const fromUrl = parseLatLngFromMapsUrl(mapsUrl);
-      const enriched = await enrichFromMapsUrl(mapsUrl);
-      const coords = fromUrl ?? enriched.coords;
-      if (!coords) {
-        return {
-          error:
-            "Im Google-Maps-Link steckt keine Position. Ort in Maps öffnen und „Link teilen“ verwenden.",
-        } as const;
-      }
-      lat = coords.lat;
-      lng = coords.lng;
-      storedMapsUrl = mapsUrl || enriched.resolvedUrl;
-      if (!imageManual) {
-        const preferred = enriched.imageUrl;
-        const previousIsPlacePhoto =
-          previousAutoImage &&
-          isUsablePreviewImage(previousAutoImage) &&
-          !isAppMapPreviewUrl(previousAutoImage);
-        const preferredIsPlacePhoto =
-          preferred &&
-          isUsablePreviewImage(preferred) &&
-          !isAppMapPreviewUrl(preferred);
 
-        imageUrl =
-          (preferredIsPlacePhoto ? preferred : null) ||
-          (previousIsPlacePhoto ? previousAutoImage : null) ||
-          (preferred && isUsablePreviewImage(preferred) ? preferred : null) ||
-          (previousAutoImage && isUsablePreviewImage(previousAutoImage)
-            ? previousAutoImage
-            : null) ||
-          (lat != null && lng != null ? previewImageFromCoords(lat, lng) : null);
-        imageManual = false;
+      if (mapsUnchanged) {
+        // Renaming / small edits: keep existing pin + image, skip remote re-enrich.
+        lat = previousLat;
+        lng = previousLng;
+        storedMapsUrl = mapsUrl;
+        if (!imageManual) {
+          imageUrl =
+            (previousAutoImage && isUsablePreviewImage(previousAutoImage)
+              ? stripImageFocus(previousAutoImage)
+              : null) || previewImageFromCoords(lat, lng);
+          imageManual = false;
+        }
+      } else {
+        const enriched = await enrichFromMapsUrl(mapsUrl);
+        const coords = fromUrl ?? enriched.coords;
+        if (!coords) {
+          return {
+            error:
+              "Im Google-Maps-Link steckt keine Position. Ort in Maps öffnen und „Link teilen“ verwenden.",
+          } as const;
+        }
+        lat = coords.lat;
+        lng = coords.lng;
+        storedMapsUrl = mapsUrl || enriched.resolvedUrl;
+        if (!imageManual) {
+          const preferred = enriched.imageUrl;
+          const previousIsPlacePhoto =
+            previousAutoImage &&
+            isUsablePreviewImage(previousAutoImage) &&
+            !isAppMapPreviewUrl(previousAutoImage);
+          const preferredIsPlacePhoto =
+            preferred &&
+            isUsablePreviewImage(preferred) &&
+            !isAppMapPreviewUrl(preferred);
+
+          imageUrl =
+            (preferredIsPlacePhoto ? preferred : null) ||
+            (previousIsPlacePhoto ? stripImageFocus(previousAutoImage) : null) ||
+            (preferred && isUsablePreviewImage(preferred) ? preferred : null) ||
+            (previousAutoImage && isUsablePreviewImage(previousAutoImage)
+              ? stripImageFocus(previousAutoImage)
+              : null) ||
+            (lat != null && lng != null ? previewImageFromCoords(lat, lng) : null);
+          imageManual = false;
+        }
       }
     } catch (error) {
       console.error("[spot] enrichFromMapsUrl failed:", error);
@@ -122,6 +151,10 @@ async function readSpotFields(formData: FormData) {
       if (fromUrl) {
         lat = fromUrl.lat;
         lng = fromUrl.lng;
+        storedMapsUrl = mapsUrl;
+      } else if (hasPreviousCoords) {
+        lat = previousLat;
+        lng = previousLng;
         storedMapsUrl = mapsUrl;
       } else {
         return {

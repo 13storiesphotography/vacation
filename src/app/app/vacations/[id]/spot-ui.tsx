@@ -4,6 +4,7 @@ import { useActionState, useEffect, useMemo, useRef, useState, useTransition, ty
 import {
   categoryLabels,
   categoryOptions,
+  suggestedSpotTags,
   type SpotCategory,
 } from "@/lib/spots";
 import type { Database } from "@/lib/database.types";
@@ -87,10 +88,13 @@ function SmartLinkField({
   value,
   onChange,
   onResolved,
+  resolveMode = "always",
 }: {
   value: string;
   onChange: (value: string) => void;
   onResolved: (result: SmartLinkResult) => void;
+  /** `onChange` skips auto-resolve for the initial value (edit forms). */
+  resolveMode?: "always" | "onChange";
 }) {
   const [remote, setRemote] = useState<{
     ok: boolean | null;
@@ -98,6 +102,7 @@ function SmartLinkField({
     providerLabel: string | null;
   }>({ ok: null, message: null, providerLabel: null });
   const [pending, startTransition] = useTransition();
+  const initialValue = useRef(value);
 
   const trimmed = value.trim();
   const idleMessage =
@@ -108,6 +113,9 @@ function SmartLinkField({
 
   useEffect(() => {
     if (!trimmed) return;
+    if (resolveMode === "onChange" && trimmed === initialValue.current.trim()) {
+      return;
+    }
     const handle = window.setTimeout(() => {
       startTransition(async () => {
         try {
@@ -170,7 +178,7 @@ function SmartLinkField({
     }, 420);
     return () => window.clearTimeout(handle);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [trimmed]);
+  }, [trimmed, resolveMode]);
 
   return (
     <label className="form-label mt-3">
@@ -205,6 +213,125 @@ function SmartLinkField({
         </span>
       </span>
     </label>
+  );
+}
+
+function TagEditor({
+  tags,
+  onChange,
+}: {
+  tags: string[];
+  onChange: (tags: string[]) => void;
+}) {
+  const [draft, setDraft] = useState("");
+  const selected = new Set(tags.map((tag) => tag.toLowerCase()));
+
+  function toggle(tag: string) {
+    const key = tag.toLowerCase();
+    if (selected.has(key)) {
+      onChange(tags.filter((item) => item.toLowerCase() !== key));
+      return;
+    }
+    onChange([...tags, tag]);
+  }
+
+  function addDraft() {
+    const next = draft.trim();
+    if (!next) return;
+    if (!selected.has(next.toLowerCase())) {
+      onChange([...tags, next]);
+    }
+    setDraft("");
+  }
+
+  return (
+    <div className="mt-3">
+      <p className="form-label">Tags</p>
+      <div className="mt-1.5 flex flex-wrap gap-1.5">
+        {suggestedSpotTags.map((tag) => (
+          <button
+            key={tag}
+            type="button"
+            className="glass-chip !py-1 !text-[11px]"
+            data-active={selected.has(tag.toLowerCase())}
+            onClick={() => toggle(tag)}
+          >
+            {tag}
+          </button>
+        ))}
+        {tags
+          .filter(
+            (tag) =>
+              !suggestedSpotTags.some(
+                (suggested) => suggested.toLowerCase() === tag.toLowerCase(),
+              ),
+          )
+          .map((tag) => (
+            <button
+              key={tag}
+              type="button"
+              className="glass-chip !py-1 !text-[11px]"
+              data-active="true"
+              onClick={() => toggle(tag)}
+            >
+              {tag} ×
+            </button>
+          ))}
+      </div>
+      <div className="mt-2 flex gap-2">
+        <input
+          type="text"
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") {
+              e.preventDefault();
+              addDraft();
+            }
+          }}
+          className="glass-field flex-1 px-3 py-2 text-[14px]"
+          placeholder="Eigenes Tag…"
+        />
+        <button type="button" className="glass-chip shrink-0" onClick={addDraft}>
+          Hinzufügen
+        </button>
+      </div>
+      <input type="hidden" name="tags" value={tags.join(", ")} />
+    </div>
+  );
+}
+
+function ExternalLinkActions({
+  mapsUrl,
+  infoUrl,
+}: {
+  mapsUrl: string;
+  infoUrl: string;
+}) {
+  if (!mapsUrl && !infoUrl) return null;
+  return (
+    <div className="mt-3 flex flex-wrap gap-1.5">
+      {mapsUrl ? (
+        <a
+          href={mapsUrl}
+          target="_blank"
+          rel="noreferrer"
+          className="glass-chip !py-1.5 !text-[12px]"
+        >
+          Karte öffnen
+        </a>
+      ) : null}
+      {infoUrl ? (
+        <a
+          href={infoUrl}
+          target="_blank"
+          rel="noreferrer"
+          className="glass-chip !py-1.5 !text-[12px]"
+        >
+          {isAirbnbUrl(infoUrl) ? "Airbnb öffnen" : "Buchung / Info öffnen"}
+        </a>
+      ) : null}
+    </div>
   );
 }
 
@@ -393,6 +520,9 @@ function SpotFormFields({
   onSmartResolved,
   detailsOpen,
   onDetailsOpenChange,
+  tags,
+  onTagsChange,
+  smartLinkResolveMode = "always",
 }: {
   spot?: Spot | null;
   showOvernight: boolean;
@@ -425,6 +555,9 @@ function SpotFormFields({
   onSmartResolved: (result: SmartLinkResult) => void;
   detailsOpen: boolean;
   onDetailsOpenChange: (value: boolean) => void;
+  tags: string[];
+  onTagsChange: (tags: string[]) => void;
+  smartLinkResolveMode?: "always" | "onChange";
 }) {
   const derivedNights = stayNightCountFromDates(stayCheckIn || null, stayCheckOut || null);
   // Controlled only by stayNights — never ghost-fill from dates (that blocked clearing).
@@ -482,6 +615,7 @@ function SpotFormFields({
         value={pasteUrl}
         onChange={onPasteUrlChange}
         onResolved={onSmartResolved}
+        resolveMode={smartLinkResolveMode}
       />
       <input type="hidden" name="maps_url" value={mapsUrl} />
       <input type="hidden" name="info_url" value={infoUrl} />
@@ -497,6 +631,11 @@ function SpotFormFields({
           placeholder="Wird oft aus dem Link erkannt"
         />
       </label>
+      <p className="mt-1 text-[11px] text-[var(--ink-faint)]">
+        Name kannst du frei ändern — Speichern überschreibt ihn nicht erneut aus dem Link.
+      </p>
+
+      <ExternalLinkActions mapsUrl={mapsUrl} infoUrl={infoUrl} />
 
       <label className="form-label mt-3">
         Kategorie
@@ -513,6 +652,8 @@ function SpotFormFields({
           ))}
         </select>
       </label>
+
+      <TagEditor tags={tags} onChange={onTagsChange} />
 
       {showOvernight && (
         <div className="mt-3 space-y-3">
@@ -718,24 +859,48 @@ function SpotFormFields({
 
           <label className="form-label mt-3">
             Google Maps Link
-            <input
-              type="url"
-              value={mapsUrl}
-              onChange={(e) => onMapsUrlChange(e.target.value)}
-              className="glass-field mt-1.5 px-3 py-3"
-              placeholder="Optional, wenn schon oben erkannt"
-            />
+            <div className="mt-1.5 flex gap-2">
+              <input
+                type="url"
+                value={mapsUrl}
+                onChange={(e) => onMapsUrlChange(e.target.value)}
+                className="glass-field min-w-0 flex-1 px-3 py-3"
+                placeholder="Optional, wenn schon oben erkannt"
+              />
+              {mapsUrl ? (
+                <a
+                  href={mapsUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="glass-chip shrink-0 self-center"
+                >
+                  Öffnen
+                </a>
+              ) : null}
+            </div>
           </label>
 
           <label className="form-label mt-3">
             Buchungs-/Info-Link
-            <input
-              type="url"
-              value={infoUrl}
-              onChange={(e) => onInfoUrlChange(e.target.value)}
-              className="glass-field mt-1.5 px-3 py-3"
-              placeholder="Airbnb, Park4Night, Booking, …"
-            />
+            <div className="mt-1.5 flex gap-2">
+              <input
+                type="url"
+                value={infoUrl}
+                onChange={(e) => onInfoUrlChange(e.target.value)}
+                className="glass-field min-w-0 flex-1 px-3 py-3"
+                placeholder="Airbnb, Park4Night, Booking, …"
+              />
+              {infoUrl ? (
+                <a
+                  href={infoUrl}
+                  target="_blank"
+                  rel="noreferrer"
+                  className="glass-chip shrink-0 self-center"
+                >
+                  Öffnen
+                </a>
+              ) : null}
+            </div>
           </label>
 
           <label className="form-label mt-3">
@@ -784,16 +949,6 @@ function SpotFormFields({
               </label>
             </>
           )}
-
-          <label className="form-label mt-3">
-            Tags (kommagetrennt)
-            <input
-              name="tags"
-              defaultValue={(spot?.tags ?? []).join(", ")}
-              className="glass-field mt-1.5 px-3 py-3"
-              placeholder="Wald, ruhig, Strom"
-            />
-          </label>
         </div>
       ) : (
         <>
@@ -816,7 +971,6 @@ function SpotFormFields({
               <input type="hidden" name="stay_status" value="" />
             </>
           ) : null}
-          <input type="hidden" name="tags" value={(spot?.tags ?? []).join(", ")} />
         </>
       )}
     </>
@@ -829,6 +983,9 @@ function applySmartLinkResult(
     fillEmptyOnly?: boolean;
     currentName?: string;
     currentDescription?: string;
+    currentMapsUrl?: string;
+    currentInfoUrl?: string;
+    currentOvernightCost?: string;
     setCategory: (value: SpotCategory) => void;
     setName: (value: string) => void;
     setDescription: (value: string) => void;
@@ -840,12 +997,22 @@ function applySmartLinkResult(
   },
 ) {
   const fillEmptyOnly = options.fillEmptyOnly ?? false;
-  options.setCategory(result.suggestedCategory);
+  if (!fillEmptyOnly) {
+    options.setCategory(result.suggestedCategory);
+  }
   // Keep the pasted source link visible when we also derived a Maps URL (e.g. Airbnb coords).
   options.setPasteUrl(result.infoUrl || result.mapsUrl || "");
 
-  if (result.mapsUrl) options.setMapsUrl(result.mapsUrl);
-  if (result.infoUrl) options.setInfoUrl(result.infoUrl);
+  if (result.mapsUrl) {
+    if (!fillEmptyOnly || !options.currentMapsUrl?.trim()) {
+      options.setMapsUrl(result.mapsUrl);
+    }
+  }
+  if (result.infoUrl) {
+    if (!fillEmptyOnly || !options.currentInfoUrl?.trim()) {
+      options.setInfoUrl(result.infoUrl);
+    }
+  }
 
   if (result.title) {
     if (!fillEmptyOnly || !options.currentName?.trim()) {
@@ -861,9 +1028,15 @@ function applySmartLinkResult(
     }
   }
   if (result.imageUrl && !isAppMapPreviewUrl(result.imageUrl)) {
-    options.setImageUrl(result.imageUrl);
+    if (!fillEmptyOnly) {
+      options.setImageUrl(result.imageUrl);
+    }
   }
-  if (result.overnightCost) options.setOvernightCost(result.overnightCost);
+  if (result.overnightCost) {
+    if (!fillEmptyOnly || !options.currentOvernightCost?.trim()) {
+      options.setOvernightCost(result.overnightCost);
+    }
+  }
 }
 
 export function CreateSpotForm({
@@ -887,6 +1060,7 @@ export function CreateSpotForm({
   const [stayCheckOut, setStayCheckOut] = useState("");
   const [stayNights, setStayNights] = useState("");
   const [stayStatus, setStayStatus] = useState("");
+  const [tags, setTags] = useState<string[]>([]);
   const [detailsOpen, setDetailsOpen] = useState(false);
 
   useEffect(() => {
@@ -928,6 +1102,8 @@ export function CreateSpotForm({
         onStayNightsChange={setStayNights}
         stayStatus={stayStatus}
         onStayStatusChange={setStayStatus}
+        tags={tags}
+        onTagsChange={setTags}
         detailsOpen={detailsOpen}
         onDetailsOpenChange={setDetailsOpen}
         onSmartResolved={(result) =>
@@ -983,6 +1159,7 @@ export function EditSpotForm({
     spot.stay_nights != null ? String(spot.stay_nights) : "",
   );
   const [stayStatus, setStayStatus] = useState(spot.stay_status ?? "");
+  const [tags, setTags] = useState<string[]>(() => [...(spot.tags ?? [])]);
   const [detailsOpen, setDetailsOpen] = useState(false);
 
   useEffect(() => {
@@ -994,6 +1171,20 @@ export function EditSpotForm({
       <form action={action}>
         <input type="hidden" name="vacation_id" value={vacationId} />
         <input type="hidden" name="spot_id" value={spot.id} />
+        <input type="hidden" name="previous_maps_url" value={spot.maps_url ?? ""} />
+        <input
+          type="hidden"
+          name="previous_lat"
+          value={spot.lat != null ? String(spot.lat) : ""}
+        />
+        <input
+          type="hidden"
+          name="previous_lng"
+          value={spot.lng != null ? String(spot.lng) : ""}
+        />
+        {spot.image_url ? (
+          <input type="hidden" name="previous_image_url" value={spot.image_url} />
+        ) : null}
         <div className="mb-3 flex items-center justify-between gap-3">
           <p className="text-[13px] font-semibold text-[var(--ink-soft)]">
             Spot bearbeiten
@@ -1045,6 +1236,9 @@ export function EditSpotForm({
           onStayNightsChange={setStayNights}
           stayStatus={stayStatus}
           onStayStatusChange={setStayStatus}
+          tags={tags}
+          onTagsChange={setTags}
+          smartLinkResolveMode="onChange"
           detailsOpen={detailsOpen}
           onDetailsOpenChange={setDetailsOpen}
           onSmartResolved={(result) =>
@@ -1052,6 +1246,9 @@ export function EditSpotForm({
               fillEmptyOnly: true,
               currentName: name,
               currentDescription: description,
+              currentMapsUrl: mapsUrl,
+              currentInfoUrl: infoUrl,
+              currentOvernightCost: overnightCost,
               setCategory,
               setName,
               setDescription,
@@ -1281,6 +1478,11 @@ export function SpotList({
                               : ""}
                             {spot.stay_status
                               ? ` · ${stayStatusLabels[spot.stay_status]}`
+                              : ""}
+                            {spot.tags?.length
+                              ? ` · ${spot.tags.slice(0, 3).join(", ")}${
+                                  spot.tags.length > 3 ? "…" : ""
+                                }`
                               : ""}
                             {summary.average != null && (
                               <>
