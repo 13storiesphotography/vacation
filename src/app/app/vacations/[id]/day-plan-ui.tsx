@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Database } from "@/lib/database.types";
-import { categoryLabels, type SpotCategory } from "@/lib/spots";
+import { categoryLabels, isSpotRelevant, type SpotCategory } from "@/lib/spots";
 import { isOvernightCategory } from "@/lib/overnight";
 import { formatDayLabel, type DayPlanWithStops } from "@/lib/day-plans";
 import {
@@ -89,13 +89,11 @@ export function DayPlanPanel({
   }, [days]);
 
   const unplannedSpots = useMemo(
-    () => spots.filter((spot) => !assignedSpotIds.has(spot.id)),
+    () =>
+      spots.filter(
+        (spot) => isSpotRelevant(spot) && !assignedSpotIds.has(spot.id),
+      ),
     [spots, assignedSpotIds],
-  );
-
-  const overnightCandidates = useMemo(
-    () => spots.filter((spot) => isOvernightCategory(spot.category as SpotCategory)),
-    [spots],
   );
 
   const tripRoutes = useMemo(
@@ -164,6 +162,18 @@ export function DayPlanPanel({
   const selectedIndex = days.findIndex((day) => day.id === selectedId);
   const selected = selectedIndex >= 0 ? days[selectedIndex] : null;
 
+  const overnightCandidates = useMemo(
+    () =>
+      spots.filter(
+        (spot) =>
+          isOvernightCategory(spot.category as SpotCategory) &&
+          (isSpotRelevant(spot) ||
+            // Keep currently selected overnight visible even if marked not relevant.
+            spot.id === selected?.overnight_spot_id),
+      ),
+    [spots, selected?.overnight_spot_id],
+  );
+
   useEffect(() => {
     setTitleDraft(selected?.title ?? "");
     setPickerOpen(false);
@@ -187,7 +197,9 @@ export function DayPlanPanel({
     if (!selected) return [];
     const used = new Set(selected.stops.map((stop) => stop.spot_id));
     if (selected.overnight_spot_id) used.add(selected.overnight_spot_id);
-    return spots.filter((spot) => !used.has(spot.id));
+    return spots.filter(
+      (spot) => isSpotRelevant(spot) && !used.has(spot.id),
+    );
   }, [selected, spots]);
 
   const pickerSpots = useMemo(() => {
@@ -584,6 +596,7 @@ export function DayPlanPanel({
                   const legAfter = selectedRoute?.legs.find(
                     (leg) => leg.fromSpotId === stop.spot_id,
                   );
+                  const relevant = isSpotRelevant(spot);
                   return (
                     <li key={stop.id}>
                       <div className="flex items-center gap-2 rounded-[14px] px-2 py-2">
@@ -596,6 +609,7 @@ export function DayPlanPanel({
                           </p>
                           <p className="text-[11px] text-[var(--ink-faint)]">
                             {categoryLabels[spot.category as SpotCategory]}
+                            {!relevant ? " · nicht relevant" : ""}
                           </p>
                         </div>
                         <div className="flex shrink-0 items-center">
