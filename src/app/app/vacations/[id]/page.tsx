@@ -18,6 +18,7 @@ import {
 } from "@/components/app/vacation-tabbar";
 import { VacationTabPanel } from "@/components/app/vacation-tab-panel";
 import { DayPlanPanel } from "./day-plan-ui";
+import { VacationUrlaubDashboard } from "./vacation-urlaub-dashboard";
 import { isCompleteEmail } from "@/lib/email";
 import { isStaleServerActionError } from "@/lib/stale-action";
 
@@ -444,55 +445,14 @@ export default function VacationDetailPage() {
       {visitedTabs.has("urlaub") && (
         <VacationTabPanel id="urlaub" active={tab === "urlaub"}>
           {!editingVacation ? (
-            <div>
-              <div className="flex items-start justify-between gap-3">
-                <h1 className="display text-2xl">{vacation.title}</h1>
-                {canEditVacation && (
-                  <button
-                    type="button"
-                    className="glass-chip shrink-0"
-                    onClick={() => setEditingVacation(true)}
-                  >
-                    Bearbeiten
-                  </button>
-                )}
-              </div>
-              <p className="tab-subtitle">
-                {vacation.start_date} – {vacation.end_date}
-                {vacation.region ? ` · ${vacation.region}` : ""} · {vacation.type}
-              </p>
-              {vacation.description && (
-                <p className="mt-3 text-[15px] leading-relaxed text-[var(--ink-soft)]">
-                  {vacation.description}
-                </p>
-              )}
-              <div className="ios-group mt-4">
-                <button
-                  type="button"
-                  className="ios-row ios-chevron"
-                  onClick={() => changeTab("spots")}
-                >
-                  <div>
-                    <p className="text-[15px] font-semibold">
-                      {spots.length} Spot{spots.length === 1 ? "" : "s"} gesammelt
-                    </p>
-                    <p className="text-[13px] text-[var(--ink-soft)]">Zur Sammlung</p>
-                  </div>
-                </button>
-                <button
-                  type="button"
-                  className="ios-row ios-chevron"
-                  onClick={() => changeTab("team")}
-                >
-                  <div>
-                    <p className="text-[15px] font-semibold">
-                      {members.length} Person{members.length === 1 ? "" : "en"}
-                    </p>
-                    <p className="text-[13px] text-[var(--ink-soft)]">Team & Einladungen</p>
-                  </div>
-                </button>
-              </div>
-            </div>
+            <VacationUrlaubDashboard
+              vacation={vacation}
+              spots={spots}
+              memberCount={members.length}
+              canEdit={canEditVacation}
+              onEdit={() => setEditingVacation(true)}
+              onOpenTab={changeTab}
+            />
           ) : (
             <EditVacationForm
               vacation={vacation}

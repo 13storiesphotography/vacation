@@ -2,13 +2,24 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { SignOutButton } from "@/components/app/sign-out-button";
-import { ReiseDashboard } from "@/components/dashboard/reise-dashboard";
-import { loadDashboardPayload } from "@/lib/dashboard-data";
+import {
+  todayIso,
+  tripPhase,
+  vacationTypeLabel,
+  type VacationSummary,
+} from "@/lib/dashboard";
+import { loadVacationList } from "@/lib/dashboard-data";
 import {
   formatMfaGraceRemaining,
   isWithinMfaEnrollGrace,
   MFA_ENROLL_GRACE_DAYS,
 } from "@/lib/mfa";
+
+function phaseLabel(phase: ReturnType<typeof tripPhase>) {
+  if (phase === "active") return "Unterwegs";
+  if (phase === "upcoming") return "Demnächst";
+  return "Vergangen";
+}
 
 export default async function AppHomePage() {
   const supabase = await createClient();
@@ -23,20 +34,15 @@ export default async function AppHomePage() {
     needsEnroll && isWithinMfaEnrollGrace(user.created_at);
   const graceLabel = formatMfaGraceRemaining(user.created_at);
 
-  const payload = await loadDashboardPayload();
+  const vacations = await loadVacationList();
+  const today = todayIso();
 
   return (
     <main className="shell mx-auto min-h-screen w-full max-w-6xl px-5 py-8 md:px-8">
       <header className="flex items-center justify-between gap-4">
         <div>
           <p className="section-label">Vacation Planer</p>
-          <h1 className="display mt-1 text-3xl">
-            {payload.featured?.phase === "active"
-              ? "Unterwegs"
-              : payload.featured?.phase === "upcoming"
-                ? "Bald geht’s los"
-                : "Dein Reise-Dashboard"}
-          </h1>
+          <h1 className="display mt-1 text-3xl">Urlaube</h1>
         </div>
         <SignOutButton />
       </header>
@@ -62,17 +68,44 @@ export default async function AppHomePage() {
         <Link href="/app/vacations/new" className="cta">
           Neuer Urlaub
         </Link>
-        {payload.featured ? (
-          <Link
-            href={`/app/vacations/${payload.featured.vacation.id}`}
-            className="cta cta-secondary"
-          >
-            Alle Details
-          </Link>
-        ) : null}
       </div>
 
-      <ReiseDashboard payload={payload} />
+      {vacations.length === 0 ? (
+        <div className="ios-group mt-6 p-5">
+          <p className="text-[15px] font-semibold">Noch keine Urlaube</p>
+          <p className="mt-2 text-[14px] text-[var(--ink-soft)]">
+            Lege den nächsten Trip an — Countdown, Route und Wetter findest du
+            danach im Tab <span className="font-semibold">Urlaub</span>.
+          </p>
+        </div>
+      ) : (
+        <div className="ios-group mt-6">
+          {vacations.map((vacation: VacationSummary) => {
+            const phase = tripPhase(vacation, today);
+            return (
+              <Link
+                key={vacation.id}
+                href={`/app/vacations/${vacation.id}?tab=urlaub`}
+                className="ios-row ios-chevron"
+              >
+                <div className="min-w-0">
+                  <p className="truncate text-[15px] font-semibold">
+                    {vacation.title}
+                  </p>
+                  <p className="text-[13px] text-[var(--ink-soft)]">
+                    {phaseLabel(phase)}
+                    {" · "}
+                    {vacation.start_date} – {vacation.end_date}
+                    {vacation.region
+                      ? ` · ${vacation.region}`
+                      : ` · ${vacationTypeLabel(vacation.type)}`}
+                  </p>
+                </div>
+              </Link>
+            );
+          })}
+        </div>
+      )}
     </main>
   );
 }

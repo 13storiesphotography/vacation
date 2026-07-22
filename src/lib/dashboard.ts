@@ -125,7 +125,7 @@ export function pickFeaturedVacation(
   return [...vacations].sort((a, b) => b.end_date.localeCompare(a.end_date))[0] ?? null;
 }
 
-function tripPhase(vacation: VacationSummary, today: string): TripPhase {
+export function tripPhase(vacation: VacationSummary, today: string): TripPhase {
   if (today < vacation.start_date) return "upcoming";
   if (today > vacation.end_date) return "past";
   return "active";
