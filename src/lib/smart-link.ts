@@ -1,5 +1,5 @@
 import { fetchAirbnbMetadata, isAirbnbUrl } from "@/lib/airbnb";
-import { enrichFromMapsUrl, parseLatLngFromMapsUrl } from "@/lib/geo";
+import { enrichFromMapsUrl, isAppMapPreviewUrl, parseLatLngFromMapsUrl } from "@/lib/geo";
 import { fetchPageMetadata } from "@/lib/link-metadata";
 import {
   detectLinkProvider,
@@ -150,19 +150,23 @@ async function enrichSmartLinkInner(rawUrl: string): Promise<SmartLinkResult> {
     }
     const title = enriched.title;
     const suggestedCategory = suggestedCategoryForProvider(provider, title, null);
+    const realPhoto =
+      enriched.imageUrl && !isAppMapPreviewUrl(enriched.imageUrl)
+        ? enriched.imageUrl
+        : null;
     return {
       ok: true,
       message: summarize([
         providerLabel,
         title,
         `Position ${coords.lat.toFixed(4)}, ${coords.lng.toFixed(4)}`,
-        enriched.imageUrl ? "Bild" : null,
+        realPhoto ? "Ortsfoto" : enriched.imageUrl ? "Karten-Vorschau" : null,
       ]),
       provider,
       providerLabel,
       title,
       description: null,
-      imageUrl: enriched.imageUrl,
+      imageUrl: realPhoto,
       locationHint: null,
       mapsUrl: enriched.resolvedUrl || trimmed,
       infoUrl: null,

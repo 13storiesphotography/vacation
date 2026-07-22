@@ -157,7 +157,10 @@ function normalizeImageUrl(raw: string): string | null {
 /** Google's own signed Static Map og:images 403 outside Google. */
 export function isUsablePreviewImage(url: string | null | undefined): boolean {
   if (!url) return false;
-  const normalized = normalizeImageUrl(url) ?? (url.startsWith("/api/map-preview?") ? url : null);
+  const withoutFocus = url.replace(/#.*$/, "");
+  const normalized =
+    normalizeImageUrl(withoutFocus) ??
+    (withoutFocus.startsWith("/api/map-preview?") ? withoutFocus : null);
   if (!normalized) return false;
   if (normalized.startsWith("/api/map-preview?")) return true;
   try {
@@ -274,7 +277,9 @@ export function previewImageFromCoords(lat: number, lng: number): string {
 
 /** App-hosted map snapshot (tile fallback), not a real place photo. */
 export function isAppMapPreviewUrl(url: string | null | undefined): boolean {
-  return Boolean(url?.startsWith("/api/map-preview?"));
+  if (!url) return false;
+  const base = url.replace(/#.*$/, "");
+  return base.startsWith("/api/map-preview?");
 }
 
 function parseOgTitle(html: string): string | null {
@@ -331,14 +336,13 @@ export async function enrichFromMapsUrl(
 
   // Google no longer embeds place hero photos in Maps HTML — use Places API.
   if (!imageUrl || isAppMapPreviewUrl(imageUrl) || !isUsablePreviewImage(imageUrl)) {
-    if (placeName) {
-      const placePhoto = await fetchGooglePlacePhoto({
-        query: placeName,
-        coords,
-      });
-      if (placePhoto && isUsablePreviewImage(placePhoto)) {
-        imageUrl = placePhoto;
-      }
+    const placePhoto = await fetchGooglePlacePhoto({
+      query: placeName,
+      coords,
+      mapsUrl: resolvedUrl || original,
+    });
+    if (placePhoto && isUsablePreviewImage(placePhoto)) {
+      imageUrl = placePhoto;
     }
   }
 

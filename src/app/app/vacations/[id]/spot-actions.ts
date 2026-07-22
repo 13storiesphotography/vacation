@@ -11,6 +11,7 @@ import {
   parseLatLngFromMapsUrl,
   previewImageFromCoords,
 } from "@/lib/geo";
+import { parseImageFocus, withImageFocus } from "@/lib/image-focus";
 import { isOvernightCategory } from "@/lib/overnight";
 import { parseTags, type OvernightCost, type SpotCategory } from "@/lib/spots";
 import { parseStayNights, parseStayStatus, validateStayRange } from "@/lib/stay";
@@ -54,8 +55,14 @@ async function readSpotFields(formData: FormData) {
   const stayNights = parseStayNights(String(formData.get("stay_nights") ?? ""));
   const stayStatus = parseStayStatus(String(formData.get("stay_status") ?? "").trim());
   const tags = parseTags(String(formData.get("tags") ?? ""));
-  const imageUrlManual = String(formData.get("image_url") ?? "").trim();
+  const imageUrlRaw = String(formData.get("image_url") ?? "").trim();
+  // Relative map snapshots are auto-generated — never treat as a manual URL.
+  const imageUrlManual =
+    imageUrlRaw && !isAppMapPreviewUrl(imageUrlRaw.replace(/#.*$/, ""))
+      ? imageUrlRaw.replace(/#.*$/, "")
+      : "";
   const previousAutoImage = String(formData.get("previous_image_url") ?? "").trim();
+  const imageFocus = parseImageFocus(String(formData.get("image_focus") ?? ""));
   const airbnbListing = isAirbnbUrl(infoUrl);
   const hasListingLink = Boolean(infoUrl);
 
@@ -162,7 +169,7 @@ async function readSpotFields(formData: FormData) {
       tags,
       lat,
       lng,
-      image_url: imageUrl,
+      image_url: withImageFocus(imageUrl, imageFocus),
       image_manual: imageManual || (hasListingLink && Boolean(imageUrlManual) && !mapsUrl),
     },
     airbnbListing,
