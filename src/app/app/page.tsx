@@ -2,6 +2,8 @@ import Link from "next/link";
 import { redirect } from "next/navigation";
 import { createClient } from "@/lib/supabase/server";
 import { SignOutButton } from "@/components/app/sign-out-button";
+import { ReiseDashboard } from "@/components/dashboard/reise-dashboard";
+import { loadDashboardPayload } from "@/lib/dashboard-data";
 import {
   formatMfaGraceRemaining,
   isWithinMfaEnrollGrace,
@@ -21,17 +23,20 @@ export default async function AppHomePage() {
     needsEnroll && isWithinMfaEnrollGrace(user.created_at);
   const graceLabel = formatMfaGraceRemaining(user.created_at);
 
-  const { data: vacations, error } = await supabase
-    .from("vacations")
-    .select("id, title, type, region, start_date, end_date")
-    .order("start_date", { ascending: true });
+  const payload = await loadDashboardPayload();
 
   return (
     <main className="shell mx-auto min-h-screen w-full max-w-6xl px-5 py-8 md:px-8">
       <header className="flex items-center justify-between gap-4">
         <div>
           <p className="section-label">Vacation Planer</p>
-          <h1 className="display mt-1 text-3xl">Deine Urlaube</h1>
+          <h1 className="display mt-1 text-3xl">
+            {payload.featured?.phase === "active"
+              ? "Unterwegs"
+              : payload.featured?.phase === "upcoming"
+                ? "Bald geht’s los"
+                : "Dein Reise-Dashboard"}
+          </h1>
         </div>
         <SignOutButton />
       </header>
@@ -57,35 +62,17 @@ export default async function AppHomePage() {
         <Link href="/app/vacations/new" className="cta">
           Neuer Urlaub
         </Link>
+        {payload.featured ? (
+          <Link
+            href={`/app/vacations/${payload.featured.vacation.id}`}
+            className="cta cta-secondary"
+          >
+            Alle Details
+          </Link>
+        ) : null}
       </div>
 
-      {error && (
-        <p className="mt-6 text-[14px] text-[var(--danger)]">{error.message}</p>
-      )}
-
-      <div className="ios-group mt-6">
-        {(vacations ?? []).length === 0 ? (
-          <div className="p-5 text-[15px] text-[var(--ink-soft)]">
-            Noch keine Urlaube. Lege den Schweden-Van-Trip an und lade danach dein Team ein.
-          </div>
-        ) : (
-          vacations?.map((vacation) => (
-            <Link
-              key={vacation.id}
-              href={`/app/vacations/${vacation.id}`}
-              className="ios-row ios-chevron"
-            >
-              <div>
-                <p className="text-[15px] font-semibold">{vacation.title}</p>
-                <p className="text-[13px] text-[var(--ink-soft)]">
-                  {vacation.start_date} – {vacation.end_date}
-                  {vacation.region ? ` · ${vacation.region}` : ""}
-                </p>
-              </div>
-            </Link>
-          ))
-        )}
-      </div>
+      <ReiseDashboard payload={payload} />
     </main>
   );
 }
