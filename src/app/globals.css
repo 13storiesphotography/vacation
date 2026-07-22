@@ -580,19 +580,28 @@ textarea {
 
 @media (min-width: 768px) {
   .app-tabbar {
-    position: sticky;
+    position: fixed;
     top: calc(3.35rem + env(safe-area-inset-top, 0px));
     bottom: auto;
-    z-index: 30;
-    margin: 0 0 1.25rem;
-    padding: 0;
-    justify-content: stretch;
-    pointer-events: auto;
-    transform: none;
+    z-index: 40;
+    margin: 0;
+    padding:
+      10px
+      max(32px, env(safe-area-inset-right, 0px))
+      12px
+      max(32px, env(safe-area-inset-left, 0px));
+    justify-content: center;
+    pointer-events: none;
+    background: rgba(244, 246, 247, 0.72);
+    backdrop-filter: var(--glass-blur);
+    -webkit-backdrop-filter: var(--glass-blur);
+    border-bottom: 1px solid rgba(255, 255, 255, 0.45);
+    box-shadow: 0 1px 0 rgba(255, 255, 255, 0.55) inset;
+    transform: translateZ(0);
   }
 
   .liquid-tabbar-shell {
-    width: 100%;
+    width: min(100%, 72rem);
     max-width: none;
     border-radius: 24px;
     padding: 5px;
@@ -644,7 +653,8 @@ textarea {
   }
 
   .app-with-chrome {
-    padding-top: calc(3.5rem + env(safe-area-inset-top, 0px));
+    /* Topbar + fixed tab bar strip under it. */
+    padding-top: calc(3.5rem + 4.85rem + env(safe-area-inset-top, 0px));
     padding-bottom: 2rem;
   }
 }
