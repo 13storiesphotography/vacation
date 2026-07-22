@@ -12,6 +12,7 @@ import {
   removeSpotFromDayClient,
   setDayOvernightClient,
   updateDayPlanMetaClient,
+  updateStopDwellClient,
 } from "@/lib/day-plans-api";
 import {
   buildDayRoute,
@@ -20,6 +21,12 @@ import {
   formatRouteDuration,
   formatRouteKm,
 } from "@/lib/day-route";
+import {
+  buildDayTimeline,
+  formatClockTime,
+  normalizeClockTime,
+  previousOvernightSpotId,
+} from "@/lib/day-timeline";
 import { syncAllSpotStays } from "@/lib/apply-stay";
 import { createClient } from "@/lib/supabase/client";
 import { CategoryIcon } from "@/components/category-icon";
@@ -231,15 +238,56 @@ export function DayPlanPanel({
 
   const daysWithStops = days.filter((day) => day.stops.length > 0).length;
 
+  const morningOriginId = useMemo(
+    () => (selected ? previousOvernightSpotId(days, selected.id) : null),
+    [days, selected],
+  );
+
   const selectedRouteEstimate = useMemo(
     () =>
-      selected ? buildDayRoute(selected, spotsById, selectedIndex) : null,
-    [selected, spotsById, selectedIndex],
+      selected
+        ? buildDayRoute(selected, spotsById, selectedIndex, {
+            originSpotId: morningOriginId,
+          })
+        : null,
+    [selected, spotsById, selectedIndex, morningOriginId],
   );
   const {
     route: selectedRoute,
     loading: routeEnriching,
   } = useEnrichedDayRoute(selectedRouteEstimate);
+
+  const categoryBySpotId = useMemo(() => {
+    const map = new Map<string, SpotCategory>();
+    for (const spot of spots) {
+      map.set(spot.id, spot.category as SpotCategory);
+    }
+    return map;
+  }, [spots]);
+
+  const timeline = useMemo(
+    () =>
+      selected
+        ? buildDayTimeline({
+            day: selected,
+            route: selectedRoute,
+            categoryBySpotId,
+          })
+        : [],
+    [selected, selectedRoute, categoryBySpotId],
+  );
+
+  const timelineBySpotId = useMemo(() => {
+    const map = new Map<string, (typeof timeline)[number]>();
+    for (const entry of timeline) {
+      if (entry.role === "stop") map.set(entry.spotId, entry);
+    }
+    return map;
+  }, [timeline]);
+
+  const originEntry = timeline.find((entry) => entry.role === "origin") ?? null;
+  const overnightEntry =
+    timeline.find((entry) => entry.role === "overnight") ?? null;
 
   function patchSelectedDay(
     updater: (day: DayPlanWithStops) => DayPlanWithStops,
@@ -476,6 +524,53 @@ export function DayPlanPanel({
               </button>
             </div>
 
+            <div className="mx-3 mb-3 flex flex-wrap items-end gap-3 rounded-[14px] bg-[var(--fjord-soft)]/35 px-3 py-2.5">
+              <label className="form-label min-w-[7.5rem] flex-1">
+                Abfahrt
+                <input
+                  type="time"
+                  value={normalizeClockTime(selected.depart_at) ?? ""}
+                  disabled={pending}
+                  className="glass-field mt-1.5 px-3 py-2 text-[14px]"
+                  onChange={(event) => {
+                    const value = event.target.value
+                      ? normalizeClockTime(event.target.value)
+                      : null;
+                    patchSelectedDay((day) => ({ ...day, depart_at: value }));
+                    run(() =>
+                      updateDayPlanMetaClient(
+                        createClient(),
+                        vacation.id,
+                        selected.id,
+                        { depart_at: value },
+                      ),
+                    );
+                  }}
+                />
+              </label>
+              <p className="pb-2 text-[12px] text-[var(--ink-soft)]">
+                {originEntry
+                  ? `von ${originEntry.name}`
+                  : selected.stops[0]
+                    ? `erster Stop: ${spotsById.get(selected.stops[0].spot_id)?.name ?? "—"}`
+                    : "Zeit für den Tagesstart"}
+                {!selected.depart_at
+                  ? " · Uhrzeit setzen für Ankunft/Abfahrt"
+                  : ""}
+              </p>
+            </div>
+
+            {originEntry && originEntry.driveMinutesBefore == null ? (
+              <div className="px-4 pb-2">
+                <p className="text-[12px] font-semibold text-[var(--ink)]">
+                  {formatClockTime(originEntry.departAt)} · Losfahren
+                </p>
+                <p className="text-[11px] text-[var(--ink-faint)]">
+                  {originEntry.name} (Übernachtung gestern)
+                </p>
+              </div>
+            ) : null}
+
             {pickerOpen && (
               <div className="glass-subpanel mx-3 mb-3 p-2">
                 <input
@@ -520,6 +615,7 @@ export function DayPlanPanel({
                                         day_plan_id: day.id,
                                         spot_id: spot.id,
                                         position: day.stops.length,
+                                        dwell_minutes: null,
                                       },
                                     ],
                                   }));
@@ -571,13 +667,24 @@ export function DayPlanPanel({
                 {selected.stops.map((stop, index) => {
                   const spot = spotsById.get(stop.spot_id);
                   if (!spot) return null;
-                  const legAfter = selectedRoute?.legs.find(
-                    (leg) => leg.fromSpotId === stop.spot_id,
-                  );
+                  const entry = timelineBySpotId.get(stop.spot_id);
                   const relevant = isSpotRelevant(spot);
                   const isEditing = editingSpotId === spot.id;
                   return (
                     <li key={stop.id}>
+                      {entry?.driveMinutesBefore != null ? (
+                        <p className="px-4 pb-1 pl-11 text-[11px] font-medium text-[var(--ink-faint)]">
+                          ↓{" "}
+                          {formatLegMeta({
+                            km: entry.driveKmBefore ?? 0,
+                            minutes: entry.driveMinutesBefore,
+                            source: entry.driveSource ?? "estimate",
+                          })}
+                          {entry.driveSource === "estimate" && routeEnriching
+                            ? " · lädt…"
+                            : ""}
+                        </p>
+                      ) : null}
                       <div
                         className={`flex items-center gap-2 rounded-[14px] px-2 py-2 ${
                           isEditing ? "bg-[rgba(15,110,140,0.06)]" : ""
@@ -603,7 +710,66 @@ export function DayPlanPanel({
                             {!relevant ? " · archiviert" : ""}
                             {isEditing ? " · wird bearbeitet" : ""}
                           </p>
+                          {selected.depart_at ? (
+                            <p className="mt-0.5 text-[11px] font-medium text-[var(--ink-soft)]">
+                              Ankunft {formatClockTime(entry?.arriveAt)}
+                              {" · Abfahrt "}
+                              {formatClockTime(entry?.departAt)}
+                            </p>
+                          ) : null}
                         </button>
+                        <label className="flex shrink-0 flex-col items-end gap-0.5">
+                          <span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--ink-faint)]">
+                            Min
+                          </span>
+                          <input
+                            type="number"
+                            min={0}
+                            max={24 * 60}
+                            inputMode="numeric"
+                            disabled={pending}
+                            placeholder={String(entry?.dwellMinutes ?? 60)}
+                            value={
+                              stop.dwell_minutes == null
+                                ? ""
+                                : String(stop.dwell_minutes)
+                            }
+                            title={
+                              stop.dwell_minutes == null
+                                ? `Standard ${entry?.dwellMinutes ?? 60} Min`
+                                : "Aufenthaltsdauer"
+                            }
+                            className="glass-field w-14 px-2 py-1.5 text-center text-[13px]"
+                            onClick={(event) => event.stopPropagation()}
+                            onChange={(event) => {
+                              const raw = event.target.value.trim();
+                              const next =
+                                raw === ""
+                                  ? null
+                                  : Math.max(
+                                      0,
+                                      Math.min(24 * 60, Number(raw) || 0),
+                                    );
+                              patchSelectedDay((day) => ({
+                                ...day,
+                                stops: day.stops.map((entryStop) =>
+                                  entryStop.id === stop.id
+                                    ? { ...entryStop, dwell_minutes: next }
+                                    : entryStop,
+                                ),
+                              }));
+                              if (stop.id.startsWith("local-")) return;
+                              run(() =>
+                                updateStopDwellClient(
+                                  createClient(),
+                                  selected.id,
+                                  stop.id,
+                                  next,
+                                ),
+                              );
+                            }}
+                          />
+                        </label>
                         <div className="flex shrink-0 items-center">
                           <button
                             type="button"
@@ -623,7 +789,7 @@ export function DayPlanPanel({
                                   patchSelectedDay((day) => {
                                     const stops = [...day.stops];
                                     const i = stops.findIndex(
-                                      (entry) => entry.spot_id === spot.id,
+                                      (entryStop) => entryStop.spot_id === spot.id,
                                     );
                                     if (i <= 0) return day;
                                     const copy = [...stops];
@@ -659,7 +825,7 @@ export function DayPlanPanel({
                                   patchSelectedDay((day) => {
                                     const stops = [...day.stops];
                                     const i = stops.findIndex(
-                                      (entry) => entry.spot_id === spot.id,
+                                      (entryStop) => entryStop.spot_id === spot.id,
                                     );
                                     if (i < 0 || i >= stops.length - 1) {
                                       return day;
@@ -697,7 +863,7 @@ export function DayPlanPanel({
                                   patchSelectedDay((day) => ({
                                     ...day,
                                     stops: day.stops.filter(
-                                      (entry) => entry.spot_id !== spot.id,
+                                      (entryStop) => entryStop.spot_id !== spot.id,
                                     ),
                                   }));
                                 },
@@ -760,14 +926,6 @@ export function DayPlanPanel({
                           }}
                         />
                       ) : null}
-                      {legAfter ? (
-                        <p className="px-4 pb-1 pl-11 text-[11px] font-medium text-[var(--ink-faint)]">
-                          ↓ {formatLegMeta(legAfter)}
-                          {legAfter.source === "estimate" && routeEnriching
-                            ? " · lädt…"
-                            : ""}
-                        </p>
-                      ) : null}
                     </li>
                   );
                 })}
@@ -821,12 +979,27 @@ export function DayPlanPanel({
                   Stellplätze oder Airbnbs unter Spots anlegen — dann erscheinen sie hier.
                 </p>
               ) : overnight ? (
-                <p className="mt-2 text-[12px] text-[var(--ink-soft)]">
-                  Heute Nacht: {overnight.name}
-                  {overnight.stay_status
-                    ? ` · ${stayStatusLabels[overnight.stay_status]}`
-                    : ""}
-                </p>
+                <div className="mt-2 space-y-1">
+                  {overnightEntry?.driveMinutesBefore != null ? (
+                    <p className="text-[11px] font-medium text-[var(--ink-faint)]">
+                      ↓{" "}
+                      {formatLegMeta({
+                        km: overnightEntry.driveKmBefore ?? 0,
+                        minutes: overnightEntry.driveMinutesBefore,
+                        source: overnightEntry.driveSource ?? "estimate",
+                      })}
+                    </p>
+                  ) : null}
+                  <p className="text-[12px] text-[var(--ink-soft)]">
+                    Heute Nacht: {overnight.name}
+                    {overnight.stay_status
+                      ? ` · ${stayStatusLabels[overnight.stay_status]}`
+                      : ""}
+                    {selected.depart_at && overnightEntry?.arriveAt
+                      ? ` · Ankunft ${formatClockTime(overnightEntry.arriveAt)}`
+                      : ""}
+                  </p>
+                </div>
               ) : null}
             </div>
           )}
@@ -863,6 +1036,7 @@ export function DayPlanPanel({
                                 day_plan_id: day.id,
                                 spot_id: spot.id,
                                 position: day.stops.length,
+                                dwell_minutes: null,
                               },
                             ],
                           }));

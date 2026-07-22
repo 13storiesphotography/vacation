@@ -12,7 +12,7 @@ export type RouteWaypoint = {
   name: string;
   category: Spot["category"];
   coords: LatLng;
-  role: "stop" | "overnight";
+  role: "origin" | "stop" | "overnight";
   /** 1-based order in the (day or trip) route. */
   order: number;
   /** Present on trip-level routes. */
@@ -115,17 +115,18 @@ export function formatLegMeta(leg: Pick<RouteLeg, "km" | "minutes" | "source">):
   return `${prefix}${formatRouteKm(leg.km)} · ${durationPrefix}${formatRouteDuration(leg.minutes)}`;
 }
 
-/** Ordered waypoints for a day: stops by position, then overnight if new. */
+/** Ordered waypoints for a day: optional morning origin, stops, then overnight. */
 export function buildDayRoute(
   day: DayPlanWithStops,
   spotsById: Map<string, Spot>,
   dayIndex = 0,
+  options?: { originSpotId?: string | null },
 ): DayRoute {
   const waypoints: RouteWaypoint[] = [];
   const skipped: DayRoute["skipped"] = [];
   const seen = new Set<string>();
 
-  function pushSpot(spotId: string, role: "stop" | "overnight") {
+  function pushSpot(spotId: string, role: RouteWaypoint["role"]) {
     if (seen.has(spotId)) return;
     const spot = spotsById.get(spotId);
     if (!spot) {
@@ -152,7 +153,14 @@ export function buildDayRoute(
     });
   }
 
+  const originId = options?.originSpotId ?? null;
   const orderedStops = [...day.stops].sort((a, b) => a.position - b.position);
+  const firstStopId = orderedStops[0]?.spot_id ?? null;
+
+  if (originId && originId !== firstStopId) {
+    pushSpot(originId, "origin");
+  }
+
   for (const stop of orderedStops) {
     pushSpot(stop.spot_id, "stop");
   }
