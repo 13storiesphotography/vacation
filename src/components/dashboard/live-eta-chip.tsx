@@ -24,7 +24,6 @@ export function LiveEtaChip({
   useEffect(() => {
     if (!navigator.geolocation) {
       setStatus("unsupported");
-      return;
     }
   }, []);
 
@@ -40,12 +39,39 @@ export function LiveEtaChip({
           lat: position.coords.latitude,
           lng: position.coords.longitude,
         };
-        const km = estimateRoadKmBetween(here, target);
-        const minutes = estimateDriveMinutesBetween(here, target);
-        setLabel(
-          `Von hier ca. ${formatRouteKm(km)} · ~${formatRouteDuration(minutes)} bis ${targetName}`,
-        );
-        setStatus("ready");
+
+        void (async () => {
+          const estimateKm = estimateRoadKmBetween(here, target);
+          const estimateMin = estimateDriveMinutesBetween(here, target);
+          let text = `Von hier ca. ${formatRouteKm(estimateKm)} · ~${formatRouteDuration(estimateMin)} bis ${targetName} · Schätzung`;
+
+          try {
+            const response = await fetch("/api/route-etas", {
+              method: "POST",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ points: [here, target] }),
+            });
+            if (response.ok) {
+              const json = (await response.json()) as {
+                available?: boolean;
+                totalKm?: number;
+                totalMinutes?: number;
+              };
+              if (
+                json.available &&
+                typeof json.totalKm === "number" &&
+                typeof json.totalMinutes === "number"
+              ) {
+                text = `Von hier ${formatRouteKm(json.totalKm)} · ${formatRouteDuration(json.totalMinutes)} bis ${targetName} · Google-Routenzeit`;
+              }
+            }
+          } catch {
+            // Keep estimate.
+          }
+
+          setLabel(text);
+          setStatus("ready");
+        })();
       },
       () => setStatus("denied"),
       { enableHighAccuracy: false, timeout: 10000, maximumAge: 120000 },

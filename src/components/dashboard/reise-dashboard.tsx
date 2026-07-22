@@ -146,13 +146,20 @@ function PlaceThumb({ place }: { place: DashboardPlace }) {
 }
 
 function LegMeta({ leg, label }: { leg: DashboardLeg; label: string }) {
+  const approx = leg.source !== "google";
   return (
     <p className="text-[12px] text-[var(--ink-soft)]">
       <span className="font-semibold text-[var(--fjord)]">{label}</span>
       {" · "}
       {leg.fromName} → {leg.toName}
-      {" · ca. "}
-      {leg.kmLabel} · ~{leg.durationLabel}
+      {" · "}
+      {approx ? "ca. " : ""}
+      {leg.kmLabel} · {approx ? "~" : ""}
+      {leg.durationLabel}
+      <span className="text-[var(--ink-faint)]">
+        {" · "}
+        {leg.source === "google" ? "Google-Routenzeit" : "Schätzung"}
+      </span>
     </p>
   );
 }
@@ -340,8 +347,14 @@ function NextUpCard({ featured }: { featured: FeaturedDashboard }) {
 
       {featured.route && featured.route.legs.length > 0 ? (
         <div className="border-t border-[var(--separator)] px-4 py-3 text-[12px] text-[var(--ink-soft)]">
-          Tagestour ca. {formatRouteKm(featured.route.totalKm)} · ~
-          {formatRouteDuration(featured.route.totalMinutes)} Fahrzeit (Schätzung)
+          Tagestour {featured.route.source === "google" ? "" : "ca. "}
+          {formatRouteKm(featured.route.totalKm)} ·{" "}
+          {featured.route.source === "google" ? "" : "~"}
+          {formatRouteDuration(featured.route.totalMinutes)} Fahrzeit
+          {" · "}
+          {featured.route.source === "google"
+            ? "Google-Routenzeit"
+            : "Schätzung"}
         </div>
       ) : null}
     </section>

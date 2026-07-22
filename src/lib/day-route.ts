@@ -5,6 +5,8 @@ import { resolveSpotCoords, type LatLng } from "@/lib/geo";
 
 type Spot = Database["public"]["Tables"]["spots"]["Row"];
 
+export type RouteSource = "google" | "estimate";
+
 export type RouteWaypoint = {
   spotId: string;
   name: string;
@@ -22,10 +24,11 @@ export type RouteLeg = {
   toSpotId: string;
   fromName: string;
   toName: string;
-  /** Approximate road km (haversine × road factor). */
+  /** Road km — Google Routes when source=google, else estimate. */
   km: number;
-  /** Rough drive minutes at van pace. */
+  /** Drive minutes — Google Routes when source=google, else estimate. */
   minutes: number;
+  source: RouteSource;
 };
 
 export type DayRoute = {
@@ -38,6 +41,8 @@ export type DayRoute = {
   legs: RouteLeg[];
   totalKm: number;
   totalMinutes: number;
+  source: RouteSource;
+  encodedPolyline: string | null;
 };
 
 const ROAD_FACTOR = 1.3;
@@ -83,6 +88,16 @@ export function formatRouteDuration(minutes: number): string {
   const m = minutes % 60;
   if (m === 0) return `${h} Std`;
   return `${h} Std ${m} Min`;
+}
+
+export function routeSourceHint(source: RouteSource): string {
+  return source === "google" ? "Google-Routenzeit" : "Schätzung";
+}
+
+export function formatLegMeta(leg: Pick<RouteLeg, "km" | "minutes" | "source">): string {
+  const prefix = leg.source === "google" ? "" : "ca. ";
+  const durationPrefix = leg.source === "google" ? "" : "~";
+  return `${prefix}${formatRouteKm(leg.km)} · ${durationPrefix}${formatRouteDuration(leg.minutes)}`;
 }
 
 /** Ordered waypoints for a day: stops by position, then overnight if new. */
@@ -144,6 +159,7 @@ export function buildDayRoute(
       toName: to.name,
       km,
       minutes: estimateMinutes(km),
+      source: "estimate",
     });
   }
 
@@ -160,6 +176,8 @@ export function buildDayRoute(
     legs,
     totalKm,
     totalMinutes,
+    source: "estimate",
+    encodedPolyline: null,
   };
 }
 
