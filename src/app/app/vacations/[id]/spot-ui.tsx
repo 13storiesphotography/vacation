@@ -18,6 +18,7 @@ import {
   type SpotRatingSummary,
 } from "@/lib/ratings";
 import { isOvernightCategory } from "@/lib/overnight";
+import { isAirbnbUrl } from "@/lib/airbnb";
 import { CategoryIcon } from "@/components/category-icon";
 import { isStaleServerActionError, reloadForStaleDeployment } from "@/lib/stale-action";
 import {
@@ -1132,8 +1133,8 @@ export function SpotList({
                         <p className="truncate text-[15px] font-semibold leading-tight">
                           {spot.name}
                         </p>
-                        <div className="mt-0.5 flex min-w-0 flex-wrap items-baseline gap-x-1.5 gap-y-0.5 text-[12px] leading-snug text-[var(--ink-soft)]">
-                          <span className="min-w-0 truncate">
+                        <div className="mt-0.5 text-[12px] leading-snug text-[var(--ink-soft)]">
+                          <span className="min-w-0">
                             {categoryLabels[spot.category]}
                             {spot.overnight_cost ? ` · ${spot.overnight_cost}` : ""}
                             {spot.price_hint ? ` · ${spot.price_hint}` : ""}
@@ -1153,28 +1154,6 @@ export function SpotList({
                               </>
                             )}
                           </span>
-                          {spot.maps_url ? (
-                            <a
-                              href={spot.maps_url}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="shrink-0 font-semibold text-[var(--fjord)]"
-                              onClick={(event) => event.stopPropagation()}
-                            >
-                              Maps
-                            </a>
-                          ) : null}
-                          {spot.info_url ? (
-                            <a
-                              href={spot.info_url}
-                              target="_blank"
-                              rel="noreferrer"
-                              className="shrink-0 font-semibold text-[var(--fjord)]"
-                              onClick={(event) => event.stopPropagation()}
-                            >
-                              Info
-                            </a>
-                          ) : null}
                         </div>
                       </div>
                       <div
@@ -1206,6 +1185,34 @@ export function SpotList({
                       <p className="mt-1 line-clamp-1 text-[12px] leading-snug text-[var(--ink-soft)]">
                         {spot.description}
                       </p>
+                    ) : null}
+
+                    {spot.maps_url || spot.info_url ? (
+                      <div
+                        className="mt-1.5 flex flex-wrap gap-1.5"
+                        onClick={(event) => event.stopPropagation()}
+                      >
+                        {spot.maps_url ? (
+                          <a
+                            href={spot.maps_url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="glass-chip !py-1 !text-[11px]"
+                          >
+                            Karte öffnen
+                          </a>
+                        ) : null}
+                        {spot.info_url ? (
+                          <a
+                            href={spot.info_url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="glass-chip !py-1 !text-[11px]"
+                          >
+                            {isAirbnbUrl(spot.info_url) ? "Bei Airbnb öffnen" : "Seite öffnen"}
+                          </a>
+                        ) : null}
+                      </div>
                     ) : null}
                   </div>
                 </div>
