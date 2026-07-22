@@ -434,6 +434,11 @@ function ImageFocusEditor({
     }
   }
 
+  function nudgeZoom(delta: number) {
+    const next = Math.round(Math.min(2.5, Math.max(1, focus.z + delta)) * 100) / 100;
+    onChange({ ...focus, z: next });
+  }
+
   return (
     <div className="mt-3">
       <div
@@ -456,24 +461,36 @@ function ImageFocusEditor({
           }}
           referrerPolicy="no-referrer"
         />
+        <div
+          className="absolute bottom-2 right-2 flex items-center gap-1 rounded-full bg-[rgba(20,36,48,0.72)] p-1 shadow-md backdrop-blur-sm"
+          onPointerDown={(event) => event.stopPropagation()}
+        >
+          <button
+            type="button"
+            className="inline-flex h-8 w-8 items-center justify-center rounded-full text-[18px] font-semibold leading-none text-white disabled:opacity-35"
+            aria-label="Verkleinern"
+            disabled={focus.z <= 1}
+            onClick={() => nudgeZoom(-0.2)}
+          >
+            −
+          </button>
+          <span className="min-w-[2.4rem] text-center text-[11px] font-semibold tabular-nums text-white/90">
+            {Math.round(focus.z * 100)}%
+          </span>
+          <button
+            type="button"
+            className="inline-flex h-8 w-8 items-center justify-center rounded-full text-[18px] font-semibold leading-none text-white disabled:opacity-35"
+            aria-label="Vergrößern"
+            disabled={focus.z >= 2.5}
+            onClick={() => nudgeZoom(0.2)}
+          >
+            +
+          </button>
+        </div>
       </div>
-      <label className="form-label mt-2">
-        Zoom
-        <input
-          type="range"
-          min={1}
-          max={2.5}
-          step={0.05}
-          value={focus.z}
-          onChange={(e) =>
-            onChange({ ...focus, z: Number.parseFloat(e.target.value) || 1 })
-          }
-          className="mt-1.5 w-full"
-        />
-      </label>
-      <div className="mt-1 flex items-center justify-between gap-2">
+      <div className="mt-1.5 flex items-center justify-between gap-2">
         <p className="text-[11px] text-[var(--ink-faint)]">
-          Ziehen zum Verschieben · Zoom am Regler
+          Ziehen zum Verschieben · +/− zum Zoomen
         </p>
         <button
           type="button"
