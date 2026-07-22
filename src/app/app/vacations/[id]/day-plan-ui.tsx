@@ -600,7 +600,7 @@ export function DayPlanPanel({
                           </p>
                           <p className="text-[11px] text-[var(--ink-faint)]">
                             {categoryLabels[spot.category as SpotCategory]}
-                            {!relevant ? " · zur Seite gelegt" : ""}
+                            {!relevant ? " · archiviert" : ""}
                             {isEditing ? " · wird bearbeitet" : ""}
                           </p>
                         </button>

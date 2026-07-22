@@ -138,7 +138,7 @@ export function SpotMap({
             <option value="all">Auswahl mit Koordinaten</option>
             <option value="favorites">Nur meine Favoriten</option>
             <option value="rated">Nur von mir bewertet</option>
-            <option value="include_shelved">Auch zur Seite gelegte</option>
+            <option value="include_shelved">Auch archivierte</option>
           </select>
         </label>
         <label className="form-label">
