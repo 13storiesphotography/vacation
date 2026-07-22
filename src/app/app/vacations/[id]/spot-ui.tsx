@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useMemo, useState, useTransition } from "react";
+import { useActionState, useEffect, useMemo, useRef, useState, useTransition, type PointerEvent as ReactPointerEvent } from "react";
 import {
   categoryLabels,
   categoryOptions,
@@ -19,6 +19,14 @@ import {
 } from "@/lib/ratings";
 import { isOvernightCategory } from "@/lib/overnight";
 import { isAirbnbUrl } from "@/lib/airbnb";
+import { isAppMapPreviewUrl } from "@/lib/geo";
+import {
+  defaultImageFocus,
+  imageFocusStyle,
+  parseImageFocus,
+  serializeImageFocus,
+  type ImageFocus,
+} from "@/lib/image-focus";
 import { CategoryIcon } from "@/components/category-icon";
 import { isStaleServerActionError, reloadForStaleDeployment } from "@/lib/stale-action";
 import {
@@ -212,7 +220,10 @@ function SpotThumb({
   onOpen?: () => void;
 }) {
   const [broken, setBroken] = useState(false);
-  const showImage = Boolean(spot.image_url) && !broken;
+  const focus = parseImageFocus(spot.image_url);
+  const focusStyle = imageFocusStyle(focus);
+  const imageSrc = spot.image_url?.replace(/#.*$/, "") || null;
+  const showImage = Boolean(imageSrc) && !broken;
 
   return (
     <button
@@ -230,9 +241,14 @@ function SpotThumb({
       {showImage ? (
         // eslint-disable-next-line @next/next/no-img-element
         <img
-          src={spot.image_url!}
+          src={imageSrc!}
           alt=""
           className="h-full w-full object-cover"
+          style={{
+            objectPosition: focusStyle.objectPosition,
+            transform: focusStyle.transform,
+            transformOrigin: focusStyle.objectPosition,
+          }}
           loading="lazy"
           referrerPolicy="no-referrer"
           onError={() => setBroken(true)}
@@ -249,6 +265,102 @@ function SpotThumb({
   );
 }
 
+function ImageFocusEditor({
+  src,
+  focus,
+  onChange,
+}: {
+  src: string;
+  focus: ImageFocus;
+  onChange: (value: ImageFocus) => void;
+}) {
+  const dragging = useRef(false);
+  const last = useRef<{ x: number; y: number } | null>(null);
+  const style = imageFocusStyle(focus);
+
+  function onPointerDown(event: ReactPointerEvent<HTMLDivElement>) {
+    dragging.current = true;
+    last.current = { x: event.clientX, y: event.clientY };
+    event.currentTarget.setPointerCapture(event.pointerId);
+  }
+
+  function onPointerMove(event: ReactPointerEvent<HTMLDivElement>) {
+    if (!dragging.current || !last.current) return;
+    const dx = event.clientX - last.current.x;
+    const dy = event.clientY - last.current.y;
+    last.current = { x: event.clientX, y: event.clientY };
+    // Dragging the image right reveals the left side → decrease focus x.
+    onChange({
+      ...focus,
+      x: Math.min(100, Math.max(0, focus.x - dx * 0.35)),
+      y: Math.min(100, Math.max(0, focus.y - dy * 0.35)),
+    });
+  }
+
+  function onPointerUp(event: ReactPointerEvent<HTMLDivElement>) {
+    dragging.current = false;
+    last.current = null;
+    try {
+      event.currentTarget.releasePointerCapture(event.pointerId);
+    } catch {
+      // ignore
+    }
+  }
+
+  return (
+    <div className="mt-3">
+      <div
+        className="relative h-44 w-full cursor-grab overflow-hidden rounded-[14px] active:cursor-grabbing touch-none"
+        onPointerDown={onPointerDown}
+        onPointerMove={onPointerMove}
+        onPointerUp={onPointerUp}
+        onPointerCancel={onPointerUp}
+      >
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img
+          src={src}
+          alt=""
+          draggable={false}
+          className="h-full w-full select-none object-cover"
+          style={{
+            objectPosition: style.objectPosition,
+            transform: style.transform,
+            transformOrigin: style.objectPosition,
+          }}
+          referrerPolicy="no-referrer"
+        />
+      </div>
+      <label className="form-label mt-2">
+        Zoom
+        <input
+          type="range"
+          min={1}
+          max={2.5}
+          step={0.05}
+          value={focus.z}
+          onChange={(e) =>
+            onChange({ ...focus, z: Number.parseFloat(e.target.value) || 1 })
+          }
+          className="mt-1.5 w-full"
+        />
+      </label>
+      <div className="mt-1 flex items-center justify-between gap-2">
+        <p className="text-[11px] text-[var(--ink-faint)]">
+          Ziehen zum Verschieben · Zoom am Regler
+        </p>
+        <button
+          type="button"
+          className="text-[11px] font-semibold text-[var(--fjord)]"
+          onClick={() => onChange({ ...defaultImageFocus })}
+        >
+          Zurücksetzen
+        </button>
+      </div>
+      <input type="hidden" name="image_focus" value={serializeImageFocus(focus) ?? ""} />
+    </div>
+  );
+}
+
 function SpotFormFields({
   spot,
   showOvernight,
@@ -260,6 +372,8 @@ function SpotFormFields({
   onDescriptionChange,
   imageUrl,
   onImageUrlChange,
+  imageFocus,
+  onImageFocusChange,
   pasteUrl,
   onPasteUrlChange,
   mapsUrl,
@@ -290,6 +404,8 @@ function SpotFormFields({
   onDescriptionChange: (value: string) => void;
   imageUrl: string;
   onImageUrlChange: (value: string) => void;
+  imageFocus: ImageFocus;
+  onImageFocusChange: (value: ImageFocus) => void;
   pasteUrl: string;
   onPasteUrlChange: (value: string) => void;
   mapsUrl: string;
@@ -338,6 +454,12 @@ function SpotFormFields({
         : null;
   const hasStay =
     Boolean(stayNights.trim()) || Boolean(stayCheckIn) || Boolean(stayCheckOut);
+  const autoImage =
+    !imageUrl && spot?.image_url && !spot.image_manual ? spot.image_url : null;
+  const previewSrc =
+    (imageUrl && !isAppMapPreviewUrl(imageUrl) ? imageUrl : null) ||
+    autoImage ||
+    (imageUrl || null);
 
   function clearStay() {
     onStayNightsChange("");
@@ -558,17 +680,20 @@ function SpotFormFields({
         </div>
       )}
 
-      {(imageUrl || (spot?.image_url && !spot.image_manual)) && (
-        <span className="mt-3 block overflow-hidden rounded-[14px]">
-          {/* eslint-disable-next-line @next/next/no-img-element */}
-          <img
-            src={imageUrl || spot?.image_url || ""}
-            alt=""
-            className="h-36 w-full object-cover"
-            referrerPolicy="no-referrer"
-          />
-        </span>
+      {previewSrc ? (
+        <ImageFocusEditor
+          src={previewSrc}
+          focus={imageFocus}
+          onChange={onImageFocusChange}
+        />
+      ) : (
+        <input type="hidden" name="image_focus" value="" />
       )}
+      {autoImage && isAppMapPreviewUrl(autoImage) && !imageUrl ? (
+        <p className="mt-2 text-[12px] text-[var(--ink-faint)]">
+          Automatische Karten-Vorschau — unter Details kannst du ein echtes Foto per URL setzen.
+        </p>
+      ) : null}
 
       <button
         type="button"
@@ -620,13 +745,18 @@ function SpotFormFields({
             ) : null}
             <input
               name="image_url"
-              type="url"
+              type="text"
+              inputMode="url"
+              autoComplete="off"
               value={imageUrl}
               onChange={(e) => onImageUrlChange(e.target.value)}
               className="glass-field mt-1.5 px-3 py-3"
-              placeholder="Leer = automatisch"
+              placeholder="https://… · leer = automatisch"
             />
           </label>
+          <p className="mt-1 text-[11px] text-[var(--ink-faint)]">
+            Direkter Link zu einem Foto (https://…). Leer lassen für Ortsfoto/Karten-Vorschau.
+          </p>
 
           {showOvernight && (
             <>
@@ -730,7 +860,9 @@ function applySmartLinkResult(
       options.setDescription(result.description);
     }
   }
-  if (result.imageUrl) options.setImageUrl(result.imageUrl);
+  if (result.imageUrl && !isAppMapPreviewUrl(result.imageUrl)) {
+    options.setImageUrl(result.imageUrl);
+  }
   if (result.overnightCost) options.setOvernightCost(result.overnightCost);
 }
 
@@ -746,6 +878,7 @@ export function CreateSpotForm({
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [imageUrl, setImageUrl] = useState("");
+  const [imageFocus, setImageFocus] = useState<ImageFocus>({ ...defaultImageFocus });
   const [pasteUrl, setPasteUrl] = useState("");
   const [mapsUrl, setMapsUrl] = useState("");
   const [infoUrl, setInfoUrl] = useState("");
@@ -777,6 +910,8 @@ export function CreateSpotForm({
         onDescriptionChange={setDescription}
         imageUrl={imageUrl}
         onImageUrlChange={setImageUrl}
+        imageFocus={imageFocus}
+        onImageFocusChange={setImageFocus}
         pasteUrl={pasteUrl}
         onPasteUrlChange={setPasteUrl}
         mapsUrl={mapsUrl}
@@ -834,15 +969,16 @@ export function EditSpotForm({
   const [name, setName] = useState(spot.name);
   const [description, setDescription] = useState(spot.description ?? "");
   const [imageUrl, setImageUrl] = useState(
-    spot.image_manual ? (spot.image_url ?? "") : "",
+    spot.image_manual ? (spot.image_url?.replace(/#.*$/, "") ?? "") : "",
   );
+  const [imageFocus, setImageFocus] = useState(() => parseImageFocus(spot.image_url));
   const [mapsUrl, setMapsUrl] = useState(spot.maps_url ?? "");
   const [infoUrl, setInfoUrl] = useState(spot.info_url ?? "");
   const [pasteUrl, setPasteUrl] = useState(spot.maps_url || spot.info_url || "");
   const [overnightCost, setOvernightCost] = useState(spot.overnight_cost ?? "");
+  // Only load explicit stay_nights — never ghost-fill from dates (blocked clearing).
   const [stayCheckIn, setStayCheckIn] = useState(spot.stay_check_in ?? "");
   const [stayCheckOut, setStayCheckOut] = useState(spot.stay_check_out ?? "");
-  // Only load explicit stay_nights — never ghost-fill from dates (blocked clearing).
   const [stayNights, setStayNights] = useState(
     spot.stay_nights != null ? String(spot.stay_nights) : "",
   );
@@ -891,6 +1027,8 @@ export function EditSpotForm({
           onDescriptionChange={setDescription}
           imageUrl={imageUrl}
           onImageUrlChange={setImageUrl}
+          imageFocus={imageFocus}
+          onImageFocusChange={setImageFocus}
           pasteUrl={pasteUrl}
           onPasteUrlChange={setPasteUrl}
           mapsUrl={mapsUrl}
