@@ -30,6 +30,7 @@ import {
 import { syncAllSpotStays } from "@/lib/apply-stay";
 import { createClient } from "@/lib/supabase/client";
 import { CategoryIcon } from "@/components/category-icon";
+import { GlassTimeField } from "@/components/ui/glass-time-field";
 import { formatStaySummary, stayStatusLabels } from "@/lib/stay";
 import { useEnrichedDayRoute } from "./use-enriched-day-route";
 import { TripRouteOverview } from "./trip-route-overview";
@@ -527,15 +528,11 @@ export function DayPlanPanel({
             <div className="mx-3 mb-3 flex flex-wrap items-end gap-3 rounded-[14px] bg-[var(--fjord-soft)]/35 px-3 py-2.5">
               <label className="form-label min-w-[7.5rem] flex-1">
                 Abfahrt
-                <input
-                  type="time"
+                <GlassTimeField
                   value={normalizeClockTime(selected.depart_at) ?? ""}
                   disabled={pending}
-                  className="glass-field mt-1.5 px-3 py-2 text-[14px]"
-                  onChange={(event) => {
-                    const value = event.target.value
-                      ? normalizeClockTime(event.target.value)
-                      : null;
+                  onChange={(clock) => {
+                    const value = clock ? normalizeClockTime(clock) : null;
                     patchSelectedDay((day) => ({ ...day, depart_at: value }));
                     run(() =>
                       updateDayPlanMetaClient(
