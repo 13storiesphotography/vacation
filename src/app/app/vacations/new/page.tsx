@@ -2,6 +2,7 @@
 
 import { useActionState } from "react";
 import Link from "next/link";
+import { GlassDateField } from "@/components/ui/glass-date-field";
 import { createVacation, type CreateVacationState } from "./actions";
 
 const initialState: CreateVacationState = {};
@@ -49,20 +50,16 @@ export default function NewVacationPage() {
         <div className="mt-4 grid grid-cols-2 gap-3">
           <label className="form-label">
             Start
-            <input
+            <GlassDateField
               name="start_date"
-              className="glass-field mt-1.5 px-3 py-3"
-              type="date"
               required
               defaultValue="2026-07-10"
             />
           </label>
           <label className="form-label">
             Ende
-            <input
+            <GlassDateField
               name="end_date"
-              className="glass-field mt-1.5 px-3 py-3"
-              type="date"
               required
               defaultValue="2026-07-24"
             />

@@ -30,6 +30,7 @@ import {
   type ImageFocus,
 } from "@/lib/image-focus";
 import { CategoryIcon } from "@/components/category-icon";
+import { GlassDateField } from "@/components/ui/glass-date-field";
 import { isStaleServerActionError, reloadForStaleDeployment } from "@/lib/stale-action";
 import {
   checkoutFromNights,
@@ -759,12 +760,10 @@ function SpotFormFields({
                   </button>
                 ) : null}
               </span>
-              <input
-                type="date"
+              <GlassDateField
                 name="stay_check_in"
                 value={stayCheckIn}
-                onChange={(e) => {
-                  const nextIn = e.target.value;
+                onChange={(nextIn) => {
                   onStayCheckInChange(nextIn);
                   if (!nextIn) {
                     onStayCheckOutChange("");
@@ -783,7 +782,6 @@ function SpotFormFields({
                     onStayCheckOutChange(checkoutFromNights(nextIn, 1));
                   }
                 }}
-                className="glass-field mt-1.5 px-3 py-3"
               />
             </label>
             <label className="form-label">
@@ -799,12 +797,11 @@ function SpotFormFields({
                   </button>
                 ) : null}
               </span>
-              <input
-                type="date"
+              <GlassDateField
                 name="stay_check_out"
                 value={stayCheckOut}
-                onChange={(e) => {
-                  const nextOut = e.target.value;
+                min={stayCheckIn || undefined}
+                onChange={(nextOut) => {
                   onStayCheckOutChange(nextOut);
                   if (!nextOut) return;
                   // Only sync nights from dates when the nights field already has a value.
@@ -817,7 +814,6 @@ function SpotFormFields({
                     if (n > 0) onStayNightsChange(String(n));
                   }
                 }}
-                className="glass-field mt-1.5 px-3 py-3"
               />
             </label>
           </div>
