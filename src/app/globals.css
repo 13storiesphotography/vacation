@@ -1034,8 +1034,14 @@ textarea {
 
   .dashboard-hero::before,
   .animate-rise,
-  .animate-float {
+  .animate-float,
+  .glass-date-popover {
     animation: none !important;
+  }
+
+  .glass-date-day,
+  .glass-date-nav {
+    transition: none;
   }
 }
 
