@@ -1210,46 +1210,42 @@ export function EditSpotForm({
           <p className="text-[13px] font-semibold text-[var(--ink-soft)]">
             Spot bearbeiten
           </p>
-          <button
-            type="button"
-            className="glass-chip glass-chip-danger shrink-0"
-            disabled={deleting || pending}
-            onClick={() => {
-              if (
-                !window.confirm(
-                  `„${spot.name}“ wirklich löschen? Das lässt sich nicht rückgängig machen.`,
-                )
-              ) {
-                return;
-              }
-              onDelete();
-            }}
-          >
-            {deleting ? "Löschen…" : "Löschen"}
-          </button>
-        </div>
-        {onToggleRelevant ? (
-          <div className="mb-3 flex items-center justify-between gap-3 rounded-[14px] border border-[var(--separator)] bg-[var(--fjord-soft)]/40 px-3 py-2.5">
-            <div className="min-w-0">
-              <p className="text-[13px] font-semibold text-[var(--ink)]">
-                {relevant ? "In der Auswahl" : "Zur Seite gelegt"}
-              </p>
-              <p className="text-[12px] text-[var(--ink-faint)]">
-                {relevant
-                  ? "Erscheint in Plan und auf der Karte."
-                  : "Bleibt in der Sammlung, aber nicht in Plan/Karte."}
-              </p>
-            </div>
+          <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+            {onToggleRelevant ? (
+              <button
+                type="button"
+                className="glass-chip"
+                data-active={!relevant}
+                disabled={pending}
+                title={
+                  relevant
+                    ? "Aus Plan und Karte nehmen, in der Sammlung behalten"
+                    : "Wieder in Plan und Karte aufnehmen"
+                }
+                onClick={onToggleRelevant}
+              >
+                {relevant ? "Archivieren" : "Wiederherstellen"}
+              </button>
+            ) : null}
             <button
               type="button"
-              className="glass-chip shrink-0"
-              data-active={!relevant}
-              onClick={onToggleRelevant}
+              className="glass-chip glass-chip-danger"
+              disabled={deleting || pending}
+              onClick={() => {
+                if (
+                  !window.confirm(
+                    `„${spot.name}“ wirklich löschen? Das lässt sich nicht rückgängig machen.`,
+                  )
+                ) {
+                  return;
+                }
+                onDelete();
+              }}
             >
-              {relevant ? "Zur Seite legen" : "Wieder dabei"}
+              {deleting ? "Löschen…" : "Löschen"}
             </button>
           </div>
-        ) : null}
+        </div>
         <SpotFormFields
           spot={spot}
           category={category}
@@ -1511,7 +1507,7 @@ export function SpotList({
 
       {shelvedCount > 0 ? (
         <p className="mb-3 text-[12px] text-[var(--ink-faint)]">
-          {shelvedCount} Spot{shelvedCount === 1 ? "" : "s"} zur Seite gelegt — unten in der
+          {shelvedCount} Spot{shelvedCount === 1 ? "" : "s"} archiviert — unten in der
           Liste, nicht in Plan/Karte.
         </p>
       ) : null}
@@ -1622,10 +1618,10 @@ export function SpotList({
                             type="button"
                             className="glass-chip !py-1 !text-[11px]"
                             data-active="true"
-                            title="Wieder in Plan und Karte aufnehmen"
+                            title="Wiederherstellen"
                             onClick={() => toggleRelevant(spot)}
                           >
-                            Zur Seite gelegt
+                            Archiviert
                           </button>
                         ) : null}
                         {spot.maps_url ? (

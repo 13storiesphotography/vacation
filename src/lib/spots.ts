@@ -42,7 +42,7 @@ export function isSpotRelevant(spot: { is_relevant?: boolean | null }): boolean 
   return spot.is_relevant !== false;
 }
 
-/** User-facing: shelved spots stay in the collection but leave Plan/Karte. */
+/** User-facing: archived spots stay in the collection but leave Plan/Karte. */
 export function isSpotShelved(spot: { is_relevant?: boolean | null }): boolean {
   return !isSpotRelevant(spot);
 }
