@@ -64,7 +64,7 @@ export default function DayRouteMapLeaflet({
         center={center}
         zoom={8}
         className="h-full w-full"
-        scrollWheelZoom={false}
+        scrollWheelZoom
       >
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>'
