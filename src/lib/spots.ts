@@ -36,3 +36,19 @@ export function parseTags(value: string): string[] {
     .map((tag) => tag.trim())
     .filter(Boolean);
 }
+
+/** Common trip tags — tap to toggle in the spot editor. */
+export const suggestedSpotTags = [
+  "Strand",
+  "Wald",
+  "See",
+  "Stadt",
+  "ruhig",
+  "Strom",
+  "Wasser",
+  "WLAN",
+  "Familie",
+  "Hund",
+  "Wanderung",
+  "Badestelle",
+] as const;
