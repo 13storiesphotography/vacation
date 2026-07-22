@@ -10,6 +10,7 @@ import { SpotMap } from "./spot-map";
 import { EditVacationForm } from "./vacation-edit";
 import { summarizeRatings, type RaterOption, type SpotRating } from "@/lib/ratings";
 import { resolveSpotPreviewImage } from "@/lib/geo";
+import { isSpotRelevant } from "@/lib/spots";
 import { healVacationSpotCoords } from "./maps-coords-actions";
 import {
   VacationTabBar,
@@ -223,6 +224,17 @@ export default function VacationDetailPage() {
       });
     },
     [currentUserId],
+  );
+
+  const applySpotPatch = useCallback((spotId: string, patch: Partial<Spot>) => {
+    setSpots((prev) =>
+      prev.map((spot) => (spot.id === spotId ? { ...spot, ...patch } : spot)),
+    );
+  }, []);
+
+  const relevantSpotCount = useMemo(
+    () => spots.filter((spot) => isSpotRelevant(spot)).length,
+    [spots],
   );
 
   const raters: RaterOption[] = useMemo(() => {
@@ -500,6 +512,9 @@ export default function VacationDetailPage() {
               <h1 className="display text-2xl">Spots</h1>
               <p className="tab-subtitle">
                 {spots.length} in der Sammlung
+                {spots.length > 0 && relevantSpotCount !== spots.length
+                  ? ` · ${relevantSpotCount} relevant`
+                  : ""}
               </p>
             </div>
             <button
@@ -532,6 +547,7 @@ export default function VacationDetailPage() {
             currentUserId={currentUserId}
             onChanged={load}
             onMyRatingPatch={applyMyRating}
+            onSpotPatch={applySpotPatch}
           />
         </VacationTabPanel>
       )}
@@ -539,9 +555,7 @@ export default function VacationDetailPage() {
       {visitedTabs.has("karte") && (
         <VacationTabPanel id="karte" active={tab === "karte"}>
           <h1 className="display text-2xl">Karte</h1>
-          <p className="tab-subtitle">
-            Alle Spots mit Position
-          </p>
+          <p className="tab-subtitle">Spots mit Position</p>
           <SpotMap spots={spots} summaries={summaries} active={tab === "karte"} />
         </VacationTabPanel>
       )}

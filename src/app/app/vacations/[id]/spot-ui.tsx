@@ -4,6 +4,7 @@ import { useActionState, useEffect, useMemo, useRef, useState, useTransition, ty
 import {
   categoryLabels,
   categoryOptions,
+  isSpotRelevant,
   suggestedSpotTags,
   type SpotCategory,
 } from "@/lib/spots";
@@ -1149,12 +1150,14 @@ export function EditSpotForm({
   spot,
   onDone,
   onDelete,
+  onToggleRelevant,
   deleting = false,
 }: {
   vacationId: string;
   spot: Spot;
   onDone: () => void;
   onDelete: () => void;
+  onToggleRelevant?: () => void;
   deleting?: boolean;
 }) {
   const [state, action, pending] = useActionState(updateSpot, initialState);
@@ -1178,6 +1181,7 @@ export function EditSpotForm({
   const [stayStatus, setStayStatus] = useState(spot.stay_status ?? "");
   const [tags, setTags] = useState<string[]>(() => [...(spot.tags ?? [])]);
   const [detailsOpen, setDetailsOpen] = useState(false);
+  const relevant = isSpotRelevant(spot);
 
   useEffect(() => {
     if (state.ok) onDone();
@@ -1224,6 +1228,28 @@ export function EditSpotForm({
             {deleting ? "Löschen…" : "Löschen"}
           </button>
         </div>
+        {onToggleRelevant ? (
+          <div className="mb-3 flex items-center justify-between gap-3 rounded-[14px] border border-[var(--separator)] bg-[var(--fjord-soft)]/40 px-3 py-2.5">
+            <div className="min-w-0">
+              <p className="text-[13px] font-semibold text-[var(--ink)]">
+                Für diese Reise
+              </p>
+              <p className="text-[12px] text-[var(--ink-faint)]">
+                {relevant
+                  ? "Relevant — erscheint in Plan und Karte."
+                  : "Nicht relevant — bleibt in der Sammlung, aber ausgeblendet."}
+              </p>
+            </div>
+            <button
+              type="button"
+              className="glass-chip shrink-0"
+              data-active={relevant}
+              onClick={onToggleRelevant}
+            >
+              {relevant ? "Relevant" : "Nicht relevant"}
+            </button>
+          </div>
+        ) : null}
         <SpotFormFields
           spot={spot}
           category={category}
@@ -1292,6 +1318,7 @@ export function EditSpotForm({
 }
 
 type SortMode = "newest" | "favorites" | "avg" | "mine";
+type RelevanceFilter = "alle" | "relevant" | "nicht";
 
 function formatAvg(value: number | null): string {
   if (value == null) return "–";
@@ -1308,6 +1335,7 @@ export function SpotList({
   currentUserId,
   onChanged,
   onMyRatingPatch,
+  onSpotPatch,
 }: {
   vacationId: string;
   spots: Spot[];
@@ -1320,16 +1348,30 @@ export function SpotList({
     spotId: string,
     patch: { rating?: number | null; isFavorite?: boolean },
   ) => void;
+  onSpotPatch: (spotId: string, patch: Partial<Spot>) => void;
 }) {
   const [filter, setFilter] = useState<"alle" | SpotCategory>("alle");
+  const [relevance, setRelevance] = useState<RelevanceFilter>("alle");
   const [sortMode, setSortMode] = useState<SortMode>("newest");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
+  const relevantCount = useMemo(
+    () => spots.filter((spot) => isSpotRelevant(spot)).length,
+    [spots],
+  );
+  const notRelevantCount = spots.length - relevantCount;
+
   const visibleSpots = useMemo(() => {
-    const list =
+    let list =
       filter === "alle" ? [...spots] : spots.filter((spot) => spot.category === filter);
+
+    if (relevance === "relevant") {
+      list = list.filter((spot) => isSpotRelevant(spot));
+    } else if (relevance === "nicht") {
+      list = list.filter((spot) => !isSpotRelevant(spot));
+    }
 
     list.sort((a, b) => {
       const summaryA = summaries[a.id] ?? emptySummary();
@@ -1347,11 +1389,17 @@ export function SpotList({
       if (sortMode === "mine") {
         return (summaryB.myRating ?? -1) - (summaryA.myRating ?? -1);
       }
+      // Newest: keep DB order, but sink non-relevant when showing all.
+      if (relevance === "alle") {
+        const aRel = isSpotRelevant(a) ? 0 : 1;
+        const bRel = isSpotRelevant(b) ? 0 : 1;
+        if (aRel !== bRel) return aRel - bRel;
+      }
       return 0;
     });
 
     return list;
-  }, [filter, sortMode, spots, summaries]);
+  }, [filter, relevance, sortMode, spots, summaries]);
 
   async function onDelete(spotId: string) {
     setDeletingId(spotId);
@@ -1406,6 +1454,27 @@ export function SpotList({
     })();
   }
 
+  function toggleRelevant(spot: Spot) {
+    const next = !isSpotRelevant(spot);
+    const previous = spot.is_relevant;
+    setError(null);
+    onSpotPatch(spot.id, { is_relevant: next });
+
+    void (async () => {
+      const supabase = createClient();
+      const { error: updateError } = await supabase
+        .from("spots")
+        .update({ is_relevant: next })
+        .eq("id", spot.id)
+        .eq("vacation_id", vacationId);
+
+      if (updateError) {
+        onSpotPatch(spot.id, { is_relevant: previous });
+        setError(updateError.message);
+      }
+    })();
+  }
+
   return (
     <div className="mt-3">
       <div className="mb-3 flex flex-wrap items-center gap-2">
@@ -1435,6 +1504,26 @@ export function SpotList({
         ))}
       </div>
 
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        {(
+          [
+            ["alle", `Alle (${spots.length})`],
+            ["relevant", `Relevant (${relevantCount})`],
+            ["nicht", `Nicht relevant (${notRelevantCount})`],
+          ] as const
+        ).map(([value, label]) => (
+          <button
+            key={value}
+            type="button"
+            onClick={() => setRelevance(value)}
+            className="glass-chip"
+            data-active={relevance === value}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+
       <div className="mb-3">
         <label className="form-label">
           Sortierung
@@ -1456,12 +1545,15 @@ export function SpotList({
       <div className="ios-group">
         {visibleSpots.length === 0 ? (
           <div className="p-5 text-[14px] text-[var(--ink-soft)]">
-            Noch keine Spots in dieser Kategorie.
+            {spots.length === 0
+              ? "Noch keine Spots in dieser Kategorie."
+              : "Keine Spots für diesen Filter."}
           </div>
         ) : (
           visibleSpots.map((spot) => {
             const summary = summaries[spot.id] ?? emptySummary();
             const isOpen = editingId === spot.id;
+            const relevant = isSpotRelevant(spot);
             function openEdit() {
               setEditingId((current) => (current === spot.id ? null : spot.id));
             }
@@ -1470,7 +1562,7 @@ export function SpotList({
                 <div
                   className={`ios-row !items-center !py-2.5 cursor-pointer ${
                     isOpen ? "bg-[rgba(15,110,140,0.06)]" : ""
-                  }`}
+                  } ${relevant ? "" : "opacity-55"}`}
                   onClick={openEdit}
                 >
                   <SpotThumb
@@ -1488,6 +1580,7 @@ export function SpotList({
                         <div className="mt-0.5 text-[12px] leading-snug text-[var(--ink-soft)]">
                           <span className="min-w-0">
                             {categoryLabels[spot.category]}
+                            {!relevant ? " · nicht relevant" : ""}
                             {spot.overnight_cost ? ` · ${spot.overnight_cost}` : ""}
                             {spot.price_hint ? ` · ${spot.price_hint}` : ""}
                             {formatStaySummary(spot)
@@ -1518,6 +1611,27 @@ export function SpotList({
                         onClick={(event) => event.stopPropagation()}
                         onKeyDown={(event) => event.stopPropagation()}
                       >
+                        <button
+                          type="button"
+                          className={`inline-flex h-6 min-w-6 items-center justify-center rounded-full px-1 text-[11px] font-bold leading-none ${
+                            relevant
+                              ? "bg-[var(--fjord-soft)] text-[var(--fjord)]"
+                              : "bg-black/6 text-[var(--ink-faint)]"
+                          }`}
+                          aria-label={
+                            relevant
+                              ? "Als nicht relevant markieren"
+                              : "Als relevant markieren"
+                          }
+                          title={
+                            relevant
+                              ? "Für diese Reise relevant — tippen zum Abwählen"
+                              : "Nicht relevant — tippen zum Aktivieren"
+                          }
+                          onClick={() => toggleRelevant(spot)}
+                        >
+                          {relevant ? "✓" : "–"}
+                        </button>
                         <Stars
                           value={summary.myRating}
                           onChange={(value) => saveRating(spot.id, { rating: value })}
@@ -1583,6 +1697,7 @@ export function SpotList({
                       setEditingId(null);
                       onChanged();
                     }}
+                    onToggleRelevant={() => toggleRelevant(spot)}
                   />
                 )}
               </div>

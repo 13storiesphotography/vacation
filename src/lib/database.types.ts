@@ -116,6 +116,7 @@ export type Database = {
           stay_nights: number | null;
           stay_status: "interessiert" | "gebucht" | null;
           tags: string[];
+          is_relevant: boolean;
           created_by: string | null;
           created_at: string;
         };
@@ -144,6 +145,7 @@ export type Database = {
           stay_nights?: number | null;
           stay_status?: "interessiert" | "gebucht" | null;
           tags?: string[];
+          is_relevant?: boolean;
           created_by?: string | null;
           created_at?: string;
         };
@@ -172,6 +174,7 @@ export type Database = {
           stay_nights?: number | null;
           stay_status?: "interessiert" | "gebucht" | null;
           tags?: string[];
+          is_relevant?: boolean;
           created_by?: string | null;
           created_at?: string;
         };

@@ -5,6 +5,7 @@ import { useEffect, useMemo, useState } from "react";
 import {
   categoryLabels,
   categoryOptions,
+  isSpotRelevant,
   type SpotCategory,
 } from "@/lib/spots";
 import { resolveSpotCoords } from "@/lib/geo";
@@ -27,6 +28,7 @@ const SpotMapCanvas = dynamic(() => import("./spot-map-canvas"), {
 
 type MapFilter = "alle" | SpotCategory;
 type FocusMode = "all" | "favorites" | "rated";
+type RelevanceMode = "relevant" | "all";
 
 export function SpotMap({
   spots,
@@ -40,6 +42,7 @@ export function SpotMap({
 }) {
   const [filter, setFilter] = useState<MapFilter>("alle");
   const [focus, setFocus] = useState<FocusMode>("all");
+  const [relevanceMode, setRelevanceMode] = useState<RelevanceMode>("relevant");
   const [minAvg, setMinAvg] = useState(0);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [expanded, setExpanded] = useState(false);
@@ -85,6 +88,7 @@ export function SpotMap({
 
   const visible = useMemo(() => {
     return mappable.filter((spot) => {
+      if (relevanceMode === "relevant" && !isSpotRelevant(spot)) return false;
       if (filter !== "alle" && spot.category !== filter) return false;
       const summary = summaries[spot.id] ?? emptySummary();
       if (focus === "favorites" && !summary.myFavorite) return false;
@@ -92,7 +96,7 @@ export function SpotMap({
       if (minAvg > 0 && (summary.average ?? 0) < minAvg) return false;
       return true;
     });
-  }, [filter, focus, mappable, minAvg, summaries]);
+  }, [filter, focus, mappable, minAvg, relevanceMode, summaries]);
 
   const selected = visible.find((spot) => spot.id === selectedId) ?? null;
 
@@ -123,6 +127,25 @@ export function SpotMap({
             {categoryLabels[option]}
           </button>
         ))}
+      </div>
+
+      <div className="mb-3 flex flex-wrap items-center gap-2">
+        <button
+          type="button"
+          className="glass-chip"
+          data-active={relevanceMode === "relevant"}
+          onClick={() => setRelevanceMode("relevant")}
+        >
+          Nur relevant
+        </button>
+        <button
+          type="button"
+          className="glass-chip"
+          data-active={relevanceMode === "all"}
+          onClick={() => setRelevanceMode("all")}
+        >
+          Auch nicht relevant
+        </button>
       </div>
 
       <div className="mb-3 grid gap-2 sm:grid-cols-2">

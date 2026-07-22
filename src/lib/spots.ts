@@ -37,6 +37,11 @@ export function parseTags(value: string): string[] {
     .filter(Boolean);
 }
 
+/** Shared trip decision — default true for older rows / unset. */
+export function isSpotRelevant(spot: { is_relevant?: boolean | null }): boolean {
+  return spot.is_relevant !== false;
+}
+
 /** Common trip tags — tap to toggle in the spot editor. */
 export const suggestedSpotTags = [
   "Strand",
