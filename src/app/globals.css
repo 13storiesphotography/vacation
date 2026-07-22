@@ -462,6 +462,7 @@ textarea {
 
 /*
  * Liquid Glass tab bar (Instagram / iOS 26-inspired web approximation).
+ * Fixed on all breakpoints: bottom on mobile, under topbar on desktop.
  * Clearer glass: low-opacity fill + strong blur. Snappy index-based thumb.
  */
 .app-tabbar {
