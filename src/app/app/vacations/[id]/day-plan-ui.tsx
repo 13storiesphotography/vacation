@@ -176,7 +176,7 @@ export function DayPlanPanel({
         (spot) =>
           isOvernightCategory(spot.category as SpotCategory) &&
           (isSpotRelevant(spot) ||
-            // Keep currently selected overnight visible even if marked not relevant.
+            // Keep currently selected overnight visible even if shelved.
             spot.id === selected?.overnight_spot_id),
       ),
     [spots, selected?.overnight_spot_id],
@@ -600,7 +600,7 @@ export function DayPlanPanel({
                           </p>
                           <p className="text-[11px] text-[var(--ink-faint)]">
                             {categoryLabels[spot.category as SpotCategory]}
-                            {!relevant ? " · nicht relevant" : ""}
+                            {!relevant ? " · zur Seite gelegt" : ""}
                             {isEditing ? " · wird bearbeitet" : ""}
                           </p>
                         </button>
