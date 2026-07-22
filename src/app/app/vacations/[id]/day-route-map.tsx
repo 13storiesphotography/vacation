@@ -24,9 +24,12 @@ const DayRouteMapLeaflet = dynamic(() => import("./day-route-map-leaflet"), {
 
 export default function DayRouteMap({
   waypoints,
+  encodedPolyline = null,
   active = true,
 }: {
   waypoints: RouteWaypoint[];
+  /** Google-encoded road polyline — only used with Google Maps (not Leaflet/OSM). */
+  encodedPolyline?: string | null;
   active?: boolean;
 }) {
   if (waypoints.length === 0) {
@@ -38,7 +41,13 @@ export default function DayRouteMap({
   }
 
   if (getBrowserGoogleMapsKey()) {
-    return <DayRouteMapGoogle waypoints={waypoints} active={active} />;
+    return (
+      <DayRouteMapGoogle
+        waypoints={waypoints}
+        encodedPolyline={encodedPolyline}
+        active={active}
+      />
+    );
   }
   return <DayRouteMapLeaflet waypoints={waypoints} />;
 }

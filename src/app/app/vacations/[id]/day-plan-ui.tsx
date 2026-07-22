@@ -16,15 +16,18 @@ import {
 import {
   buildDayRoute,
   buildTripRoutes,
+  formatLegMeta,
   formatRouteDuration,
   formatRouteKm,
   googleMapsDirectionsUrl,
+  routeSourceHint,
 } from "@/lib/day-route";
 import { syncAllSpotStays } from "@/lib/apply-stay";
 import { createClient } from "@/lib/supabase/client";
 import { CategoryIcon } from "@/components/category-icon";
 import { formatStaySummary, stayStatusLabels } from "@/lib/stay";
 import DayRouteMap from "./day-route-map";
+import { useEnrichedDayRoute } from "./use-enriched-day-route";
 
 type Spot = Database["public"]["Tables"]["spots"]["Row"];
 type Vacation = Database["public"]["Tables"]["vacations"]["Row"];
@@ -222,6 +225,17 @@ export function DayPlanPanel({
 
   const daysWithStops = days.filter((day) => day.stops.length > 0).length;
 
+  const selectedRouteEstimate = useMemo(
+    () =>
+      selected ? buildDayRoute(selected, spotsById, selectedIndex) : null,
+    [selected, spotsById, selectedIndex],
+  );
+  const {
+    route: selectedRoute,
+    loading: routeEnriching,
+    source: routeSource,
+  } = useEnrichedDayRoute(selectedRouteEstimate);
+
   function patchSelectedDay(
     updater: (day: DayPlanWithStops) => DayPlanWithStops,
   ) {
@@ -326,9 +340,6 @@ export function DayPlanPanel({
     vacation.type === "van" ||
     vacation.type === "camping" ||
     vacation.type === "hotel";
-  const selectedRoute = selected
-    ? buildDayRoute(selected, spotsById, selectedIndex)
-    : null;
   const directionsUrl = selectedRoute
     ? googleMapsDirectionsUrl(selectedRoute.waypoints)
     : null;
@@ -364,7 +375,7 @@ export function DayPlanPanel({
               Route über alle Tage
             </p>
             <p className="mt-1 text-[12px] text-[var(--ink-faint)]">
-              Grobe Schätzung (Straßenfaktor, Van-Tempo) — nicht Navigation.
+              Überblick über alle Tage — Etappen-Details mit Google-Routenzeit im Tagesplan.
             </p>
           </div>
           <ul className="divide-y divide-[var(--separator)] px-2 pb-2">
@@ -715,8 +726,10 @@ export function DayPlanPanel({
                       </div>
                       {legAfter ? (
                         <p className="px-4 pb-1 pl-11 text-[11px] font-medium text-[var(--ink-faint)]">
-                          ↓ ca. {formatRouteKm(legAfter.km)} · ~
-                          {formatRouteDuration(legAfter.minutes)}
+                          ↓ {formatLegMeta(legAfter)}
+                          {legAfter.source === "estimate" && routeEnriching
+                            ? " · lädt…"
+                            : ""}
                         </p>
                       ) : null}
                     </li>
@@ -793,11 +806,19 @@ export function DayPlanPanel({
                     {selectedRoute.waypoints.length} Stop
                     {selectedRoute.waypoints.length === 1 ? "" : "s"}
                     {selectedRoute.legs.length > 0
-                      ? ` · ca. ${formatRouteKm(selectedRoute.totalKm)} · ~${formatRouteDuration(selectedRoute.totalMinutes)}`
+                      ? ` · ${
+                          routeSource === "google" ? "" : "ca. "
+                        }${formatRouteKm(selectedRoute.totalKm)} · ${
+                          routeSource === "google" ? "" : "~"
+                        }${formatRouteDuration(selectedRoute.totalMinutes)}`
                       : ""}
+                    {routeEnriching ? " · Routenzeit…" : ""}
                   </p>
                   <p className="mt-1 text-[12px] text-[var(--ink-faint)]">
-                    Reihenfolge wie im Plan. Schätzung (Straßenfaktor, Van-Tempo).
+                    Reihenfolge wie im Plan · {routeSourceHint(routeSource)}
+                    {routeSource === "estimate"
+                      ? " (Straßenfaktor, bis Google Routes greift)"
+                      : ""}
                   </p>
                 </div>
                 {directionsUrl ? (
@@ -813,7 +834,10 @@ export function DayPlanPanel({
                 ) : null}
               </div>
               <div className="px-3 pb-3">
-                <DayRouteMap waypoints={selectedRoute.waypoints} />
+                <DayRouteMap
+                  waypoints={selectedRoute.waypoints}
+                  encodedPolyline={selectedRoute.encodedPolyline}
+                />
               </div>
               {selectedRoute.legs.length > 0 ? (
                 <ul className="divide-y divide-[var(--separator)] border-t border-[var(--separator)] px-2 pb-2">
@@ -832,9 +856,9 @@ export function DayPlanPanel({
                         </span>
                       </p>
                       <p className="shrink-0 text-right text-[12px] font-semibold text-[var(--ink-soft)]">
-                        {formatRouteKm(leg.km)}
+                        {formatLegMeta(leg)}
                         <span className="block text-[11px] font-medium text-[var(--ink-faint)]">
-                          ~{formatRouteDuration(leg.minutes)}
+                          {routeSourceHint(leg.source)}
                         </span>
                       </p>
                     </li>

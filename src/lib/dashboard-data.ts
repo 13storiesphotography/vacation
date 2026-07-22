@@ -5,10 +5,13 @@ import {
   pickFeaturedVacation,
   todayIso,
   type DashboardPayload,
+  type FeaturedDashboard,
   type SpotRow,
   type VacationSummary,
 } from "@/lib/dashboard";
+import { formatRouteDuration, formatRouteKm } from "@/lib/day-route";
 import { resolveSpotCoords } from "@/lib/geo";
+import { enrichDayRoute, enrichDrivingLeg } from "@/lib/route-enrichment";
 import { fetchDailyWeather } from "@/lib/weather";
 
 function weatherWindow(today: string, focusDate: string | null, endDate: string) {
@@ -16,6 +19,37 @@ function weatherWindow(today: string, focusDate: string | null, endDate: string)
   // Open-Meteo accepts a range; keep it tight to reduce payload.
   const end = endDate < start ? start : endDate;
   return { start, end };
+}
+
+async function enrichFeaturedDayRoute(
+  featured: FeaturedDashboard,
+): Promise<FeaturedDashboard> {
+  if (!featured.route || featured.route.legs.length === 0) return featured;
+  const route = await enrichDayRoute(featured.route);
+  const first = route.legs[0];
+  const fromWp = first
+    ? route.waypoints.find((point) => point.spotId === first.fromSpotId)
+    : null;
+  const toWp = first
+    ? route.waypoints.find((point) => point.spotId === first.toSpotId)
+    : null;
+  return {
+    ...featured,
+    route,
+    nextLeg: first
+      ? {
+          fromName: first.fromName,
+          toName: first.toName,
+          km: first.km,
+          minutes: first.minutes,
+          kmLabel: formatRouteKm(first.km),
+          durationLabel: formatRouteDuration(first.minutes),
+          source: first.source,
+          fromCoords: fromWp?.coords ?? null,
+          toCoords: toWp?.coords ?? null,
+        }
+      : featured.nextLeg,
+  };
 }
 
 export async function loadDashboardPayload(): Promise<DashboardPayload> {
@@ -83,13 +117,35 @@ export async function loadDashboardPayload(): Promise<DashboardPayload> {
     }
   }
 
-  const featured = buildFeaturedDashboard({
+  let featured = buildFeaturedDashboard({
     vacation: featuredVacation,
     spots: spotRows,
     days,
     weatherByDate,
     today,
   });
+
+  featured = await enrichFeaturedDayRoute(featured);
+
+  if (featured.arrivalLeg?.fromCoords && featured.arrivalLeg?.toCoords) {
+    const google = await enrichDrivingLeg(
+      featured.arrivalLeg.fromCoords,
+      featured.arrivalLeg.toCoords,
+    );
+    if (google) {
+      featured = {
+        ...featured,
+        arrivalLeg: {
+          ...featured.arrivalLeg,
+          km: google.km,
+          minutes: google.minutes,
+          kmLabel: formatRouteKm(google.km),
+          durationLabel: formatRouteDuration(google.minutes),
+          source: google.source,
+        },
+      };
+    }
+  }
 
   return { featured, others };
 }

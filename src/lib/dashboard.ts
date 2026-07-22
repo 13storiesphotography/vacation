@@ -38,6 +38,9 @@ export type DashboardLeg = {
   minutes: number;
   kmLabel: string;
   durationLabel: string;
+  source: "google" | "estimate";
+  fromCoords?: LatLng | null;
+  toCoords?: LatLng | null;
 };
 
 export type FeaturedDashboard = {
@@ -239,6 +242,8 @@ export function buildFeaturedDashboard(input: {
   let nextLeg: DashboardLeg | null = null;
   if (route && route.legs.length > 0) {
     const leg = route.legs[0];
+    const fromWp = route.waypoints.find((point) => point.spotId === leg.fromSpotId);
+    const toWp = route.waypoints.find((point) => point.spotId === leg.toSpotId);
     nextLeg = {
       fromName: leg.fromName,
       toName: leg.toName,
@@ -246,6 +251,9 @@ export function buildFeaturedDashboard(input: {
       minutes: leg.minutes,
       kmLabel: formatRouteKm(leg.km),
       durationLabel: formatRouteDuration(leg.minutes),
+      source: leg.source,
+      fromCoords: fromWp?.coords ?? null,
+      toCoords: toWp?.coords ?? null,
     };
   }
 
@@ -262,6 +270,9 @@ export function buildFeaturedDashboard(input: {
       minutes,
       kmLabel: formatRouteKm(km),
       durationLabel: formatRouteDuration(minutes),
+      source: "estimate",
+      fromCoords: origin.coords,
+      toCoords: firstPlace.coords,
     };
   }
 

@@ -18,7 +18,7 @@ async function ensureMapsApi(apiKey: string) {
     });
     mapsOptionsReady = true;
   }
-  await importLibrary("maps");
+  await Promise.all([importLibrary("maps"), importLibrary("geometry")]);
 }
 
 function numberMarkerIcon(order: number, overnight: boolean): string {
@@ -35,9 +35,11 @@ function numberMarkerIcon(order: number, overnight: boolean): string {
 
 export default function DayRouteMapGoogle({
   waypoints,
+  encodedPolyline = null,
   active = true,
 }: {
   waypoints: RouteWaypoint[];
+  encodedPolyline?: string | null;
   active?: boolean;
 }) {
   const apiKey = getBrowserGoogleMapsKey();
@@ -75,10 +77,15 @@ export default function DayRouteMapGoogle({
         markersRef.current = [];
         lineRef.current?.setMap(null);
 
-        const path = waypoints.map((point) => point.coords);
+        let path: google.maps.LatLngLiteral[] | google.maps.LatLng[] =
+          waypoints.map((point) => point.coords);
+        if (encodedPolyline && google.maps.geometry?.encoding?.decodePath) {
+          path = google.maps.geometry.encoding.decodePath(encodedPolyline);
+        }
+
         lineRef.current = new google.maps.Polyline({
           path,
-          geodesic: true,
+          geodesic: !encodedPolyline,
           strokeColor: "#0f6e8c",
           strokeOpacity: 0.85,
           strokeWeight: 4,
@@ -116,7 +123,7 @@ export default function DayRouteMapGoogle({
     return () => {
       cancelled = true;
     };
-  }, [apiKey, waypoints]);
+  }, [apiKey, waypoints, encodedPolyline]);
 
   useEffect(() => {
     if (!active || !mapRef.current) return;
