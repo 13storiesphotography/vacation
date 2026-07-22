@@ -13,10 +13,18 @@ import {
   setDayOvernightClient,
   updateDayPlanMetaClient,
 } from "@/lib/day-plans-api";
+import {
+  buildDayRoute,
+  buildTripRoutes,
+  formatRouteDuration,
+  formatRouteKm,
+  googleMapsDirectionsUrl,
+} from "@/lib/day-route";
 import { syncAllSpotStays } from "@/lib/apply-stay";
 import { createClient } from "@/lib/supabase/client";
 import { CategoryIcon } from "@/components/category-icon";
 import { formatStaySummary, stayStatusLabels } from "@/lib/stay";
+import DayRouteMap from "./day-route-map";
 
 type Spot = Database["public"]["Tables"]["spots"]["Row"];
 type Vacation = Database["public"]["Tables"]["vacations"]["Row"];
@@ -88,6 +96,11 @@ export function DayPlanPanel({
   const overnightCandidates = useMemo(
     () => spots.filter((spot) => isOvernightCategory(spot.category as SpotCategory)),
     [spots],
+  );
+
+  const tripRoutes = useMemo(
+    () => buildTripRoutes(days, spotsById),
+    [days, spotsById],
   );
 
   async function reload(preferId?: string | null) {
@@ -301,6 +314,12 @@ export function DayPlanPanel({
     vacation.type === "van" ||
     vacation.type === "camping" ||
     vacation.type === "hotel";
+  const selectedRoute = selected
+    ? buildDayRoute(selected, spotsById, selectedIndex)
+    : null;
+  const directionsUrl = selectedRoute
+    ? googleMapsDirectionsUrl(selectedRoute.waypoints)
+    : null;
 
   return (
     <div className="mt-3 space-y-4">
@@ -315,6 +334,9 @@ export function DayPlanPanel({
             {daysWithStops}/{days.length}
           </span>{" "}
           Tage befüllt
+          {tripRoutes.daysWithRoute > 0
+            ? ` · ca. ${formatRouteKm(tripRoutes.totalKm)} · ~${formatRouteDuration(tripRoutes.totalMinutes)}`
+            : ""}
           {unplannedSpots.length > 0
             ? ` · ${unplannedSpots.length} Spot${unplannedSpots.length === 1 ? "" : "s"} noch offen`
             : spots.length > 0
@@ -322,6 +344,48 @@ export function DayPlanPanel({
               : ""}
         </p>
       </div>
+
+      {tripRoutes.daysWithRoute > 1 ? (
+        <div className="ios-group overflow-hidden">
+          <div className="px-4 pt-3.5 pb-2">
+            <p className="text-[12px] font-semibold uppercase tracking-wide text-[var(--fjord)]">
+              Route über alle Tage
+            </p>
+            <p className="mt-1 text-[12px] text-[var(--ink-faint)]">
+              Grobe Schätzung (Straßenfaktor, Van-Tempo) — nicht Navigation.
+            </p>
+          </div>
+          <ul className="divide-y divide-[var(--separator)] px-2 pb-2">
+            {tripRoutes.days
+              .filter((route) => route.legs.length > 0)
+              .map((route) => (
+                <li key={route.dayId}>
+                  <button
+                    type="button"
+                    className="flex w-full items-center gap-3 rounded-[12px] px-2 py-2.5 text-left hover:bg-[var(--fjord-soft)]"
+                    onClick={() => selectDay(route.dayId)}
+                  >
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-[14px] font-semibold">
+                        {route.title}
+                      </span>
+                      <span className="text-[11px] text-[var(--ink-faint)]">
+                        {route.label} · {route.waypoints.length} Stop
+                        {route.waypoints.length === 1 ? "" : "s"}
+                      </span>
+                    </span>
+                    <span className="shrink-0 text-right text-[12px] font-semibold text-[var(--ink-soft)]">
+                      {formatRouteKm(route.totalKm)}
+                      <span className="block text-[11px] font-medium text-[var(--ink-faint)]">
+                        ~{formatRouteDuration(route.totalMinutes)}
+                      </span>
+                    </span>
+                  </button>
+                </li>
+              ))}
+          </ul>
+        </div>
+      ) : null}
 
       {/* Day strip */}
       <div
@@ -517,122 +581,130 @@ export function DayPlanPanel({
                 {selected.stops.map((stop, index) => {
                   const spot = spotsById.get(stop.spot_id);
                   if (!spot) return null;
+                  const legAfter = selectedRoute?.legs.find(
+                    (leg) => leg.fromSpotId === stop.spot_id,
+                  );
                   return (
-                    <li
-                      key={stop.id}
-                      className="flex items-center gap-2 rounded-[14px] px-2 py-2"
-                    >
-                      <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[var(--fjord-soft)] text-[12px] font-bold text-[var(--fjord)]">
-                        {index + 1}
-                      </span>
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-[15px] font-semibold">
-                          {spot.name}
-                        </p>
-                        <p className="text-[11px] text-[var(--ink-faint)]">
-                          {categoryLabels[spot.category as SpotCategory]}
-                        </p>
-                      </div>
-                      <div className="flex shrink-0 items-center">
-                        <button
-                          type="button"
-                          className="plan-icon-btn"
-                          disabled={pending || index === 0}
-                          aria-label="Nach oben"
-                          onClick={() =>
-                            run(
-                              () =>
-                                moveSpotOnDayClient(
-                                  createClient(),
-                                  selected.id,
-                                  spot.id,
-                                  "up",
-                                ),
-                              () => {
-                                patchSelectedDay((day) => {
-                                  const stops = [...day.stops];
-                                  const i = stops.findIndex(
-                                    (entry) => entry.spot_id === spot.id,
-                                  );
-                                  if (i <= 0) return day;
-                                  const copy = [...stops];
-                                  [copy[i - 1], copy[i]] = [
-                                    copy[i],
-                                    copy[i - 1],
-                                  ];
-                                  return { ...day, stops: copy };
-                                });
-                              },
-                            )
-                          }
-                        >
-                          ↑
-                        </button>
-                        <button
-                          type="button"
-                          className="plan-icon-btn"
-                          disabled={
-                            pending || index === selected.stops.length - 1
-                          }
-                          aria-label="Nach unten"
-                          onClick={() =>
-                            run(
-                              () =>
-                                moveSpotOnDayClient(
-                                  createClient(),
-                                  selected.id,
-                                  spot.id,
-                                  "down",
-                                ),
-                              () => {
-                                patchSelectedDay((day) => {
-                                  const stops = [...day.stops];
-                                  const i = stops.findIndex(
-                                    (entry) => entry.spot_id === spot.id,
-                                  );
-                                  if (i < 0 || i >= stops.length - 1) {
-                                    return day;
-                                  }
-                                  const copy = [...stops];
-                                  [copy[i], copy[i + 1]] = [
-                                    copy[i + 1],
-                                    copy[i],
-                                  ];
-                                  return { ...day, stops: copy };
-                                });
-                              },
-                            )
-                          }
-                        >
-                          ↓
-                        </button>
-                        <button
-                          type="button"
-                          className="plan-icon-btn text-[var(--danger)]"
-                          disabled={pending}
-                          aria-label="Entfernen"
-                          onClick={() =>
-                            run(
-                              () =>
-                                removeSpotFromDayClient(
-                                  createClient(),
-                                  selected.id,
-                                  spot.id,
-                                ),
-                              () => {
-                                patchSelectedDay((day) => ({
-                                  ...day,
-                                  stops: day.stops.filter(
-                                    (entry) => entry.spot_id !== spot.id,
+                    <li key={stop.id}>
+                      <div className="flex items-center gap-2 rounded-[14px] px-2 py-2">
+                        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[var(--fjord-soft)] text-[12px] font-bold text-[var(--fjord)]">
+                          {index + 1}
+                        </span>
+                        <div className="min-w-0 flex-1">
+                          <p className="truncate text-[15px] font-semibold">
+                            {spot.name}
+                          </p>
+                          <p className="text-[11px] text-[var(--ink-faint)]">
+                            {categoryLabels[spot.category as SpotCategory]}
+                          </p>
+                        </div>
+                        <div className="flex shrink-0 items-center">
+                          <button
+                            type="button"
+                            className="plan-icon-btn"
+                            disabled={pending || index === 0}
+                            aria-label="Nach oben"
+                            onClick={() =>
+                              run(
+                                () =>
+                                  moveSpotOnDayClient(
+                                    createClient(),
+                                    selected.id,
+                                    spot.id,
+                                    "up",
                                   ),
-                                }));
-                              },
-                            )
-                          }
-                        >
-                          ×
-                        </button>
+                                () => {
+                                  patchSelectedDay((day) => {
+                                    const stops = [...day.stops];
+                                    const i = stops.findIndex(
+                                      (entry) => entry.spot_id === spot.id,
+                                    );
+                                    if (i <= 0) return day;
+                                    const copy = [...stops];
+                                    [copy[i - 1], copy[i]] = [
+                                      copy[i],
+                                      copy[i - 1],
+                                    ];
+                                    return { ...day, stops: copy };
+                                  });
+                                },
+                              )
+                            }
+                          >
+                            ↑
+                          </button>
+                          <button
+                            type="button"
+                            className="plan-icon-btn"
+                            disabled={
+                              pending || index === selected.stops.length - 1
+                            }
+                            aria-label="Nach unten"
+                            onClick={() =>
+                              run(
+                                () =>
+                                  moveSpotOnDayClient(
+                                    createClient(),
+                                    selected.id,
+                                    spot.id,
+                                    "down",
+                                  ),
+                                () => {
+                                  patchSelectedDay((day) => {
+                                    const stops = [...day.stops];
+                                    const i = stops.findIndex(
+                                      (entry) => entry.spot_id === spot.id,
+                                    );
+                                    if (i < 0 || i >= stops.length - 1) {
+                                      return day;
+                                    }
+                                    const copy = [...stops];
+                                    [copy[i], copy[i + 1]] = [
+                                      copy[i + 1],
+                                      copy[i],
+                                    ];
+                                    return { ...day, stops: copy };
+                                  });
+                                },
+                              )
+                            }
+                          >
+                            ↓
+                          </button>
+                          <button
+                            type="button"
+                            className="plan-icon-btn text-[var(--danger)]"
+                            disabled={pending}
+                            aria-label="Entfernen"
+                            onClick={() =>
+                              run(
+                                () =>
+                                  removeSpotFromDayClient(
+                                    createClient(),
+                                    selected.id,
+                                    spot.id,
+                                  ),
+                                () => {
+                                  patchSelectedDay((day) => ({
+                                    ...day,
+                                    stops: day.stops.filter(
+                                      (entry) => entry.spot_id !== spot.id,
+                                    ),
+                                  }));
+                                },
+                              )
+                            }
+                          >
+                            ×
+                          </button>
+                        </div>
                       </div>
+                      {legAfter ? (
+                        <p className="px-4 pb-1 pl-11 text-[11px] font-medium text-[var(--ink-faint)]">
+                          ↓ ca. {formatRouteKm(legAfter.km)} · ~
+                          {formatRouteDuration(legAfter.minutes)}
+                        </p>
+                      ) : null}
                     </li>
                   );
                 })}
@@ -695,6 +767,74 @@ export function DayPlanPanel({
               ) : null}
             </div>
           )}
+
+          {selectedRoute && selectedRoute.waypoints.length > 0 ? (
+            <div className="ios-group overflow-hidden">
+              <div className="flex flex-wrap items-start justify-between gap-3 px-4 pt-3.5 pb-2">
+                <div className="min-w-0">
+                  <p className="text-[12px] font-semibold uppercase tracking-wide text-[var(--fjord)]">
+                    Route auf der Karte
+                  </p>
+                  <p className="mt-1 text-[13px] text-[var(--ink-soft)]">
+                    {selectedRoute.waypoints.length} Stop
+                    {selectedRoute.waypoints.length === 1 ? "" : "s"}
+                    {selectedRoute.legs.length > 0
+                      ? ` · ca. ${formatRouteKm(selectedRoute.totalKm)} · ~${formatRouteDuration(selectedRoute.totalMinutes)}`
+                      : ""}
+                  </p>
+                  <p className="mt-1 text-[12px] text-[var(--ink-faint)]">
+                    Reihenfolge wie im Plan. Schätzung (Straßenfaktor, Van-Tempo).
+                  </p>
+                </div>
+                {directionsUrl ? (
+                  <a
+                    href={directionsUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-[var(--separator)] bg-[var(--fjord-soft)] px-3 py-1.5 text-[12px] font-semibold text-[var(--fjord)] transition hover:bg-[var(--fjord)] hover:text-white"
+                  >
+                    In Google Maps öffnen
+                    <span aria-hidden="true">↗</span>
+                  </a>
+                ) : null}
+              </div>
+              <div className="px-3 pb-3">
+                <DayRouteMap waypoints={selectedRoute.waypoints} />
+              </div>
+              {selectedRoute.legs.length > 0 ? (
+                <ul className="divide-y divide-[var(--separator)] border-t border-[var(--separator)] px-2 pb-2">
+                  {selectedRoute.legs.map((leg) => (
+                    <li
+                      key={`${leg.fromSpotId}-${leg.toSpotId}-${leg.fromOrder}`}
+                      className="flex items-center justify-between gap-3 px-2 py-2.5"
+                    >
+                      <p className="min-w-0 text-[13px] text-[var(--ink-soft)]">
+                        <span className="font-semibold text-[var(--ink)]">
+                          {leg.fromName}
+                        </span>
+                        <span className="mx-1.5 text-[var(--ink-faint)]">→</span>
+                        <span className="font-semibold text-[var(--ink)]">
+                          {leg.toName}
+                        </span>
+                      </p>
+                      <p className="shrink-0 text-right text-[12px] font-semibold text-[var(--ink-soft)]">
+                        {formatRouteKm(leg.km)}
+                        <span className="block text-[11px] font-medium text-[var(--ink-faint)]">
+                          ~{formatRouteDuration(leg.minutes)}
+                        </span>
+                      </p>
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
+              {selectedRoute.skipped.length > 0 ? (
+                <p className="border-t border-[var(--separator)] px-4 py-2.5 text-[12px] text-[var(--ink-faint)]">
+                  Ohne Koordinaten nicht auf der Route:{" "}
+                  {selectedRoute.skipped.map((entry) => entry.name).join(", ")}
+                </p>
+              ) : null}
+            </div>
+          ) : null}
 
           {/* Quick pool of still-open spots */}
           {!pickerOpen && unplannedSpots.length > 0 && (
