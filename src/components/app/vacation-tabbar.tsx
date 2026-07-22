@@ -72,38 +72,24 @@ export function VacationTabBar({
   active: VacationTabId;
   onChange: (id: VacationTabId) => void;
 }) {
-  const activeIndex = Math.max(
-    0,
-    vacationTabs.findIndex((tab) => tab.id === active),
-  );
-
   return (
     <nav className="app-tabbar" aria-label="Urlaub-Navigation">
-      <div className="liquid-tabbar-shell">
-        {/* Index-based thumb: no measure lag, moves immediately with the tab. */}
-        <div className="liquid-tabbar-track" aria-hidden>
-          <div
-            className="liquid-tabbar-slider"
-            style={{
-              transform: `translate3d(${activeIndex * 100}%, 0, 0)`,
-            }}
-          />
-        </div>
+      <div className="dock-tabbar">
         {vacationTabs.map((item) => {
           const isActive = active === item.id;
           return (
             <button
               key={item.id}
               type="button"
-              className="liquid-tabbar-item"
+              className="dock-tab"
               data-active={isActive}
               aria-current={isActive ? "page" : undefined}
               onClick={() => onChange(item.id)}
             >
-              <span className="tab-glyph">
+              <span className="dock-tab-icon">
                 <TabGlyph id={item.id} />
               </span>
-              <span className="liquid-tabbar-label">{item.short}</span>
+              <span className="dock-tab-label">{item.short}</span>
             </button>
           );
         })}
