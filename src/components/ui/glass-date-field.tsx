@@ -178,7 +178,7 @@ export function GlassDateField({
       </button>
 
       {open ? (
-        <div id={listId} className="glass-date-popover" role="dialog" aria-label="Datum wählen">
+        <div id={listId} className="glass-picker-surface glass-date-popover" role="dialog" aria-label="Datum wählen">
           <div className="glass-date-header">
             <button
               type="button"
