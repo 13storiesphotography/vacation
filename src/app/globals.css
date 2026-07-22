@@ -349,59 +349,6 @@ textarea {
   color: var(--ink-soft);
 }
 
-.apple-sign-in {
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 10px;
-  width: 100%;
-  min-height: 48px;
-  border: 0;
-  border-radius: var(--radius-s);
-  background: #000000;
-  color: #ffffff;
-  font-size: 15px;
-  font-weight: 600;
-  letter-spacing: -0.01em;
-  box-shadow: 0 8px 20px rgba(0, 0, 0, 0.18);
-  transition: transform 120ms ease, opacity 120ms ease;
-}
-
-.apple-sign-in:hover:not(:disabled) {
-  opacity: 0.92;
-}
-
-.apple-sign-in:active:not(:disabled) {
-  transform: scale(0.985);
-}
-
-.apple-sign-in:disabled {
-  opacity: 0.55;
-}
-
-.auth-divider {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  color: var(--ink-faint);
-  font-size: 12px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.06em;
-}
-
-.auth-divider::before,
-.auth-divider::after {
-  content: "";
-  flex: 1;
-  height: 1px;
-  background: var(--separator);
-}
-
-.auth-divider span {
-  flex: 0 0 auto;
-}
-
 .glass-callout {
   border-radius: var(--radius-m);
   border: var(--glass-border);

@@ -163,8 +163,8 @@ export default function ConceptPage() {
       text: "Als Admin teilst du den Urlaub per E-Mail. Der Link gilt nur für diesen Trip.",
     },
     {
-      title: "Passwort oder Apple",
-      text: "Die eingeladene Person aktiviert das Konto per Passwort oder Apple Sign-In.",
+      title: "Passwort setzen",
+      text: "Die eingeladene Person aktiviert das Konto per E-Mail-Link und Passwort.",
     },
     {
       title: "MFA einrichten",
@@ -617,7 +617,7 @@ export default function ConceptPage() {
                 <p className="section-label">Zusammenarbeit</p>
                 <h3 className="display mt-2 text-2xl md:text-3xl">Einladen, absichern, teilen</h3>
                 <p className="mt-3 text-[15px] leading-relaxed text-[var(--ink-soft)]">
-                  Apple-klare Schritte: Invite → Passwort/Apple → MFA. Danach derselbe Urlaub für alle
+                  Klare Schritte: Invite → Passwort → MFA. Danach derselbe Urlaub für alle
                   Mitglieder.
                 </p>
               </>
