@@ -114,7 +114,7 @@ export default function SpotMapLeaflet({
       zoom={DEFAULT_MAP_ZOOM}
       className="h-full w-full rounded-[18px]"
       scrollWheelZoom={expanded}
-      dragging={expanded}
+      dragging
     >
       <TileLayer
         attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>'

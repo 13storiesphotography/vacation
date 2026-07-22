@@ -3,10 +3,19 @@
 import { useEffect } from "react";
 import { useMap } from "react-leaflet";
 
+/** True when the device has a mouse/trackpad (desktop or hybrid). */
+export function hasFinePointer(): boolean {
+  if (typeof window === "undefined") return true;
+  return window.matchMedia("(any-pointer: fine)").matches;
+}
+
 /**
  * Mobile-friendly map gestures:
  * - cooperative: one finger scrolls the page; two fingers pan the map
- * - greedy (expanded): one finger pans the map normally
+ * - greedy (expanded / desktop): mouse or one finger pans the map
+ *
+ * On desktop (fine pointer), cooperative still allows mouse-drag panning;
+ * only the scroll wheel stays off so the page can scroll over the map.
  */
 export function LeafletGestureMode({
   mode,
@@ -29,6 +38,7 @@ export function LeafletGestureMode({
   useEffect(() => {
     const container = map.getContainer();
     const isCooperative = mode === "cooperative";
+    const desktop = hasFinePointer();
 
     if (!isCooperative) {
       map.dragging.enable();
@@ -38,9 +48,20 @@ export function LeafletGestureMode({
     }
 
     container.classList.add("map-gestures-cooperative");
-    map.dragging.disable();
     // Keep wheel zoom off in cooperative so page scroll stays primary on trackpads.
     map.scrollWheelZoom.disable();
+
+    // Desktop: allow click-drag pan without expanding the map.
+    if (desktop) {
+      map.dragging.enable();
+      return () => {
+        container.classList.remove("map-gestures-cooperative");
+        map.dragging.enable();
+        map.scrollWheelZoom.enable();
+      };
+    }
+
+    map.dragging.disable();
 
     let activeTouches = 0;
 
