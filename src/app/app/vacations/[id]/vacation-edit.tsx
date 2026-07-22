@@ -2,6 +2,7 @@
 
 import { useActionState, useEffect } from "react";
 import type { Database } from "@/lib/database.types";
+import { GlassDateField } from "@/components/ui/glass-date-field";
 import { updateVacation, type VacationActionState } from "./vacation-actions";
 
 type Vacation = Database["public"]["Tables"]["vacations"]["Row"];
@@ -62,22 +63,18 @@ export function EditVacationForm({
       <div className="mt-4 grid grid-cols-2 gap-3">
         <label className="form-label">
           Start
-          <input
+          <GlassDateField
             name="start_date"
-            type="date"
             required
             defaultValue={vacation.start_date}
-            className="glass-field mt-1.5 px-3 py-3"
           />
         </label>
         <label className="form-label">
           Ende
-          <input
+          <GlassDateField
             name="end_date"
-            type="date"
             required
             defaultValue={vacation.end_date}
-            className="glass-field mt-1.5 px-3 py-3"
           />
         </label>
       </div>

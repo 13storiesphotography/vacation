@@ -1039,3 +1039,180 @@ textarea {
   }
 }
 
+
+/* Custom liquid-glass date picker (native calendar cannot be styled). */
+.glass-date {
+  position: relative;
+}
+
+.glass-date-trigger {
+  cursor: pointer;
+  font-weight: 600;
+  letter-spacing: -0.01em;
+}
+
+.glass-date-trigger:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.glass-date-popover {
+  position: absolute;
+  z-index: 60;
+  top: calc(100% + 10px);
+  left: 0;
+  width: min(100vw - 2rem, 20.5rem);
+  padding: 14px;
+  border-radius: 24px;
+  background: linear-gradient(
+    165deg,
+    rgba(255, 255, 255, 0.55) 0%,
+    rgba(255, 255, 255, 0.28) 55%,
+    rgba(230, 240, 244, 0.42) 100%
+  );
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: var(--glass-border);
+  box-shadow:
+    var(--glass-inset),
+    0 18px 48px rgba(20, 36, 48, 0.16),
+    0 2px 8px rgba(20, 36, 48, 0.06);
+  animation: glass-date-in 180ms cubic-bezier(0.22, 1, 0.36, 1);
+  transform-origin: top center;
+}
+
+@keyframes glass-date-in {
+  from {
+    opacity: 0;
+    transform: translateY(-6px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+.glass-date-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.glass-date-month {
+  flex: 1;
+  text-align: center;
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ink);
+  text-transform: capitalize;
+  letter-spacing: -0.02em;
+}
+
+.glass-date-nav {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid rgba(255, 255, 255, 0.5);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.42);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.65) inset;
+  color: var(--ink);
+  font-size: 18px;
+  line-height: 1;
+  cursor: pointer;
+  transition:
+    background 140ms ease,
+    color 140ms ease,
+    transform 120ms ease;
+}
+
+.glass-date-nav:hover {
+  background: var(--fjord-soft);
+  color: var(--fjord);
+}
+
+.glass-date-nav:active {
+  transform: scale(0.94);
+}
+
+.glass-date-weekdays {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 2px;
+  margin-bottom: 6px;
+  text-align: center;
+  font-size: 11px;
+  font-weight: 650;
+  color: var(--ink-faint);
+}
+
+.glass-date-grid {
+  display: grid;
+  grid-template-columns: repeat(7, minmax(0, 1fr));
+  gap: 3px;
+}
+
+.glass-date-empty {
+  aspect-ratio: 1;
+}
+
+.glass-date-day {
+  aspect-ratio: 1;
+  border: 0;
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition:
+    background 140ms ease,
+    color 140ms ease,
+    box-shadow 140ms ease,
+    transform 120ms ease;
+}
+
+.glass-date-day:hover:not(:disabled) {
+  background: rgba(15, 110, 140, 0.12);
+  color: var(--fjord);
+}
+
+.glass-date-day:active:not(:disabled) {
+  transform: scale(0.92);
+}
+
+.glass-date-day[data-today="true"] {
+  box-shadow: inset 0 0 0 1.5px rgba(15, 110, 140, 0.4);
+  color: var(--fjord);
+}
+
+.glass-date-day[data-selected="true"] {
+  background: var(--fjord);
+  color: #fff;
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.35) inset,
+    0 6px 16px rgba(15, 110, 140, 0.32);
+}
+
+.glass-date-day[data-selected="true"]:hover:not(:disabled) {
+  background: var(--fjord);
+  color: #fff;
+}
+
+.glass-date-day:disabled {
+  opacity: 0.28;
+  cursor: not-allowed;
+}
+
+.glass-date-footer {
+  display: flex;
+  justify-content: space-between;
+  gap: 8px;
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(255, 255, 255, 0.45);
+}

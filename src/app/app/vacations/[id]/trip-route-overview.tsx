@@ -4,6 +4,7 @@ import { useEffect, useMemo, useState } from "react";
 import type { Database } from "@/lib/database.types";
 import type { DayPlanWithStops } from "@/lib/day-plans";
 import { todayIso } from "@/lib/dashboard";
+import { GlassDateField } from "@/components/ui/glass-date-field";
 import {
   buildTripRoute,
   formatLegMeta,
@@ -156,24 +157,20 @@ export function TripRouteOverview({
           <div className="mt-3 grid gap-2 sm:grid-cols-2">
             <label className="form-label">
               Von
-              <input
-                type="date"
+              <GlassDateField
                 min={vacationStart}
                 max={vacationEnd}
                 value={customStart}
-                onChange={(event) => setCustomStart(event.target.value)}
-                className="glass-field mt-1.5 px-3 py-2.5 text-[14px]"
+                onChange={setCustomStart}
               />
             </label>
             <label className="form-label">
               Bis
-              <input
-                type="date"
+              <GlassDateField
                 min={vacationStart}
                 max={vacationEnd}
                 value={customEnd}
-                onChange={(event) => setCustomEnd(event.target.value)}
-                className="glass-field mt-1.5 px-3 py-2.5 text-[14px]"
+                onChange={setCustomEnd}
               />
             </label>
           </div>
