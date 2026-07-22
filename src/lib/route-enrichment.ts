@@ -1,6 +1,10 @@
 import type { DayRoute, RouteLeg, RouteSource } from "@/lib/day-route";
 import type { LatLng } from "@/lib/geo";
-import { computeDrivingRoute, type GoogleRouteResult } from "@/lib/google-routes";
+import {
+  computeDrivingRoute,
+  computeDrivingRouteChunked,
+  type GoogleRouteResult,
+} from "@/lib/google-routes";
 
 export function applyGoogleRouteToDayRoute(
   route: DayRoute,
@@ -20,13 +24,14 @@ export function applyGoogleRouteToDayRoute(
     totalMinutes: google.totalMinutes,
     source: "google",
     encodedPolyline: google.encodedPolyline,
+    encodedPolylines: google.encodedPolylines,
   };
 }
 
 export async function enrichDayRoute(route: DayRoute): Promise<DayRoute> {
   if (route.waypoints.length < 2 || route.legs.length === 0) return route;
   const points = route.waypoints.map((point) => point.coords);
-  const google = await computeDrivingRoute(points);
+  const google = await computeDrivingRouteChunked(points);
   if (!google) return route;
   return applyGoogleRouteToDayRoute(route, google);
 }

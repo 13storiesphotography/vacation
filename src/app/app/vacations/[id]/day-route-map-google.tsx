@@ -23,11 +23,12 @@ async function ensureMapsApi(apiKey: string) {
 
 function numberMarkerIcon(order: number, overnight: boolean): string {
   const fill = overnight ? "#8b4d6b" : "#0f6e8c";
+  const label = order > 99 ? "•" : String(order);
   const svg = `
     <svg xmlns="http://www.w3.org/2000/svg" width="32" height="40" viewBox="0 0 32 40">
       <path d="M16 0C7.2 0 0 7.2 0 16c0 12 16 24 16 24s16-12 16-24C32 7.2 24.8 0 16 0z" fill="${fill}"/>
       <circle cx="16" cy="16" r="10" fill="#ffffff"/>
-      <text x="16" y="20" text-anchor="middle" font-size="12" font-weight="700" fill="${fill}" font-family="system-ui,sans-serif">${order}</text>
+      <text x="16" y="20" text-anchor="middle" font-size="${order > 9 ? 10 : 12}" font-weight="700" fill="${fill}" font-family="system-ui,sans-serif">${label}</text>
     </svg>
   `;
   return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
@@ -35,18 +36,20 @@ function numberMarkerIcon(order: number, overnight: boolean): string {
 
 export default function DayRouteMapGoogle({
   waypoints,
-  encodedPolyline = null,
+  encodedPolylines = [],
   active = true,
+  className = "h-56",
 }: {
   waypoints: RouteWaypoint[];
-  encodedPolyline?: string | null;
+  encodedPolylines?: string[];
   active?: boolean;
+  className?: string;
 }) {
   const apiKey = getBrowserGoogleMapsKey();
   const containerRef = useRef<HTMLDivElement>(null);
   const mapRef = useRef<google.maps.Map | null>(null);
   const markersRef = useRef<google.maps.Marker[]>([]);
-  const lineRef = useRef<google.maps.Polyline | null>(null);
+  const linesRef = useRef<google.maps.Polyline[]>([]);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
@@ -75,30 +78,45 @@ export default function DayRouteMapGoogle({
         const map = mapRef.current;
         for (const marker of markersRef.current) marker.setMap(null);
         markersRef.current = [];
-        lineRef.current?.setMap(null);
+        for (const line of linesRef.current) line.setMap(null);
+        linesRef.current = [];
 
-        let path: google.maps.LatLngLiteral[] | google.maps.LatLng[] =
-          waypoints.map((point) => point.coords);
-        if (encodedPolyline && google.maps.geometry?.encoding?.decodePath) {
-          path = google.maps.geometry.encoding.decodePath(encodedPolyline);
+        if (encodedPolylines.length > 0 && google.maps.geometry?.encoding?.decodePath) {
+          for (const encoded of encodedPolylines) {
+            linesRef.current.push(
+              new google.maps.Polyline({
+                path: google.maps.geometry.encoding.decodePath(encoded),
+                geodesic: false,
+                strokeColor: "#0f6e8c",
+                strokeOpacity: 0.85,
+                strokeWeight: 4,
+                map,
+              }),
+            );
+          }
+        } else {
+          linesRef.current.push(
+            new google.maps.Polyline({
+              path: waypoints.map((point) => point.coords),
+              geodesic: true,
+              strokeColor: "#0f6e8c",
+              strokeOpacity: 0.85,
+              strokeWeight: 4,
+              map,
+            }),
+          );
         }
-
-        lineRef.current = new google.maps.Polyline({
-          path,
-          geodesic: !encodedPolyline,
-          strokeColor: "#0f6e8c",
-          strokeOpacity: 0.85,
-          strokeWeight: 4,
-          map,
-        });
 
         const bounds = new google.maps.LatLngBounds();
         for (const point of waypoints) {
           bounds.extend(point.coords);
+          const title = point.dayLabel
+            ? `${point.order}. ${point.name} · ${point.dayLabel}`
+            : `${point.order}. ${point.name}`;
           const marker = new google.maps.Marker({
             map,
             position: point.coords,
-            title: `${point.order}. ${point.name}`,
+            title,
             icon: {
               url: numberMarkerIcon(point.order, point.role === "overnight"),
               scaledSize: new google.maps.Size(32, 40),
@@ -123,7 +141,7 @@ export default function DayRouteMapGoogle({
     return () => {
       cancelled = true;
     };
-  }, [apiKey, waypoints, encodedPolyline]);
+  }, [apiKey, waypoints, encodedPolylines]);
 
   useEffect(() => {
     if (!active || !mapRef.current) return;
@@ -132,14 +150,16 @@ export default function DayRouteMapGoogle({
 
   if (!apiKey) {
     return (
-      <div className="flex h-56 items-center justify-center rounded-[16px] bg-black/5 text-[13px] text-[var(--ink-soft)]">
+      <div
+        className={`flex items-center justify-center rounded-[16px] bg-black/5 text-[13px] text-[var(--ink-soft)] ${className}`}
+      >
         Google-Maps-Key fehlt — Leaflet-Fallback folgt unten.
       </div>
     );
   }
 
   return (
-    <div className="relative h-56 overflow-hidden rounded-[16px]">
+    <div className={`relative overflow-hidden rounded-[16px] ${className}`}>
       <div ref={containerRef} className="h-full w-full" />
       {error ? (
         <p className="absolute inset-x-0 bottom-2 px-3 text-center text-[12px] text-[var(--danger)]">

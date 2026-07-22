@@ -13,8 +13,14 @@ export type RouteWaypoint = {
   category: Spot["category"];
   coords: LatLng;
   role: "stop" | "overnight";
-  /** 1-based order in the day route. */
+  /** 1-based order in the (day or trip) route. */
   order: number;
+  /** Present on trip-level routes. */
+  dayId?: string;
+  dayDate?: string;
+  dayLabel?: string;
+  /** Unique key when the same spot appears on multiple days. */
+  occurrenceId?: string;
 };
 
 export type RouteLeg = {
@@ -29,6 +35,8 @@ export type RouteLeg = {
   /** Drive minutes — Google Routes when source=google, else estimate. */
   minutes: number;
   source: RouteSource;
+  dayId?: string;
+  dayLabel?: string;
 };
 
 export type DayRoute = {
@@ -37,12 +45,19 @@ export type DayRoute = {
   label: string;
   title: string | null;
   waypoints: RouteWaypoint[];
-  skipped: Array<{ spotId: string; name: string; reason: string }>;
+  skipped: Array<{ spotId: string; name: string; reason: string; dayLabel?: string }>;
   legs: RouteLeg[];
   totalKm: number;
   totalMinutes: number;
   source: RouteSource;
   encodedPolyline: string | null;
+  /** Multiple polylines when a long trip is chunked for Google Routes. */
+  encodedPolylines?: string[];
+};
+
+export type DateRange = {
+  startDate: string;
+  endDate: string;
 };
 
 const ROAD_FACTOR = 1.3;
@@ -200,12 +215,142 @@ export function buildTripRoutes(
   };
 }
 
+/**
+ * Continuous trip route across one or more days:
+ * day stops → overnight → next day stops → …
+ * Consecutive duplicates of the same spot are collapsed (e.g. overnight = next first stop).
+ */
+export function buildTripRoute(
+  days: DayPlanWithStops[],
+  spotsById: Map<string, Spot>,
+  range?: DateRange | null,
+): DayRoute {
+  const sorted = [...days].sort((a, b) => a.date.localeCompare(b.date));
+  const selected = range
+    ? sorted.filter(
+        (day) => day.date >= range.startDate && day.date <= range.endDate,
+      )
+    : sorted;
+
+  const waypoints: RouteWaypoint[] = [];
+  const skipped: DayRoute["skipped"] = [];
+
+  function pushSpot(
+    day: DayPlanWithStops,
+    dayIndex: number,
+    spotId: string,
+    role: "stop" | "overnight",
+  ) {
+    const last = waypoints[waypoints.length - 1];
+    if (last?.spotId === spotId) {
+      // Same place already last (typical overnight → next morning).
+      if (role === "overnight") last.role = "overnight";
+      return;
+    }
+    const spot = spotsById.get(spotId);
+    if (!spot) {
+      skipped.push({
+        spotId,
+        name: "Unbekannter Spot",
+        reason: "nicht gefunden",
+        dayLabel: formatDayLabel(day.date),
+      });
+      return;
+    }
+    const coords = resolveSpotCoords(spot);
+    if (!coords) {
+      skipped.push({
+        spotId,
+        name: spot.name,
+        reason: "ohne Koordinaten",
+        dayLabel: formatDayLabel(day.date),
+      });
+      return;
+    }
+    const order = waypoints.length + 1;
+    waypoints.push({
+      spotId,
+      name: spot.name,
+      category: spot.category,
+      coords,
+      role,
+      order,
+      dayId: day.id,
+      dayDate: day.date,
+      dayLabel: formatDayLabel(day.date),
+      occurrenceId: `${day.id}:${spotId}:${role}:${order}`,
+    });
+  }
+
+  selected.forEach((day, index) => {
+    const orderedStops = [...day.stops].sort((a, b) => a.position - b.position);
+    for (const stop of orderedStops) {
+      pushSpot(day, index, stop.spot_id, "stop");
+    }
+    if (day.overnight_spot_id) {
+      pushSpot(day, index, day.overnight_spot_id, "overnight");
+    }
+  });
+
+  const legs: RouteLeg[] = [];
+  for (let i = 0; i < waypoints.length - 1; i += 1) {
+    const from = waypoints[i];
+    const to = waypoints[i + 1];
+    const km = estimateRoadKm(from.coords, to.coords);
+    legs.push({
+      fromOrder: from.order,
+      toOrder: to.order,
+      fromSpotId: from.spotId,
+      toSpotId: to.spotId,
+      fromName: from.name,
+      toName: to.name,
+      km,
+      minutes: estimateMinutes(km),
+      source: "estimate",
+      dayId: to.dayId ?? from.dayId,
+      dayLabel: to.dayLabel ?? from.dayLabel,
+    });
+  }
+
+  const totalKm = legs.reduce((sum, leg) => sum + leg.km, 0);
+  const totalMinutes = legs.reduce((sum, leg) => sum + leg.minutes, 0);
+  const first = selected[0];
+  const last = selected[selected.length - 1];
+
+  return {
+    dayId: first?.id ?? "trip",
+    date: first?.date ?? "",
+    label:
+      first && last
+        ? first.date === last.date
+          ? formatDayLabel(first.date)
+          : `${formatDayLabel(first.date)} – ${formatDayLabel(last.date)}`
+        : "Keine Tage",
+    title:
+      selected.length === 0
+        ? "Keine Tage"
+        : selected.length === 1
+          ? (first?.title ?? `Tag`)
+          : `${selected.length} Tage`,
+    waypoints,
+    skipped,
+    legs,
+    totalKm,
+    totalMinutes,
+    source: "estimate",
+    encodedPolyline: null,
+    encodedPolylines: [],
+  };
+}
+
 /** Google Maps directions deep link for the day's waypoints. */
 export function googleMapsDirectionsUrl(waypoints: RouteWaypoint[]): string | null {
   if (waypoints.length < 2) return null;
-  const origin = waypoints[0].coords;
-  const destination = waypoints[waypoints.length - 1].coords;
-  const middle = waypoints.slice(1, -1);
+  // Google Maps deep links handle a limited number of waypoints well.
+  const limited = waypoints.slice(0, 10);
+  const origin = limited[0].coords;
+  const destination = limited[limited.length - 1].coords;
+  const middle = limited.slice(1, -1);
   const url = new URL("https://www.google.com/maps/dir/");
   url.searchParams.set("api", "1");
   url.searchParams.set("origin", `${origin.lat},${origin.lng}`);

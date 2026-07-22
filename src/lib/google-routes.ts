@@ -11,6 +11,7 @@ export type GoogleRouteResult = {
   totalMinutes: number;
   /** Encoded polyline for the whole route (Google Maps only). */
   encodedPolyline: string | null;
+  encodedPolylines: string[];
 };
 
 function getServerMapsKey(): string | null {
@@ -139,9 +140,53 @@ export async function computeDrivingRoute(
       totalKm,
       totalMinutes,
       encodedPolyline: route.polyline?.encodedPolyline ?? null,
+      encodedPolylines: route.polyline?.encodedPolyline
+        ? [route.polyline.encodedPolyline]
+        : [],
     };
   } catch (error) {
     console.error("[google-routes]", error);
     return null;
   }
+}
+
+const CHUNK_SIZE = 25; // origin + intermediates + destination
+
+/**
+ * Chunk long itineraries into overlapping 25-point Windows so no leg is lost.
+ */
+export async function computeDrivingRouteChunked(
+  points: LatLng[],
+): Promise<GoogleRouteResult | null> {
+  if (points.length < 2) return null;
+  if (points.length <= CHUNK_SIZE) {
+    return computeDrivingRoute(points);
+  }
+
+  const legs: GoogleRouteLeg[] = [];
+  const polylines: string[] = [];
+  let cursor = 0;
+  while (cursor < points.length - 1) {
+    const end = Math.min(cursor + CHUNK_SIZE - 1, points.length - 1);
+    const chunk = points.slice(cursor, end + 1);
+    const result = await computeDrivingRoute(chunk);
+    if (!result) return null;
+    legs.push(...result.legs);
+    if (result.encodedPolyline) polylines.push(result.encodedPolyline);
+    if (end >= points.length - 1) break;
+    cursor = end; // overlap last point as next origin
+  }
+
+  if (legs.length !== points.length - 1) {
+    console.error("[google-routes] chunked leg mismatch", legs.length, points.length - 1);
+    return null;
+  }
+
+  return {
+    legs,
+    totalKm: legs.reduce((sum, leg) => sum + leg.km, 0),
+    totalMinutes: legs.reduce((sum, leg) => sum + leg.minutes, 0),
+    encodedPolyline: polylines[0] ?? null,
+    encodedPolylines: polylines,
+  };
 }
