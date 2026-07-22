@@ -100,16 +100,37 @@ export async function updateDayPlanMetaClient(
   supabase: Client,
   vacationId: string,
   dayPlanId: string,
-  patch: { title?: string | null; notes?: string | null },
+  patch: {
+    title?: string | null;
+    notes?: string | null;
+    depart_at?: string | null;
+  },
 ): Promise<{ error?: string; ok?: boolean }> {
   const { error } = await supabase
     .from("day_plans")
     .update({
       ...(patch.title !== undefined ? { title: patch.title?.trim() || null } : {}),
       ...(patch.notes !== undefined ? { notes: patch.notes?.trim() || null } : {}),
+      ...(patch.depart_at !== undefined ? { depart_at: patch.depart_at } : {}),
     })
     .eq("id", dayPlanId)
     .eq("vacation_id", vacationId);
+
+  if (error) return { error: error.message };
+  return { ok: true };
+}
+
+export async function updateStopDwellClient(
+  supabase: Client,
+  dayPlanId: string,
+  stopId: string,
+  dwellMinutes: number | null,
+): Promise<{ error?: string; ok?: boolean }> {
+  const { error } = await supabase
+    .from("day_plan_spots")
+    .update({ dwell_minutes: dwellMinutes })
+    .eq("id", stopId)
+    .eq("day_plan_id", dayPlanId);
 
   if (error) return { error: error.message };
   return { ok: true };

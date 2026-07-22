@@ -221,6 +221,8 @@ export type Database = {
           title: string | null;
           notes: string | null;
           overnight_spot_id: string | null;
+          /** HH:MM[:SS] local clock — day start / leave morning origin. */
+          depart_at: string | null;
         };
         Insert: {
           id?: string;
@@ -229,6 +231,7 @@ export type Database = {
           title?: string | null;
           notes?: string | null;
           overnight_spot_id?: string | null;
+          depart_at?: string | null;
         };
         Update: {
           id?: string;
@@ -237,6 +240,7 @@ export type Database = {
           title?: string | null;
           notes?: string | null;
           overnight_spot_id?: string | null;
+          depart_at?: string | null;
         };
         Relationships: [];
       };
@@ -246,18 +250,22 @@ export type Database = {
           day_plan_id: string;
           spot_id: string;
           position: number;
+          /** Minutes on site; null = app default. */
+          dwell_minutes: number | null;
         };
         Insert: {
           id?: string;
           day_plan_id: string;
           spot_id: string;
           position?: number;
+          dwell_minutes?: number | null;
         };
         Update: {
           id?: string;
           day_plan_id?: string;
           spot_id?: string;
           position?: number;
+          dwell_minutes?: number | null;
         };
         Relationships: [];
       };

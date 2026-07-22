@@ -222,9 +222,16 @@ export function buildFeaturedDashboard(input: {
   const places: DashboardPlace[] = [];
   if (route) {
     for (const waypoint of route.waypoints) {
+      if (waypoint.role === "origin") continue;
       const spot = spotsById.get(waypoint.spotId);
       if (!spot) continue;
-      places.push(toPlace(spot, waypoint.role, waypoint.order));
+      places.push(
+        toPlace(
+          spot,
+          waypoint.role === "overnight" ? "overnight" : "stop",
+          waypoint.order,
+        ),
+      );
     }
   }
 
