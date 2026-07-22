@@ -1580,7 +1580,6 @@ export function SpotList({
                         <div className="mt-0.5 text-[12px] leading-snug text-[var(--ink-soft)]">
                           <span className="min-w-0">
                             {categoryLabels[spot.category]}
-                            {!relevant ? " · nicht relevant" : ""}
                             {spot.overnight_cost ? ` · ${spot.overnight_cost}` : ""}
                             {spot.price_hint ? ` · ${spot.price_hint}` : ""}
                             {formatStaySummary(spot)
@@ -1611,27 +1610,6 @@ export function SpotList({
                         onClick={(event) => event.stopPropagation()}
                         onKeyDown={(event) => event.stopPropagation()}
                       >
-                        <button
-                          type="button"
-                          className={`inline-flex h-6 min-w-6 items-center justify-center rounded-full px-1 text-[11px] font-bold leading-none ${
-                            relevant
-                              ? "bg-[var(--fjord-soft)] text-[var(--fjord)]"
-                              : "bg-black/6 text-[var(--ink-faint)]"
-                          }`}
-                          aria-label={
-                            relevant
-                              ? "Als nicht relevant markieren"
-                              : "Als relevant markieren"
-                          }
-                          title={
-                            relevant
-                              ? "Für diese Reise relevant — tippen zum Abwählen"
-                              : "Nicht relevant — tippen zum Aktivieren"
-                          }
-                          onClick={() => toggleRelevant(spot)}
-                        >
-                          {relevant ? "✓" : "–"}
-                        </button>
                         <Stars
                           value={summary.myRating}
                           onChange={(value) => saveRating(spot.id, { rating: value })}
@@ -1658,33 +1636,45 @@ export function SpotList({
                       </p>
                     ) : null}
 
-                    {spot.maps_url || spot.info_url ? (
-                      <div
-                        className="mt-1.5 flex flex-wrap gap-1.5"
-                        onClick={(event) => event.stopPropagation()}
+                    <div
+                      className="mt-1.5 flex flex-wrap gap-1.5"
+                      onClick={(event) => event.stopPropagation()}
+                    >
+                      <button
+                        type="button"
+                        className="glass-chip !py-1 !text-[11px]"
+                        data-active={relevant}
+                        aria-pressed={relevant}
+                        title={
+                          relevant
+                            ? "Für diese Reise relevant — tippen zum Abwählen"
+                            : "Nicht relevant — tippen zum Aktivieren"
+                        }
+                        onClick={() => toggleRelevant(spot)}
                       >
-                        {spot.maps_url ? (
-                          <a
-                            href={spot.maps_url}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="glass-chip !py-1 !text-[11px]"
-                          >
-                            Karte öffnen
-                          </a>
-                        ) : null}
-                        {spot.info_url ? (
-                          <a
-                            href={spot.info_url}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="glass-chip !py-1 !text-[11px]"
-                          >
-                            {isAirbnbUrl(spot.info_url) ? "Bei Airbnb öffnen" : "Seite öffnen"}
-                          </a>
-                        ) : null}
-                      </div>
-                    ) : null}
+                        {relevant ? "Relevant" : "Nicht relevant"}
+                      </button>
+                      {spot.maps_url ? (
+                        <a
+                          href={spot.maps_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="glass-chip !py-1 !text-[11px]"
+                        >
+                          Karte öffnen
+                        </a>
+                      ) : null}
+                      {spot.info_url ? (
+                        <a
+                          href={spot.info_url}
+                          target="_blank"
+                          rel="noreferrer"
+                          className="glass-chip !py-1 !text-[11px]"
+                        >
+                          {isAirbnbUrl(spot.info_url) ? "Bei Airbnb öffnen" : "Seite öffnen"}
+                        </a>
+                      ) : null}
+                    </div>
                   </div>
                 </div>
                 {isOpen && (
