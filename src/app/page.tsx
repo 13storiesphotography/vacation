@@ -10,15 +10,12 @@ export default function HomePage() {
         Privat und abgesichert.
       </h1>
       <p className="mt-5 max-w-xl text-[17px] leading-relaxed text-[var(--ink-soft)]">
-        Spots sammeln, Karte und Tagesplan — mit Login und MFA. Der Entwurf ist nur für
-        eingeladene Nutzer sichtbar.
+        Spots sammeln, Karte und Tagesplan — mit Login und MFA. Zugang nur für
+        eingeladene Nutzer.
       </p>
       <div className="mt-8 flex flex-wrap gap-3">
         <Link href="/login" className="cta">
           Anmelden
-        </Link>
-        <Link href="/konzept" className="cta cta-secondary">
-          Konzept ansehen
         </Link>
       </div>
     </main>
