@@ -443,7 +443,6 @@ export default function VacationDetailPage() {
             <VacationUrlaubDashboard
               vacation={vacation}
               spots={spots}
-              memberCount={members.length}
               canEdit={canEditVacation}
               onEdit={() => setEditingVacation(true)}
               onOpenTab={changeTab}

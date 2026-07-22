@@ -19,14 +19,12 @@ type DashboardResponse = {
 export function VacationUrlaubDashboard({
   vacation,
   spots,
-  memberCount,
   canEdit,
   onEdit,
   onOpenTab,
 }: {
   vacation: Vacation;
   spots: Spot[];
-  memberCount: number;
   canEdit: boolean;
   onEdit: () => void;
   onOpenTab: (tab: "plan" | "karte" | "spots" | "team") => void;
@@ -77,7 +75,7 @@ export function VacationUrlaubDashboard({
           <h1 className="display text-2xl">{vacation.title}</h1>
           <p className="tab-subtitle">
             {vacation.start_date} – {vacation.end_date}
-            {vacation.region ? ` · ${vacation.region}` : ""} · {vacation.type}
+            {vacation.region ? ` · ${vacation.region}` : ""}
           </p>
         </div>
         {canEdit ? (
@@ -127,33 +125,6 @@ export function VacationUrlaubDashboard({
           onSelectDay={() => onOpenTab("plan")}
         />
       ) : null}
-
-      <div className="ios-group">
-        <button
-          type="button"
-          className="ios-row ios-chevron"
-          onClick={() => onOpenTab("spots")}
-        >
-          <div>
-            <p className="text-[15px] font-semibold">
-              {spots.length} Spot{spots.length === 1 ? "" : "s"} gesammelt
-            </p>
-            <p className="text-[13px] text-[var(--ink-soft)]">Zur Sammlung</p>
-          </div>
-        </button>
-        <button
-          type="button"
-          className="ios-row ios-chevron"
-          onClick={() => onOpenTab("team")}
-        >
-          <div>
-            <p className="text-[15px] font-semibold">
-              {memberCount} Person{memberCount === 1 ? "" : "en"}
-            </p>
-            <p className="text-[13px] text-[var(--ink-soft)]">Team & Einladungen</p>
-          </div>
-        </button>
-      </div>
     </div>
   );
 }
