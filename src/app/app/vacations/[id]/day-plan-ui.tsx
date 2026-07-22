@@ -28,6 +28,7 @@ import { CategoryIcon } from "@/components/category-icon";
 import { formatStaySummary, stayStatusLabels } from "@/lib/stay";
 import DayRouteMap from "./day-route-map";
 import { useEnrichedDayRoute } from "./use-enriched-day-route";
+import { EditSpotForm } from "./spot-ui";
 
 type Spot = Database["public"]["Tables"]["spots"]["Row"];
 type Vacation = Database["public"]["Tables"]["vacations"]["Row"];
@@ -53,9 +54,13 @@ function friendlyError(message: string): string {
 export function DayPlanPanel({
   vacation,
   spots,
+  onSpotsChanged,
+  onSpotPatch,
 }: {
   vacation: Vacation;
   spots: Spot[];
+  onSpotsChanged?: () => void | Promise<void>;
+  onSpotPatch?: (spotId: string, patch: Partial<Spot>) => void;
 }) {
   const [days, setDays] = useState<DayPlanWithStops[]>([]);
   const [selectedId, setSelectedId] = useState<string | null>(null);
@@ -65,6 +70,8 @@ export function DayPlanPanel({
   const [pickerOpen, setPickerOpen] = useState(false);
   const [query, setQuery] = useState("");
   const [titleDraft, setTitleDraft] = useState("");
+  const [editingSpotId, setEditingSpotId] = useState<string | null>(null);
+  const [deletingSpotId, setDeletingSpotId] = useState<string | null>(null);
 
   const selectedIdRef = useRef<string | null>(null);
   const dayStripRef = useRef<HTMLDivElement>(null);
@@ -181,6 +188,7 @@ export function DayPlanPanel({
     setTitleDraft(selected?.title ?? "");
     setPickerOpen(false);
     setQuery("");
+    setEditingSpotId(null);
   }, [selected?.id, selected?.title]);
 
   // Keep active day chip visible in the horizontal strip.
@@ -608,21 +616,35 @@ export function DayPlanPanel({
                     (leg) => leg.fromSpotId === stop.spot_id,
                   );
                   const relevant = isSpotRelevant(spot);
+                  const isEditing = editingSpotId === spot.id;
                   return (
                     <li key={stop.id}>
-                      <div className="flex items-center gap-2 rounded-[14px] px-2 py-2">
+                      <div
+                        className={`flex items-center gap-2 rounded-[14px] px-2 py-2 ${
+                          isEditing ? "bg-[rgba(15,110,140,0.06)]" : ""
+                        }`}
+                      >
                         <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[var(--fjord-soft)] text-[12px] font-bold text-[var(--fjord)]">
                           {index + 1}
                         </span>
-                        <div className="min-w-0 flex-1">
+                        <button
+                          type="button"
+                          className="min-w-0 flex-1 rounded-[12px] px-1 py-0.5 text-left hover:bg-[var(--fjord-soft)]/50"
+                          onClick={() =>
+                            setEditingSpotId((current) =>
+                              current === spot.id ? null : spot.id,
+                            )
+                          }
+                        >
                           <p className="truncate text-[15px] font-semibold">
                             {spot.name}
                           </p>
                           <p className="text-[11px] text-[var(--ink-faint)]">
                             {categoryLabels[spot.category as SpotCategory]}
                             {!relevant ? " · nicht relevant" : ""}
+                            {isEditing ? " · wird bearbeitet" : ""}
                           </p>
-                        </div>
+                        </button>
                         <div className="flex shrink-0 items-center">
                           <button
                             type="button"
@@ -700,7 +722,7 @@ export function DayPlanPanel({
                             type="button"
                             className="plan-icon-btn text-[var(--danger)]"
                             disabled={pending}
-                            aria-label="Entfernen"
+                            aria-label="Aus dem Tag entfernen"
                             onClick={() =>
                               run(
                                 () =>
@@ -710,6 +732,9 @@ export function DayPlanPanel({
                                     spot.id,
                                   ),
                                 () => {
+                                  if (editingSpotId === spot.id) {
+                                    setEditingSpotId(null);
+                                  }
                                   patchSelectedDay((day) => ({
                                     ...day,
                                     stops: day.stops.filter(
@@ -724,6 +749,58 @@ export function DayPlanPanel({
                           </button>
                         </div>
                       </div>
+                      {isEditing ? (
+                        <EditSpotForm
+                          vacationId={vacation.id}
+                          spot={spot}
+                          deleting={deletingSpotId === spot.id}
+                          onToggleRelevant={
+                            onSpotPatch
+                              ? () => {
+                                  const next = !isSpotRelevant(spot);
+                                  onSpotPatch(spot.id, { is_relevant: next });
+                                  void (async () => {
+                                    const supabase = createClient();
+                                    const { error: updateError } = await supabase
+                                      .from("spots")
+                                      .update({ is_relevant: next })
+                                      .eq("id", spot.id)
+                                      .eq("vacation_id", vacation.id);
+                                    if (updateError) {
+                                      onSpotPatch(spot.id, {
+                                        is_relevant: spot.is_relevant,
+                                      });
+                                      setError(friendlyError(updateError.message));
+                                    }
+                                  })();
+                                }
+                              : undefined
+                          }
+                          onDelete={() => {
+                            void (async () => {
+                              setDeletingSpotId(spot.id);
+                              setError(null);
+                              const { deleteSpot } = await import("./spot-actions");
+                              const result = await deleteSpot(vacation.id, spot.id);
+                              setDeletingSpotId(null);
+                              if (result.error) {
+                                setError(friendlyError(result.error));
+                                return;
+                              }
+                              setEditingSpotId(null);
+                              await onSpotsChanged?.();
+                              await reload(selectedIdRef.current);
+                            })();
+                          }}
+                          onDone={() => {
+                            setEditingSpotId(null);
+                            void (async () => {
+                              await onSpotsChanged?.();
+                              await reload(selectedIdRef.current);
+                            })();
+                          }}
+                        />
+                      ) : null}
                       {legAfter ? (
                         <p className="px-4 pb-1 pl-11 text-[11px] font-medium text-[var(--ink-faint)]">
                           ↓ {formatLegMeta(legAfter)}

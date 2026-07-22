@@ -564,9 +564,14 @@ export default function VacationDetailPage() {
         <VacationTabPanel id="plan" active={tab === "plan"}>
           <h1 className="display text-2xl">Plan</h1>
           <p className="tab-subtitle">
-            Tag wählen, Spots tippen — fertig
+            Tag wählen — Spot tippen zum Bearbeiten
           </p>
-          <DayPlanPanel vacation={vacation} spots={spots} />
+          <DayPlanPanel
+            vacation={vacation}
+            spots={spots}
+            onSpotsChanged={load}
+            onSpotPatch={applySpotPatch}
+          />
         </VacationTabPanel>
       )}
 
