@@ -672,7 +672,7 @@ export default function VacationDetailPage() {
 
       </main>
 
-      {/* Fixed: bottom on mobile, under topbar on desktop (see .app-tabbar). */}
+      {/* Mobile dock / desktop segment rail — see .app-tabbar */}
       <VacationTabBar active={tab} onChange={changeTab} />
     </>
   );
