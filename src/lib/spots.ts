@@ -5,7 +5,7 @@ export type OvernightCost = Database["public"]["Enums"]["overnight_cost"];
 
 export const categoryLabels: Record<SpotCategory, string> = {
   stellplatz: "Stellplatz",
-  unterkunft: "Unterkunft / Airbnb",
+  unterkunft: "Unterkunft",
   sehenswuerdigkeit: "Sehenswürdigkeit",
   ort: "Ort",
   freizeit: "Freizeit",
