@@ -437,11 +437,6 @@ export default function VacationDetailPage() {
       </header>
 
       <main className="shell app-with-chrome mx-auto min-h-screen w-full max-w-6xl px-5 pb-6 pt-3 md:px-8 md:pb-8 md:pt-4">
-        {/* Desktop: tab bar on top. Mobile: fixed at bottom via CSS. */}
-        <div className="hidden md:block">
-          <VacationTabBar active={tab} onChange={changeTab} />
-        </div>
-
       {visitedTabs.has("urlaub") && (
         <VacationTabPanel id="urlaub" active={tab === "urlaub"}>
           {!editingVacation ? (
@@ -678,9 +673,8 @@ export default function VacationDetailPage() {
 
       </main>
 
-      <div className="md:hidden">
-        <VacationTabBar active={tab} onChange={changeTab} />
-      </div>
+      {/* Fixed: bottom on mobile, under topbar on desktop (see .app-tabbar). */}
+      <VacationTabBar active={tab} onChange={changeTab} />
     </>
   );
 }
