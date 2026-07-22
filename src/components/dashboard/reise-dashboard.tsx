@@ -164,13 +164,23 @@ function LegMeta({ leg, label }: { leg: DashboardLeg; label: string }) {
   );
 }
 
-function FeaturedHero({ featured }: { featured: FeaturedDashboard }) {
+function FeaturedHero({
+  featured,
+  onOpenTab,
+}: {
+  featured: FeaturedDashboard;
+  onOpenTab?: (tab: "plan" | "karte" | "spots") => void;
+}) {
   const vibe =
     featured.phase === "upcoming"
       ? "dashboard-hero dashboard-hero--upcoming"
       : featured.phase === "active"
         ? "dashboard-hero dashboard-hero--active"
         : "dashboard-hero dashboard-hero--past";
+
+  const planHref = `/app/vacations/${featured.vacation.id}?tab=plan`;
+  const karteHref = `/app/vacations/${featured.vacation.id}?tab=karte`;
+  const spotsHref = `/app/vacations/${featured.vacation.id}?tab=spots`;
 
   return (
     <section className={`${vibe} animate-rise`}>
@@ -206,30 +216,61 @@ function FeaturedHero({ featured }: { featured: FeaturedDashboard }) {
       </div>
 
       <div className="mt-5 flex flex-wrap gap-2">
-        <Link
-          href={`/app/vacations/${featured.vacation.id}?tab=plan`}
-          className="cta !bg-white !text-[var(--fjord)]"
-        >
-          Plan öffnen
-        </Link>
-        <Link
-          href={`/app/vacations/${featured.vacation.id}?tab=karte`}
-          className="cta cta-secondary !border-white/35 !bg-white/10 !text-white"
-        >
-          Karte
-        </Link>
-        <Link
-          href={`/app/vacations/${featured.vacation.id}?tab=spots`}
-          className="cta cta-secondary !border-white/35 !bg-white/10 !text-white"
-        >
-          Spots
-        </Link>
+        {onOpenTab ? (
+          <>
+            <button
+              type="button"
+              className="cta !bg-white !text-[var(--fjord)]"
+              onClick={() => onOpenTab("plan")}
+            >
+              Plan öffnen
+            </button>
+            <button
+              type="button"
+              className="cta cta-secondary !border-white/35 !bg-white/10 !text-white"
+              onClick={() => onOpenTab("karte")}
+            >
+              Karte
+            </button>
+            <button
+              type="button"
+              className="cta cta-secondary !border-white/35 !bg-white/10 !text-white"
+              onClick={() => onOpenTab("spots")}
+            >
+              Spots
+            </button>
+          </>
+        ) : (
+          <>
+            <Link href={planHref} className="cta !bg-white !text-[var(--fjord)]">
+              Plan öffnen
+            </Link>
+            <Link
+              href={karteHref}
+              className="cta cta-secondary !border-white/35 !bg-white/10 !text-white"
+            >
+              Karte
+            </Link>
+            <Link
+              href={spotsHref}
+              className="cta cta-secondary !border-white/35 !bg-white/10 !text-white"
+            >
+              Spots
+            </Link>
+          </>
+        )}
       </div>
     </section>
   );
 }
 
-function NextUpCard({ featured }: { featured: FeaturedDashboard }) {
+function NextUpCard({
+  featured,
+  onOpenTab,
+}: {
+  featured: FeaturedDashboard;
+  onOpenTab?: (tab: "plan" | "karte" | "spots") => void;
+}) {
   const lead = featured.places[0] ?? featured.overnight;
   if (!lead && !featured.focusDate) {
     return (
@@ -241,12 +282,22 @@ function NextUpCard({ featured }: { featured: FeaturedDashboard }) {
         <p className="mt-1 text-[13px] text-[var(--ink-soft)]">
           Sammle Spots und lege die ersten Tage — dann erscheint hier dein nächster Halt.
         </p>
-        <Link
-          href={`/app/vacations/${featured.vacation.id}?tab=plan`}
-          className="cta mt-4 inline-flex"
-        >
-          Jetzt planen
-        </Link>
+        {onOpenTab ? (
+          <button
+            type="button"
+            className="cta mt-4 inline-flex"
+            onClick={() => onOpenTab("plan")}
+          >
+            Jetzt planen
+          </button>
+        ) : (
+          <Link
+            href={`/app/vacations/${featured.vacation.id}?tab=plan`}
+            className="cta mt-4 inline-flex"
+          >
+            Jetzt planen
+          </Link>
+        )}
       </section>
     );
   }
@@ -361,7 +412,13 @@ function NextUpCard({ featured }: { featured: FeaturedDashboard }) {
   );
 }
 
-function AlertsCard({ featured }: { featured: FeaturedDashboard }) {
+function AlertsCard({
+  featured,
+  onOpenTab,
+}: {
+  featured: FeaturedDashboard;
+  onOpenTab?: (tab: "plan" | "karte" | "spots") => void;
+}) {
   if (featured.alerts.length === 0) return null;
   return (
     <section className="glass-callout animate-rise px-4 py-3">
@@ -375,12 +432,22 @@ function AlertsCard({ featured }: { featured: FeaturedDashboard }) {
           </li>
         ))}
       </ul>
-      <Link
-        href={`/app/vacations/${featured.vacation.id}?tab=plan`}
-        className="mt-3 inline-block text-[13px] font-semibold text-[var(--fjord)] underline"
-      >
-        Im Plan nachziehen
-      </Link>
+      {onOpenTab ? (
+        <button
+          type="button"
+          className="mt-3 inline-block text-[13px] font-semibold text-[var(--fjord)] underline"
+          onClick={() => onOpenTab("plan")}
+        >
+          Im Plan nachziehen
+        </button>
+      ) : (
+        <Link
+          href={`/app/vacations/${featured.vacation.id}?tab=plan`}
+          className="mt-3 inline-block text-[13px] font-semibold text-[var(--fjord)] underline"
+        >
+          Im Plan nachziehen
+        </Link>
+      )}
     </section>
   );
 }
@@ -415,6 +482,25 @@ function OtherVacations({ vacations }: { vacations: VacationSummary[] }) {
   );
 }
 
+/** Dashboard cards for one vacation (Urlaub tab). */
+export function VacationTripDashboard({
+  featured,
+  onOpenTab,
+  className = "space-y-4",
+}: {
+  featured: FeaturedDashboard;
+  onOpenTab?: (tab: "plan" | "karte" | "spots") => void;
+  className?: string;
+}) {
+  return (
+    <div className={className}>
+      <FeaturedHero featured={featured} onOpenTab={onOpenTab} />
+      <NextUpCard featured={featured} onOpenTab={onOpenTab} />
+      <AlertsCard featured={featured} onOpenTab={onOpenTab} />
+    </div>
+  );
+}
+
 export function ReiseDashboard({ payload }: { payload: DashboardPayload }) {
   const { featured, others } = payload;
 
@@ -423,7 +509,7 @@ export function ReiseDashboard({ payload }: { payload: DashboardPayload }) {
       <div className="ios-group mt-6 p-5">
         <p className="text-[15px] font-semibold">Noch keine Urlaube</p>
         <p className="mt-2 text-[14px] text-[var(--ink-soft)]">
-          Lege den nächsten Trip an — danach siehst du hier Countdown, nächste Orte und Wetter.
+          Lege den nächsten Trip an — das Dashboard findest du danach im Tab Urlaub.
         </p>
         <Link href="/app/vacations/new" className="cta mt-4 inline-flex">
           Ersten Urlaub anlegen
@@ -434,9 +520,7 @@ export function ReiseDashboard({ payload }: { payload: DashboardPayload }) {
 
   return (
     <div className="mt-6 space-y-4">
-      <FeaturedHero featured={featured} />
-      <NextUpCard featured={featured} />
-      <AlertsCard featured={featured} />
+      <VacationTripDashboard featured={featured} />
       <OtherVacations vacations={others} />
     </div>
   );
