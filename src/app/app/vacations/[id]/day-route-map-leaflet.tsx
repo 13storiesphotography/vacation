@@ -15,11 +15,12 @@ import type { RouteWaypoint } from "@/lib/day-route";
 
 function numberIcon(order: number, overnight: boolean) {
   const fill = overnight ? "#8b4d6b" : "#0f6e8c";
+  const label = order > 99 ? "•" : String(order);
   return L.divIcon({
     className: "",
     iconSize: [28, 28],
     iconAnchor: [14, 14],
-    html: `<div style="width:28px;height:28px;border-radius:999px;background:${fill};color:#fff;display:flex;align-items:center;justify-content:center;font:700 12px system-ui,sans-serif;border:2px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.25)">${order}</div>`,
+    html: `<div style="width:28px;height:28px;border-radius:999px;background:${fill};color:#fff;display:flex;align-items:center;justify-content:center;font:700 ${order > 9 ? 10 : 12}px system-ui,sans-serif;border:2px solid #fff;box-shadow:0 2px 8px rgba(0,0,0,.25)">${label}</div>`,
   });
 }
 
@@ -41,8 +42,10 @@ function FitBounds({ waypoints }: { waypoints: RouteWaypoint[] }) {
 
 export default function DayRouteMapLeaflet({
   waypoints,
+  className = "h-56",
 }: {
   waypoints: RouteWaypoint[];
+  className?: string;
 }) {
   const path = useMemo(
     () => waypoints.map((point) => [point.coords.lat, point.coords.lng] as [number, number]),
@@ -52,14 +55,16 @@ export default function DayRouteMapLeaflet({
 
   if (waypoints.length === 0) {
     return (
-      <div className="flex h-56 items-center justify-center rounded-[16px] bg-black/5 text-[13px] text-[var(--ink-soft)]">
+      <div
+        className={`flex items-center justify-center rounded-[16px] bg-black/5 text-[13px] text-[var(--ink-soft)] ${className}`}
+      >
         Keine Stops mit Koordinaten.
       </div>
     );
   }
 
   return (
-    <div className="h-56 overflow-hidden rounded-[16px]">
+    <div className={`overflow-hidden rounded-[16px] ${className}`}>
       <MapContainer
         center={center}
         zoom={8}
@@ -76,9 +81,14 @@ export default function DayRouteMapLeaflet({
         ) : null}
         {waypoints.map((point) => (
           <Marker
-            key={`${point.spotId}-${point.order}`}
+            key={point.occurrenceId ?? `${point.spotId}-${point.order}`}
             position={[point.coords.lat, point.coords.lng]}
             icon={numberIcon(point.order, point.role === "overnight")}
+            title={
+              point.dayLabel
+                ? `${point.order}. ${point.name} · ${point.dayLabel}`
+                : `${point.order}. ${point.name}`
+            }
           />
         ))}
       </MapContainer>

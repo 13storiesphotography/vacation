@@ -19,15 +19,13 @@ import {
   formatLegMeta,
   formatRouteDuration,
   formatRouteKm,
-  googleMapsDirectionsUrl,
-  routeSourceHint,
 } from "@/lib/day-route";
 import { syncAllSpotStays } from "@/lib/apply-stay";
 import { createClient } from "@/lib/supabase/client";
 import { CategoryIcon } from "@/components/category-icon";
 import { formatStaySummary, stayStatusLabels } from "@/lib/stay";
-import DayRouteMap from "./day-route-map";
 import { useEnrichedDayRoute } from "./use-enriched-day-route";
+import { TripRouteOverview } from "./trip-route-overview";
 import { EditSpotForm } from "./spot-ui";
 
 type Spot = Database["public"]["Tables"]["spots"]["Row"];
@@ -241,7 +239,6 @@ export function DayPlanPanel({
   const {
     route: selectedRoute,
     loading: routeEnriching,
-    source: routeSource,
   } = useEnrichedDayRoute(selectedRouteEstimate);
 
   function patchSelectedDay(
@@ -348,10 +345,6 @@ export function DayPlanPanel({
     vacation.type === "van" ||
     vacation.type === "camping" ||
     vacation.type === "hotel";
-  const directionsUrl = selectedRoute
-    ? googleMapsDirectionsUrl(selectedRoute.waypoints)
-    : null;
-
   return (
     <div className="mt-3 space-y-4">
       {error && (
@@ -376,47 +369,13 @@ export function DayPlanPanel({
         </p>
       </div>
 
-      {tripRoutes.daysWithRoute > 1 ? (
-        <div className="ios-group overflow-hidden">
-          <div className="px-4 pt-3.5 pb-2">
-            <p className="text-[12px] font-semibold uppercase tracking-wide text-[var(--fjord)]">
-              Route über alle Tage
-            </p>
-            <p className="mt-1 text-[12px] text-[var(--ink-faint)]">
-              Überblick über alle Tage — Etappen-Details mit Google-Routenzeit im Tagesplan.
-            </p>
-          </div>
-          <ul className="divide-y divide-[var(--separator)] px-2 pb-2">
-            {tripRoutes.days
-              .filter((route) => route.legs.length > 0)
-              .map((route) => (
-                <li key={route.dayId}>
-                  <button
-                    type="button"
-                    className="flex w-full items-center gap-3 rounded-[12px] px-2 py-2.5 text-left hover:bg-[var(--fjord-soft)]"
-                    onClick={() => selectDay(route.dayId)}
-                  >
-                    <span className="min-w-0 flex-1">
-                      <span className="block truncate text-[14px] font-semibold">
-                        {route.title}
-                      </span>
-                      <span className="text-[11px] text-[var(--ink-faint)]">
-                        {route.label} · {route.waypoints.length} Stop
-                        {route.waypoints.length === 1 ? "" : "s"}
-                      </span>
-                    </span>
-                    <span className="shrink-0 text-right text-[12px] font-semibold text-[var(--ink-soft)]">
-                      {formatRouteKm(route.totalKm)}
-                      <span className="block text-[11px] font-medium text-[var(--ink-faint)]">
-                        ~{formatRouteDuration(route.totalMinutes)}
-                      </span>
-                    </span>
-                  </button>
-                </li>
-              ))}
-          </ul>
-        </div>
-      ) : null}
+      <TripRouteOverview
+        days={days}
+        spotsById={spotsById}
+        vacationStart={vacation.start_date}
+        vacationEnd={vacation.end_date}
+        onSelectDay={selectDay}
+      />
 
       {/* Day strip */}
       <div
@@ -871,85 +830,6 @@ export function DayPlanPanel({
               ) : null}
             </div>
           )}
-
-          {selectedRoute && selectedRoute.waypoints.length > 0 ? (
-            <div className="ios-group overflow-hidden">
-              <div className="flex flex-wrap items-start justify-between gap-3 px-4 pt-3.5 pb-2">
-                <div className="min-w-0">
-                  <p className="text-[12px] font-semibold uppercase tracking-wide text-[var(--fjord)]">
-                    Route auf der Karte
-                  </p>
-                  <p className="mt-1 text-[13px] text-[var(--ink-soft)]">
-                    {selectedRoute.waypoints.length} Stop
-                    {selectedRoute.waypoints.length === 1 ? "" : "s"}
-                    {selectedRoute.legs.length > 0
-                      ? ` · ${
-                          routeSource === "google" ? "" : "ca. "
-                        }${formatRouteKm(selectedRoute.totalKm)} · ${
-                          routeSource === "google" ? "" : "~"
-                        }${formatRouteDuration(selectedRoute.totalMinutes)}`
-                      : ""}
-                    {routeEnriching ? " · Routenzeit…" : ""}
-                  </p>
-                  <p className="mt-1 text-[12px] text-[var(--ink-faint)]">
-                    Reihenfolge wie im Plan · {routeSourceHint(routeSource)}
-                    {routeSource === "estimate"
-                      ? " (Straßenfaktor, bis Google Routes greift)"
-                      : ""}
-                  </p>
-                </div>
-                {directionsUrl ? (
-                  <a
-                    href={directionsUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="inline-flex shrink-0 items-center gap-1.5 rounded-full border border-[var(--separator)] bg-[var(--fjord-soft)] px-3 py-1.5 text-[12px] font-semibold text-[var(--fjord)] transition hover:bg-[var(--fjord)] hover:text-white"
-                  >
-                    In Google Maps öffnen
-                    <span aria-hidden="true">↗</span>
-                  </a>
-                ) : null}
-              </div>
-              <div className="px-3 pb-3">
-                <DayRouteMap
-                  waypoints={selectedRoute.waypoints}
-                  encodedPolyline={selectedRoute.encodedPolyline}
-                />
-              </div>
-              {selectedRoute.legs.length > 0 ? (
-                <ul className="divide-y divide-[var(--separator)] border-t border-[var(--separator)] px-2 pb-2">
-                  {selectedRoute.legs.map((leg) => (
-                    <li
-                      key={`${leg.fromSpotId}-${leg.toSpotId}-${leg.fromOrder}`}
-                      className="flex items-center justify-between gap-3 px-2 py-2.5"
-                    >
-                      <p className="min-w-0 text-[13px] text-[var(--ink-soft)]">
-                        <span className="font-semibold text-[var(--ink)]">
-                          {leg.fromName}
-                        </span>
-                        <span className="mx-1.5 text-[var(--ink-faint)]">→</span>
-                        <span className="font-semibold text-[var(--ink)]">
-                          {leg.toName}
-                        </span>
-                      </p>
-                      <p className="shrink-0 text-right text-[12px] font-semibold text-[var(--ink-soft)]">
-                        {formatLegMeta(leg)}
-                        <span className="block text-[11px] font-medium text-[var(--ink-faint)]">
-                          {routeSourceHint(leg.source)}
-                        </span>
-                      </p>
-                    </li>
-                  ))}
-                </ul>
-              ) : null}
-              {selectedRoute.skipped.length > 0 ? (
-                <p className="border-t border-[var(--separator)] px-4 py-2.5 text-[12px] text-[var(--ink-faint)]">
-                  Ohne Koordinaten nicht auf der Route:{" "}
-                  {selectedRoute.skipped.map((entry) => entry.name).join(", ")}
-                </p>
-              ) : null}
-            </div>
-          ) : null}
 
           {/* Quick pool of still-open spots */}
           {!pickerOpen && unplannedSpots.length > 0 && (

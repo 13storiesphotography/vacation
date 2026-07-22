@@ -10,6 +10,7 @@ type ApiOk = {
   totalKm: number;
   totalMinutes: number;
   encodedPolyline: string | null;
+  encodedPolylines?: string[];
 };
 
 /**
@@ -78,6 +79,7 @@ export function useEnrichedDayRoute(route: DayRoute | null): {
           totalMinutes: json.totalMinutes,
           source: "google",
           encodedPolyline: json.encodedPolyline,
+          encodedPolylines: json.encodedPolylines ?? (json.encodedPolyline ? [json.encodedPolyline] : []),
         });
       } catch {
         // Keep estimate.

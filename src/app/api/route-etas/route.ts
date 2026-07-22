@@ -1,11 +1,11 @@
 import { NextRequest, NextResponse } from "next/server";
 import { createClient } from "@/lib/supabase/server";
 import { isValidLatLng, type LatLng } from "@/lib/geo";
-import { computeDrivingRoute } from "@/lib/google-routes";
+import { computeDrivingRouteChunked } from "@/lib/google-routes";
 
 export const runtime = "nodejs";
 
-const MAX_POINTS = 25;
+const MAX_POINTS = 80;
 
 type Body = {
   points?: Array<{ lat?: unknown; lng?: unknown }>;
@@ -23,7 +23,7 @@ function parsePoints(raw: Body["points"]): LatLng[] | null {
   return points;
 }
 
-/** Authenticated driving ETAs via Google Routes API. */
+/** Authenticated driving ETAs via Google Routes API (chunked for long trips). */
 export async function POST(request: NextRequest) {
   const supabase = await createClient();
   const {
@@ -43,12 +43,12 @@ export async function POST(request: NextRequest) {
   const points = parsePoints(body.points);
   if (!points) {
     return NextResponse.json(
-      { error: "2–25 gültige Koordinaten nötig." },
+      { error: "2–80 gültige Koordinaten nötig." },
       { status: 400 },
     );
   }
 
-  const result = await computeDrivingRoute(points);
+  const result = await computeDrivingRouteChunked(points);
   if (!result) {
     return NextResponse.json(
       {
@@ -66,5 +66,6 @@ export async function POST(request: NextRequest) {
     totalKm: result.totalKm,
     totalMinutes: result.totalMinutes,
     encodedPolyline: result.encodedPolyline,
+    encodedPolylines: result.encodedPolylines,
   });
 }
