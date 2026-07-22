@@ -1232,21 +1232,21 @@ export function EditSpotForm({
           <div className="mb-3 flex items-center justify-between gap-3 rounded-[14px] border border-[var(--separator)] bg-[var(--fjord-soft)]/40 px-3 py-2.5">
             <div className="min-w-0">
               <p className="text-[13px] font-semibold text-[var(--ink)]">
-                Für diese Reise
+                {relevant ? "In der Auswahl" : "Zur Seite gelegt"}
               </p>
               <p className="text-[12px] text-[var(--ink-faint)]">
                 {relevant
-                  ? "Relevant — erscheint in Plan und Karte."
-                  : "Nicht relevant — bleibt in der Sammlung, aber ausgeblendet."}
+                  ? "Erscheint in Plan und auf der Karte."
+                  : "Bleibt in der Sammlung, aber nicht in Plan/Karte."}
               </p>
             </div>
             <button
               type="button"
               className="glass-chip shrink-0"
-              data-active={relevant}
+              data-active={!relevant}
               onClick={onToggleRelevant}
             >
-              {relevant ? "Relevant" : "Nicht relevant"}
+              {relevant ? "Zur Seite legen" : "Wieder dabei"}
             </button>
           </div>
         ) : null}
@@ -1318,7 +1318,6 @@ export function EditSpotForm({
 }
 
 type SortMode = "newest" | "favorites" | "avg" | "mine";
-type RelevanceFilter = "alle" | "relevant" | "nicht";
 
 function formatAvg(value: number | null): string {
   if (value == null) return "–";
@@ -1351,27 +1350,19 @@ export function SpotList({
   onSpotPatch: (spotId: string, patch: Partial<Spot>) => void;
 }) {
   const [filter, setFilter] = useState<"alle" | SpotCategory>("alle");
-  const [relevance, setRelevance] = useState<RelevanceFilter>("alle");
   const [sortMode, setSortMode] = useState<SortMode>("newest");
   const [editingId, setEditingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
 
-  const relevantCount = useMemo(
-    () => spots.filter((spot) => isSpotRelevant(spot)).length,
+  const shelvedCount = useMemo(
+    () => spots.filter((spot) => !isSpotRelevant(spot)).length,
     [spots],
   );
-  const notRelevantCount = spots.length - relevantCount;
 
   const visibleSpots = useMemo(() => {
     let list =
       filter === "alle" ? [...spots] : spots.filter((spot) => spot.category === filter);
-
-    if (relevance === "relevant") {
-      list = list.filter((spot) => isSpotRelevant(spot));
-    } else if (relevance === "nicht") {
-      list = list.filter((spot) => !isSpotRelevant(spot));
-    }
 
     list.sort((a, b) => {
       const summaryA = summaries[a.id] ?? emptySummary();
@@ -1389,17 +1380,15 @@ export function SpotList({
       if (sortMode === "mine") {
         return (summaryB.myRating ?? -1) - (summaryA.myRating ?? -1);
       }
-      // Newest: keep DB order, but sink non-relevant when showing all.
-      if (relevance === "alle") {
-        const aRel = isSpotRelevant(a) ? 0 : 1;
-        const bRel = isSpotRelevant(b) ? 0 : 1;
-        if (aRel !== bRel) return aRel - bRel;
-      }
+      // Newest: keep DB order, but sink shelved spots.
+      const aRel = isSpotRelevant(a) ? 0 : 1;
+      const bRel = isSpotRelevant(b) ? 0 : 1;
+      if (aRel !== bRel) return aRel - bRel;
       return 0;
     });
 
     return list;
-  }, [filter, relevance, sortMode, spots, summaries]);
+  }, [filter, sortMode, spots, summaries]);
 
   async function onDelete(spotId: string) {
     setDeletingId(spotId);
@@ -1504,26 +1493,6 @@ export function SpotList({
         ))}
       </div>
 
-      <div className="mb-3 flex flex-wrap items-center gap-2">
-        {(
-          [
-            ["alle", `Alle (${spots.length})`],
-            ["relevant", `Relevant (${relevantCount})`],
-            ["nicht", `Nicht relevant (${notRelevantCount})`],
-          ] as const
-        ).map(([value, label]) => (
-          <button
-            key={value}
-            type="button"
-            onClick={() => setRelevance(value)}
-            className="glass-chip"
-            data-active={relevance === value}
-          >
-            {label}
-          </button>
-        ))}
-      </div>
-
       <div className="mb-3">
         <label className="form-label">
           Sortierung
@@ -1539,6 +1508,13 @@ export function SpotList({
           </select>
         </label>
       </div>
+
+      {shelvedCount > 0 ? (
+        <p className="mb-3 text-[12px] text-[var(--ink-faint)]">
+          {shelvedCount} Spot{shelvedCount === 1 ? "" : "s"} zur Seite gelegt — unten in der
+          Liste, nicht in Plan/Karte.
+        </p>
+      ) : null}
 
       {error && <p className="mb-3 text-[13px] text-[var(--danger)]">{error}</p>}
 
@@ -1636,45 +1612,44 @@ export function SpotList({
                       </p>
                     ) : null}
 
-                    <div
-                      className="mt-1.5 flex flex-wrap gap-1.5"
-                      onClick={(event) => event.stopPropagation()}
-                    >
-                      <button
-                        type="button"
-                        className="glass-chip !py-1 !text-[11px]"
-                        data-active={relevant}
-                        aria-pressed={relevant}
-                        title={
-                          relevant
-                            ? "Für diese Reise relevant — tippen zum Abwählen"
-                            : "Nicht relevant — tippen zum Aktivieren"
-                        }
-                        onClick={() => toggleRelevant(spot)}
+                    {!relevant || spot.maps_url || spot.info_url ? (
+                      <div
+                        className="mt-1.5 flex flex-wrap gap-1.5"
+                        onClick={(event) => event.stopPropagation()}
                       >
-                        {relevant ? "Relevant" : "Nicht relevant"}
-                      </button>
-                      {spot.maps_url ? (
-                        <a
-                          href={spot.maps_url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="glass-chip !py-1 !text-[11px]"
-                        >
-                          Karte öffnen
-                        </a>
-                      ) : null}
-                      {spot.info_url ? (
-                        <a
-                          href={spot.info_url}
-                          target="_blank"
-                          rel="noreferrer"
-                          className="glass-chip !py-1 !text-[11px]"
-                        >
-                          {isAirbnbUrl(spot.info_url) ? "Bei Airbnb öffnen" : "Seite öffnen"}
-                        </a>
-                      ) : null}
-                    </div>
+                        {!relevant ? (
+                          <button
+                            type="button"
+                            className="glass-chip !py-1 !text-[11px]"
+                            data-active="true"
+                            title="Wieder in Plan und Karte aufnehmen"
+                            onClick={() => toggleRelevant(spot)}
+                          >
+                            Zur Seite gelegt
+                          </button>
+                        ) : null}
+                        {spot.maps_url ? (
+                          <a
+                            href={spot.maps_url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="glass-chip !py-1 !text-[11px]"
+                          >
+                            Karte öffnen
+                          </a>
+                        ) : null}
+                        {spot.info_url ? (
+                          <a
+                            href={spot.info_url}
+                            target="_blank"
+                            rel="noreferrer"
+                            className="glass-chip !py-1 !text-[11px]"
+                          >
+                            {isAirbnbUrl(spot.info_url) ? "Bei Airbnb öffnen" : "Seite öffnen"}
+                          </a>
+                        ) : null}
+                      </div>
+                    ) : null}
                   </div>
                 </div>
                 {isOpen && (

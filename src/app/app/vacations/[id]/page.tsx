@@ -473,7 +473,7 @@ export default function VacationDetailPage() {
               <p className="tab-subtitle">
                 {spots.length} in der Sammlung
                 {spots.length > 0 && relevantSpotCount !== spots.length
-                  ? ` · ${relevantSpotCount} relevant`
+                  ? ` · ${spots.length - relevantSpotCount} zur Seite gelegt`
                   : ""}
               </p>
             </div>

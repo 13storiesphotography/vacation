@@ -208,7 +208,7 @@ function FeaturedHero({
           {featured.daysWithStops}/{featured.totalDays} Tage geplant
         </span>
         <span className="dashboard-pill">
-          {featured.plannedRelevantCount}/{featured.relevantSpotCount} Spots
+          {featured.plannedRelevantCount}/{featured.relevantSpotCount} in Auswahl
         </span>
         {featured.focusLabel ? (
           <span className="dashboard-pill">Fokus {featured.focusLabel}</span>

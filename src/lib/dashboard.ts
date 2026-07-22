@@ -316,7 +316,7 @@ export function buildFeaturedDashboard(input: {
     const openRelevant = relevant.length - plannedRelevantCount;
     if (openRelevant > 0) {
       alerts.push(
-        `${openRelevant} relevante Spot${openRelevant === 1 ? "" : "s"} noch nicht eingeplant.`,
+        `${openRelevant} Spot${openRelevant === 1 ? "" : "s"} in der Auswahl noch nicht eingeplant.`,
       );
     }
   }
