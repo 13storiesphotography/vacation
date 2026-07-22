@@ -113,7 +113,7 @@ export default function SpotMapLeaflet({
       center={DEFAULT_MAP_CENTER}
       zoom={DEFAULT_MAP_ZOOM}
       className="h-full w-full rounded-[18px]"
-      scrollWheelZoom={expanded}
+      scrollWheelZoom
       dragging
     >
       <TileLayer

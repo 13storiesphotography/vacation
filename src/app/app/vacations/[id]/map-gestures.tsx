@@ -12,10 +12,10 @@ export function hasFinePointer(): boolean {
 /**
  * Mobile-friendly map gestures:
  * - cooperative: one finger scrolls the page; two fingers pan the map
- * - greedy (expanded / desktop): mouse or one finger pans the map
+ * - greedy (expanded): mouse or one finger pans the map; wheel zooms
  *
- * On desktop (fine pointer), cooperative still allows mouse-drag panning;
- * only the scroll wheel stays off so the page can scroll over the map.
+ * On desktop (fine pointer), cooperative still allows mouse-drag panning
+ * and scroll-wheel zoom. Touch devices keep two-finger pan / no wheel trap.
  */
 export function LeafletGestureMode({
   mode,
@@ -48,12 +48,12 @@ export function LeafletGestureMode({
     }
 
     container.classList.add("map-gestures-cooperative");
-    // Keep wheel zoom off in cooperative so page scroll stays primary on trackpads.
-    map.scrollWheelZoom.disable();
 
-    // Desktop: allow click-drag pan without expanding the map.
+    // Desktop: pan + wheel zoom without expanding. Page scroll still works
+    // outside the map; over the map the wheel zooms intentionally.
     if (desktop) {
       map.dragging.enable();
+      map.scrollWheelZoom.enable();
       return () => {
         container.classList.remove("map-gestures-cooperative");
         map.dragging.enable();
@@ -62,6 +62,7 @@ export function LeafletGestureMode({
     }
 
     map.dragging.disable();
+    map.scrollWheelZoom.disable();
 
     let activeTouches = 0;
 

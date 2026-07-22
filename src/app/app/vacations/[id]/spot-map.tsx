@@ -186,7 +186,7 @@ export function SpotMap({
           : " · OpenStreetMap (Google-Key fehlt)"}
         {" · "}
         {expanded || desktopPointer
-          ? "Ziehen zum Verschieben"
+          ? "Ziehen oder Mausrad zum Zoomen"
           : "Zwei Finger zum Verschieben"}
       </p>
 
