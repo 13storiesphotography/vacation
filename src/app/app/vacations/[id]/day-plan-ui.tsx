@@ -576,7 +576,7 @@ export function DayPlanPanel({
               </div>
             )}
 
-            {selected.stops.length === 0 ? (
+            {!pickerOpen && selected.stops.length === 0 ? (
               <button
                 type="button"
                 disabled={pending || availableForDay.length === 0}
@@ -588,7 +588,7 @@ export function DayPlanPanel({
                   Tippe, um Spots aus der Sammlung hierher zu legen.
                 </span>
               </button>
-            ) : (
+            ) : selected.stops.length > 0 ? (
               <ol className="px-2 pb-2">
                 {selected.stops.map((stop, index) => {
                   const spot = spotsById.get(stop.spot_id);
