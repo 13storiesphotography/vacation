@@ -271,6 +271,7 @@ export type Database = {
         Args: { p_day_plan_id: string };
         Returns: boolean;
       };
+      activate_my_vacation_invites: { Args: Record<string, never>; Returns: number };
     };
     Enums: {
       member_role: "admin" | "member";

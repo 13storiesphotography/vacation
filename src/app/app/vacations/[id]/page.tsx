@@ -551,40 +551,40 @@ export default function VacationDetailPage() {
               const canManage = canEditVacation && !isSelf;
 
               return (
-                <div key={member.id} className="ios-row !items-start">
+                <div key={member.id} className="ios-row !items-center">
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-[15px] font-semibold">{member.email}</p>
                     <p className="text-[12px] font-semibold uppercase tracking-wide text-[var(--ink-faint)]">
                       {memberRoleLabel(member.role)} · {memberStatusLabel(member.status)}
                       {isSelf ? " · Du" : ""}
                     </p>
-                    {canManage && (
-                      <div className="mt-2 flex flex-wrap gap-2">
-                        {member.status === "invited" && (
-                          <button
-                            type="button"
-                            className="glass-chip"
-                            disabled={busy}
-                            onClick={() => void onResendInvite(member)}
-                          >
-                            {busy ? "…" : "Erneut senden"}
-                          </button>
-                        )}
+                  </div>
+                  {canManage ? (
+                    <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+                      {member.status === "invited" ? (
                         <button
                           type="button"
-                          className="glass-chip glass-chip-danger"
+                          className="glass-chip"
                           disabled={busy}
-                          onClick={() => void onRemoveMember(member)}
+                          onClick={() => void onResendInvite(member)}
                         >
-                          {busy
-                            ? "…"
-                            : member.status === "invited"
-                              ? "Einladung zurückziehen"
-                              : "Entfernen"}
+                          {busy ? "…" : "Erneut senden"}
                         </button>
-                      </div>
-                    )}
-                  </div>
+                      ) : null}
+                      <button
+                        type="button"
+                        className="glass-chip glass-chip-danger"
+                        disabled={busy}
+                        onClick={() => void onRemoveMember(member)}
+                      >
+                        {busy
+                          ? "…"
+                          : member.status === "invited"
+                            ? "Zurückziehen"
+                            : "Entfernen"}
+                      </button>
+                    </div>
+                  ) : null}
                 </div>
               );
             })}

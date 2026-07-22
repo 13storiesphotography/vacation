@@ -33,6 +33,9 @@ export async function GET(request: Request) {
           }
           return NextResponse.redirect(denied);
         }
+
+        // Activate pending vacation invites once the invite link / login confirms.
+        await supabase.rpc("activate_my_vacation_invites");
       }
 
       const forwardedHost = request.headers.get("x-forwarded-host");

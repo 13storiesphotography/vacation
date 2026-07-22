@@ -16,11 +16,14 @@ export default function SetPasswordPage() {
     setError(null);
     const supabase = createClient();
     const { error: updateError } = await supabase.auth.updateUser({ password });
-    setLoading(false);
     if (updateError) {
+      setLoading(false);
       setError(updateError.message);
       return;
     }
+    // Ensure membership flips from invited → active after accepting the invite.
+    await supabase.rpc("activate_my_vacation_invites");
+    setLoading(false);
     router.replace("/app/mfa/enroll");
     router.refresh();
   }
