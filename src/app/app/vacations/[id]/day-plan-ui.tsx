@@ -561,7 +561,7 @@ export function DayPlanPanel({
                               </span>
                               <span className="text-[11px] text-[var(--ink-faint)]">
                                 {categoryLabels[spot.category as SpotCategory]}
-                                {open ? " · noch offen" : " · schon woanders"}
+                                {open ? " · noch offen" : " · schon geplant"}
                               </span>
                             </span>
                             <span className="text-[18px] font-light text-[var(--fjord)]">
