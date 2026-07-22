@@ -60,8 +60,16 @@ function estimateRoadKm(a: LatLng, b: LatLng): number {
   return haversineKm(a, b) * ROAD_FACTOR;
 }
 
+export function estimateRoadKmBetween(a: LatLng, b: LatLng): number {
+  return estimateRoadKm(a, b);
+}
+
 function estimateMinutes(km: number): number {
   return Math.max(1, Math.round((km / VAN_KMH) * 60));
+}
+
+export function estimateDriveMinutesBetween(a: LatLng, b: LatLng): number {
+  return estimateMinutes(estimateRoadKm(a, b));
 }
 
 export function formatRouteKm(km: number): string {
