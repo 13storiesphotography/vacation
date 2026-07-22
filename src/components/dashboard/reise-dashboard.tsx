@@ -1,17 +1,14 @@
 import Link from "next/link";
 import { CategoryIcon } from "@/components/category-icon";
 import { categoryLabels, type SpotCategory } from "@/lib/spots";
-import { formatRouteDuration, formatRouteKm } from "@/lib/day-route";
 import {
   vacationTypeLabel,
-  type DashboardLeg,
   type DashboardPayload,
   type DashboardPlace,
   type FeaturedDashboard,
   type VacationSummary,
 } from "@/lib/dashboard";
 import type { DayWeather } from "@/lib/weather";
-import { LiveEtaChip } from "./live-eta-chip";
 
 function WeatherGlyph({ icon }: { icon: DayWeather["icon"] }) {
   const common = {
@@ -87,45 +84,6 @@ function WeatherGlyph({ icon }: { icon: DayWeather["icon"] }) {
   );
 }
 
-function ProgressRing({ value }: { value: number }) {
-  const clamped = Math.max(0, Math.min(1, value));
-  const size = 64;
-  const stroke = 6;
-  const radius = (size - stroke) / 2;
-  const circumference = 2 * Math.PI * radius;
-  const offset = circumference * (1 - clamped);
-  return (
-    <svg
-      width={size}
-      height={size}
-      viewBox={`0 0 ${size} ${size}`}
-      className="shrink-0"
-      aria-hidden="true"
-    >
-      <circle
-        cx={size / 2}
-        cy={size / 2}
-        r={radius}
-        fill="none"
-        stroke="rgba(255,255,255,0.28)"
-        strokeWidth={stroke}
-      />
-      <circle
-        cx={size / 2}
-        cy={size / 2}
-        r={radius}
-        fill="none"
-        stroke="rgba(255,255,255,0.95)"
-        strokeWidth={stroke}
-        strokeLinecap="round"
-        strokeDasharray={circumference}
-        strokeDashoffset={offset}
-        transform={`rotate(-90 ${size / 2} ${size / 2})`}
-      />
-    </svg>
-  );
-}
-
 function PlaceThumb({ place }: { place: DashboardPlace }) {
   if (place.imageUrl) {
     return (
@@ -145,122 +103,68 @@ function PlaceThumb({ place }: { place: DashboardPlace }) {
   );
 }
 
-function LegMeta({ leg, label }: { leg: DashboardLeg; label: string }) {
-  const approx = leg.source !== "google";
-  return (
-    <p className="text-[12px] text-[var(--ink-soft)]">
-      <span className="font-semibold text-[var(--fjord)]">{label}</span>
-      {" · "}
-      {leg.fromName} → {leg.toName}
-      {" · "}
-      {approx ? "ca. " : ""}
-      {leg.kmLabel} · {approx ? "~" : ""}
-      {leg.durationLabel}
-      <span className="text-[var(--ink-faint)]">
-        {" · "}
-        {leg.source === "google" ? "Google-Routenzeit" : "Schätzung"}
-      </span>
-    </p>
-  );
+function formatDayLong(date: string): string {
+  return new Intl.DateTimeFormat("de-DE", {
+    weekday: "long",
+    day: "numeric",
+    month: "long",
+  }).format(new Date(`${date}T12:00:00Z`));
 }
 
-function FeaturedHero({
+function statusLine(featured: FeaturedDashboard): string {
+  if (featured.phase === "upcoming") {
+    if (featured.daysUntilStart <= 0) return "Start heute";
+    if (featured.daysUntilStart === 1) return "Start morgen";
+    return `Start in ${featured.daysUntilStart} Tagen`;
+  }
+  if (featured.phase === "active") {
+    if (featured.dayIndex != null) {
+      return `Tag ${featured.dayIndex} von ${featured.totalDays}`;
+    }
+    return "Unterwegs";
+  }
+  if (featured.daysSinceEnd <= 1) return "Gerade zurück";
+  return `Vor ${featured.daysSinceEnd} Tagen zu Ende`;
+}
+
+function googleMapsDirectionsUrl(coords: { lat: number; lng: number }): string {
+  const url = new URL("https://www.google.com/maps/dir/");
+  url.searchParams.set("api", "1");
+  url.searchParams.set("destination", `${coords.lat},${coords.lng}`);
+  url.searchParams.set("travelmode", "driving");
+  return url.toString();
+}
+
+function StatusStrip({
   featured,
   onOpenTab,
 }: {
   featured: FeaturedDashboard;
   onOpenTab?: (tab: "plan" | "karte" | "spots") => void;
 }) {
-  const vibe =
-    featured.phase === "upcoming"
-      ? "dashboard-hero dashboard-hero--upcoming"
-      : featured.phase === "active"
-        ? "dashboard-hero dashboard-hero--active"
-        : "dashboard-hero dashboard-hero--past";
-
-  const planHref = `/app/vacations/${featured.vacation.id}?tab=plan`;
-  const karteHref = `/app/vacations/${featured.vacation.id}?tab=karte`;
-  const spotsHref = `/app/vacations/${featured.vacation.id}?tab=spots`;
-
   return (
-    <section className={`${vibe} animate-rise`}>
-      <div className="flex items-start justify-between gap-4">
-        <div className="min-w-0">
-          <p className="text-[11px] font-bold uppercase tracking-[0.18em] text-white/75">
-            {featured.phase === "upcoming"
-              ? "Vorfreude"
-              : featured.phase === "active"
-                ? "Unterwegs"
-                : "Rückblick"}
-          </p>
-          <h2 className="mt-2 text-[28px] font-bold leading-tight tracking-[-0.04em] text-white">
-            {featured.heroTitle}
-          </h2>
-          <p className="mt-2 text-[14px] leading-relaxed text-white/80">
-            {featured.heroSubtitle}
-          </p>
-        </div>
-        <ProgressRing value={featured.progress} />
-      </div>
-
-      <div className="mt-5 flex flex-wrap gap-2">
-        <span className="dashboard-pill">
-          {featured.daysWithStops}/{featured.totalDays} Tage geplant
-        </span>
-        <span className="dashboard-pill">
-          {featured.plannedRelevantCount}/{featured.relevantSpotCount} in Auswahl
-        </span>
-        {featured.focusLabel ? (
-          <span className="dashboard-pill">Fokus {featured.focusLabel}</span>
-        ) : null}
-      </div>
-
-      <div className="mt-5 flex flex-wrap gap-2">
-        {onOpenTab ? (
-          <>
-            <button
-              type="button"
-              className="cta !bg-white !text-[var(--fjord)]"
-              onClick={() => onOpenTab("plan")}
-            >
-              Plan öffnen
-            </button>
-            <button
-              type="button"
-              className="cta cta-secondary !border-white/35 !bg-white/10 !text-white"
-              onClick={() => onOpenTab("karte")}
-            >
-              Karte
-            </button>
-            <button
-              type="button"
-              className="cta cta-secondary !border-white/35 !bg-white/10 !text-white"
-              onClick={() => onOpenTab("spots")}
-            >
-              Spots
-            </button>
-          </>
-        ) : (
-          <>
-            <Link href={planHref} className="cta !bg-white !text-[var(--fjord)]">
-              Plan öffnen
-            </Link>
-            <Link
-              href={karteHref}
-              className="cta cta-secondary !border-white/35 !bg-white/10 !text-white"
-            >
-              Karte
-            </Link>
-            <Link
-              href={spotsHref}
-              className="cta cta-secondary !border-white/35 !bg-white/10 !text-white"
-            >
-              Spots
-            </Link>
-          </>
-        )}
-      </div>
-    </section>
+    <div className="flex flex-wrap items-center justify-between gap-3 px-0.5">
+      <p className="text-[14px] text-[var(--ink-soft)]">
+        <span className="font-semibold text-[var(--ink)]">{statusLine(featured)}</span>
+        {featured.vacation.region ? ` · ${featured.vacation.region}` : ""}
+      </p>
+      {onOpenTab ? (
+        <button
+          type="button"
+          className="glass-chip shrink-0"
+          onClick={() => onOpenTab("plan")}
+        >
+          Plan
+        </button>
+      ) : (
+        <Link
+          href={`/app/vacations/${featured.vacation.id}?tab=plan`}
+          className="glass-chip shrink-0"
+        >
+          Plan
+        </Link>
+      )}
+    </div>
   );
 }
 
@@ -272,6 +176,7 @@ function NextUpCard({
   onOpenTab?: (tab: "plan" | "karte" | "spots") => void;
 }) {
   const lead = featured.places[0] ?? featured.overnight;
+
   if (!lead && !featured.focusDate) {
     return (
       <section className="ios-group animate-rise p-5">
@@ -280,7 +185,7 @@ function NextUpCard({
         </p>
         <p className="mt-2 text-[15px] font-semibold">Noch nichts eingeplant</p>
         <p className="mt-1 text-[13px] text-[var(--ink-soft)]">
-          Sammle Spots und lege die ersten Tage — dann erscheint hier dein nächster Halt.
+          Im Plan die ersten Stops legen — dann steht hier der nächste Halt.
         </p>
         {onOpenTab ? (
           <button
@@ -288,21 +193,27 @@ function NextUpCard({
             className="cta mt-4 inline-flex"
             onClick={() => onOpenTab("plan")}
           >
-            Jetzt planen
+            Zum Plan
           </button>
         ) : (
           <Link
             href={`/app/vacations/${featured.vacation.id}?tab=plan`}
             className="cta mt-4 inline-flex"
           >
-            Jetzt planen
+            Zum Plan
           </Link>
         )}
       </section>
     );
   }
 
-  const rest = featured.places.filter((place) => place.spotId !== lead?.spotId).slice(0, 3);
+  const dayHeading = featured.isFocusToday
+    ? "Heute"
+    : featured.focusDate
+      ? formatDayLong(featured.focusDate)
+      : "Als Nächstes";
+
+  const mapsUrl = lead?.coords ? googleMapsDirectionsUrl(lead.coords) : null;
 
   return (
     <section className="ios-group animate-rise overflow-hidden">
@@ -310,16 +221,10 @@ function NextUpCard({
         <p className="text-[12px] font-semibold uppercase tracking-wide text-[var(--fjord)]">
           Als Nächstes
         </p>
-        <p className="mt-1 text-[13px] text-[var(--ink-soft)]">
-          {featured.focusTitle ? `${featured.focusTitle} · ` : ""}
-          {featured.focusLabel}
-          {featured.phase === "upcoming" ? " · erster geplanter Tag" : ""}
-          {featured.phase === "active"
-            ? featured.isFocusToday
-              ? " · heute"
-              : " · nächster befüllter Tag"
-            : ""}
-        </p>
+        <p className="mt-1 text-[15px] font-semibold text-[var(--ink)]">{dayHeading}</p>
+        {featured.focusTitle ? (
+          <p className="mt-0.5 text-[13px] text-[var(--ink-soft)]">{featured.focusTitle}</p>
+        ) : null}
       </div>
 
       {featured.weather ? (
@@ -332,7 +237,7 @@ function NextUpCard({
               {featured.weather.tempMax}° / {featured.weather.tempMin}°
             </p>
             <p className="text-[12px] text-[var(--ink-soft)]">
-              Wetter am Ort
+              Wetter
               {featured.weather.precipProb != null
                 ? ` · ${featured.weather.precipProb}% Regen`
                 : ""}
@@ -344,110 +249,28 @@ function NextUpCard({
       ) : null}
 
       {lead ? (
-        <div className="flex items-start gap-3 px-4 pb-3">
+        <div className="flex items-start gap-3 px-4 pb-4">
           <PlaceThumb place={lead} />
           <div className="min-w-0 flex-1">
             <p className="truncate text-[16px] font-semibold">{lead.name}</p>
             <p className="mt-0.5 text-[12px] text-[var(--ink-soft)]">
               {categoryLabels[lead.category as SpotCategory]}
-              {lead.role === "overnight" ? " · Übernachtung" : " · nächster Stop"}
-              {lead.tags.length
-                ? ` · ${lead.tags.slice(0, 2).join(", ")}`
-                : ""}
+              {lead.role === "overnight" ? " · Übernachtung" : ""}
             </p>
-            {featured.arrivalLeg ? (
-              <div className="mt-2">
-                <LegMeta leg={featured.arrivalLeg} label="Anfahrt" />
-              </div>
-            ) : featured.nextLeg ? (
-              <div className="mt-2">
-                <LegMeta leg={featured.nextLeg} label="Erste Etappe" />
-              </div>
-            ) : null}
-            {lead.coords ? (
-              <div className="mt-2">
-                <LiveEtaChip
-                  target={lead.coords}
-                  targetName={lead.name}
-                />
-              </div>
+            {mapsUrl ? (
+              <a
+                href={mapsUrl}
+                target="_blank"
+                rel="noreferrer"
+                className="mt-3 inline-flex items-center gap-1.5 rounded-full border border-[var(--separator)] bg-[var(--fjord-soft)] px-3 py-1.5 text-[12px] font-semibold text-[var(--fjord)] transition hover:bg-[var(--fjord)] hover:text-white"
+              >
+                In Google Maps öffnen
+                <span aria-hidden="true">↗</span>
+              </a>
             ) : null}
           </div>
         </div>
       ) : null}
-
-      {rest.length > 0 ? (
-        <ul className="divide-y divide-[var(--separator)] border-t border-[var(--separator)]">
-          {rest.map((place) => (
-            <li key={`${place.spotId}-${place.order}`} className="flex items-center gap-3 px-4 py-2.5">
-              <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[var(--fjord-soft)] text-[12px] font-bold text-[var(--fjord)]">
-                {place.order}
-              </span>
-              <div className="min-w-0 flex-1">
-                <p className="truncate text-[14px] font-semibold">{place.name}</p>
-                <p className="text-[11px] text-[var(--ink-faint)]">
-                  {categoryLabels[place.category as SpotCategory]}
-                  {place.role === "overnight" ? " · Übernachtung" : ""}
-                </p>
-              </div>
-              <CategoryIcon category={place.category as SpotCategory} size={16} />
-            </li>
-          ))}
-        </ul>
-      ) : null}
-
-      {featured.route && featured.route.legs.length > 0 ? (
-        <div className="border-t border-[var(--separator)] px-4 py-3 text-[12px] text-[var(--ink-soft)]">
-          Tagestour {featured.route.source === "google" ? "" : "ca. "}
-          {formatRouteKm(featured.route.totalKm)} ·{" "}
-          {featured.route.source === "google" ? "" : "~"}
-          {formatRouteDuration(featured.route.totalMinutes)} Fahrzeit
-          {" · "}
-          {featured.route.source === "google"
-            ? "Google-Routenzeit"
-            : "Schätzung"}
-        </div>
-      ) : null}
-    </section>
-  );
-}
-
-function AlertsCard({
-  featured,
-  onOpenTab,
-}: {
-  featured: FeaturedDashboard;
-  onOpenTab?: (tab: "plan" | "karte" | "spots") => void;
-}) {
-  if (featured.alerts.length === 0) return null;
-  return (
-    <section className="glass-callout animate-rise px-4 py-3">
-      <p className="text-[12px] font-semibold uppercase tracking-wide text-[var(--sun)]">
-        Noch offen
-      </p>
-      <ul className="mt-2 space-y-1.5">
-        {featured.alerts.map((alert) => (
-          <li key={alert} className="text-[13px] leading-snug text-[var(--ink-soft)]">
-            {alert}
-          </li>
-        ))}
-      </ul>
-      {onOpenTab ? (
-        <button
-          type="button"
-          className="mt-3 inline-block text-[13px] font-semibold text-[var(--fjord)] underline"
-          onClick={() => onOpenTab("plan")}
-        >
-          Im Plan nachziehen
-        </button>
-      ) : (
-        <Link
-          href={`/app/vacations/${featured.vacation.id}?tab=plan`}
-          className="mt-3 inline-block text-[13px] font-semibold text-[var(--fjord)] underline"
-        >
-          Im Plan nachziehen
-        </Link>
-      )}
     </section>
   );
 }
@@ -463,7 +286,7 @@ function OtherVacations({ vacations }: { vacations: VacationSummary[] }) {
         {vacations.map((vacation) => (
           <Link
             key={vacation.id}
-            href={`/app/vacations/${vacation.id}`}
+            href={`/app/vacations/${vacation.id}?tab=urlaub`}
             className="ios-row ios-chevron"
           >
             <div className="min-w-0">
@@ -482,7 +305,7 @@ function OtherVacations({ vacations }: { vacations: VacationSummary[] }) {
   );
 }
 
-/** Dashboard cards for one vacation (Urlaub tab). */
+/** Lean dashboard for the Urlaub tab: status, next stop, no nagging stats. */
 export function VacationTripDashboard({
   featured,
   onOpenTab,
@@ -494,9 +317,8 @@ export function VacationTripDashboard({
 }) {
   return (
     <div className={className}>
-      <FeaturedHero featured={featured} onOpenTab={onOpenTab} />
+      <StatusStrip featured={featured} onOpenTab={onOpenTab} />
       <NextUpCard featured={featured} onOpenTab={onOpenTab} />
-      <AlertsCard featured={featured} onOpenTab={onOpenTab} />
     </div>
   );
 }
