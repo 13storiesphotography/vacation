@@ -57,9 +57,6 @@ export default async function AppHomePage() {
         <Link href="/app/vacations/new" className="cta">
           Neuer Urlaub
         </Link>
-        <Link href="/konzept" className="cta cta-secondary">
-          Konzept
-        </Link>
       </div>
 
       {error && (
