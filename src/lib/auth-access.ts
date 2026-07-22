@@ -4,12 +4,15 @@ import { createAdminClient } from "@/lib/supabase/admin";
 const FRESH_ACCOUNT_MS = 2 * 60 * 1000;
 
 /**
- * Invite-only guard for OAuth (Apple).
- * Allows existing/invited users; blocks brand-new Apple-only accounts
+ * Invite-only guard for OAuth providers.
+ * Allows existing/invited users; blocks brand-new OAuth-only accounts
  * that have no vacation membership.
  *
  * Relies on Supabase "Enable sign ups" being off + Automatic linking by email.
  * When the service role key is missing, we skip the extra check.
+ *
+ * Note: Apple Sign-In UI is currently removed (needs paid Apple Developer).
+ * This guard remains for any future OAuth provider.
  */
 export async function assertOAuthUserAllowed(user: User): Promise<{
   ok: boolean;

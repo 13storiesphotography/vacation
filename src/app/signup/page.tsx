@@ -7,12 +7,11 @@ export default function SignupPage() {
         <h1 className="display text-2xl">Nur per Einladung</h1>
         <p className="mt-2 text-[14px] leading-relaxed text-[var(--ink-soft)]">
           Neue Konten können sich nicht selbst registrieren. Ein Admin lädt dich ein — danach
-          meldest du dich mit Apple oder E-Mail/Passwort an und richtest MFA ein.
+          meldest du dich mit E-Mail und Passwort an und richtest MFA ein.
         </p>
         <p className="mt-4 text-[14px] leading-relaxed text-[var(--ink-soft)]">
           Bist du der erste Admin? Lege den Account einmalig im Supabase Dashboard an
-          (Authentication → Users → Add user), melde dich hier an und richte MFA ein. Danach
-          kannst du auch Apple Sign-In mit derselben E-Mail nutzen.
+          (Authentication → Users → Add user), melde dich hier an und richte MFA ein.
         </p>
         <Link href="/login" className="cta mt-6 inline-flex w-full">
           Zur Anmeldung
