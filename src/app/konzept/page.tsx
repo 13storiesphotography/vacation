@@ -1,5 +1,6 @@
 "use client";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import {
   categoryLabels,
@@ -185,7 +186,7 @@ export default function ConceptPage() {
           </a>
           <nav className="hidden items-center gap-6 text-[13px] font-semibold text-[var(--ink-soft)] md:flex">
             <a href="#konzept" className="hover:text-[var(--ink)]">
-              Konzept
+              Idee
             </a>
             <a href="#prototype" className="hover:text-[var(--ink)]">
               Demo
@@ -194,9 +195,14 @@ export default function ConceptPage() {
               Datenmodell
             </a>
           </nav>
-          <a href="#prototype" className="cta !px-4 !py-2 text-[13px]">
-            Demo öffnen
-          </a>
+          <div className="flex items-center gap-2">
+            <a href="#prototype" className="cta cta-secondary !px-4 !py-2 text-[13px]">
+              Demo
+            </a>
+            <Link href="/login" className="cta !px-4 !py-2 text-[13px]">
+              Anmelden
+            </Link>
+          </div>
         </div>
       </header>
 
@@ -215,11 +221,11 @@ export default function ConceptPage() {
             ruhig und gemeinsam abgesichert mit MFA.
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
-            <a href="#prototype" className="cta">
-              Live-Konzept ansehen
-            </a>
-            <a href="#konzept" className="cta cta-secondary">
-              Aufbau verstehen
+            <Link href="/login" className="cta">
+              Anmelden
+            </Link>
+            <a href="#prototype" className="cta cta-secondary">
+              Demo ansehen
             </a>
           </div>
         </div>
@@ -662,8 +668,11 @@ export default function ConceptPage() {
       </section>
 
       <footer className="mx-auto w-full max-w-6xl px-5 pb-12 pt-2 md:px-8">
-        <div className="border-t border-[var(--separator)] pt-6 text-[13px] text-[var(--ink-soft)]">
-          Vacation Planer · iOS-inspiriertes Konzept · nächster Schritt: echtes Schema + Auth
+        <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--separator)] pt-6 text-[13px] text-[var(--ink-soft)]">
+          <p>Vacation Planer · privat, eingeladen, mit MFA</p>
+          <Link href="/login" className="font-semibold text-[var(--fjord)] underline">
+            Anmelden
+          </Link>
         </div>
       </footer>
     </main>
