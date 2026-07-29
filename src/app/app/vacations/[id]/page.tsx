@@ -21,6 +21,7 @@ import { DayPlanPanel } from "./day-plan-ui";
 import { VacationUrlaubDashboard } from "./vacation-urlaub-dashboard";
 import { isCompleteEmail } from "@/lib/email";
 import { isStaleServerActionError } from "@/lib/stale-action";
+import { copyTextToClipboard } from "@/lib/clipboard";
 
 type Vacation = Database["public"]["Tables"]["vacations"]["Row"];
 type Member = Database["public"]["Tables"]["vacation_members"]["Row"];
@@ -332,6 +333,32 @@ export default function VacationDetailPage() {
   async function onCopyInviteLink(member: Member) {
     setError(null);
     setMessage(null);
+
+    const existingToken = member.invite_token?.trim() || null;
+    const expiresAt = member.invite_expires_at
+      ? new Date(member.invite_expires_at).getTime()
+      : null;
+    const tokenStillValid =
+      Boolean(existingToken) &&
+      (expiresAt == null || Number.isFinite(expiresAt)) &&
+      (expiresAt == null || expiresAt > Date.now());
+
+    // Prefer the existing token so copy stays inside the click gesture (iOS).
+    if (tokenStillValid && existingToken) {
+      const link = `${window.location.origin}/invite/${existingToken}`;
+      const copied = await copyTextToClipboard(link);
+      setInviteLink(link);
+      if (copied) {
+        setMessage("Einladungslink kopiert.");
+      } else {
+        setShowInvite(true);
+        setMessage(
+          "Link bereit — bitte unten markieren und manuell kopieren (Zwischenablage blockiert).",
+        );
+      }
+      return;
+    }
+
     setMemberBusyId(member.id);
     try {
       const response = await fetch("/api/invite", {
@@ -352,15 +379,35 @@ export default function VacationDetailPage() {
         setError(payload.error ?? "Link konnte nicht erzeugt werden.");
         return;
       }
-      await navigator.clipboard.writeText(payload.inviteLink);
       setInviteLink(payload.inviteLink);
-      setMessage(payload.note ? `${payload.note} Link wurde kopiert.` : "Einladungslink kopiert.");
+      const copied = await copyTextToClipboard(payload.inviteLink);
+      if (copied) {
+        setMessage(
+          payload.note ? `${payload.note} Link wurde kopiert.` : "Einladungslink kopiert.",
+        );
+      } else {
+        setShowInvite(true);
+        setMessage(
+          "Link bereit — bitte unten markieren und manuell kopieren (Zwischenablage blockiert).",
+        );
+      }
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Link konnte nicht erzeugt werden.");
     } finally {
       setMemberBusyId(null);
     }
+  }
+
+  async function onCopyVisibleInviteLink() {
+    if (!inviteLink) return;
+    setError(null);
+    const copied = await copyTextToClipboard(inviteLink);
+    if (copied) {
+      setMessage("Einladungslink kopiert.");
+      return;
+    }
+    setError("Kopieren blockiert — Link markieren und manuell kopieren.");
   }
 
   async function onUpdateRole(memberId: string, role: MemberRole) {
@@ -738,11 +785,12 @@ export default function VacationDetailPage() {
                           readOnly
                           className="glass-field px-3 py-3 text-[13px]"
                           value={inviteLink}
+                          onFocus={(event) => event.currentTarget.select()}
                         />
                         <button
                           type="button"
                           className="glass-chip shrink-0"
-                          onClick={() => void navigator.clipboard.writeText(inviteLink)}
+                          onClick={() => void onCopyVisibleInviteLink()}
                         >
                           Link kopieren
                         </button>
