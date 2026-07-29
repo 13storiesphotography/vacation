@@ -2,7 +2,6 @@ function isAppleTouchDevice(): boolean {
   if (typeof navigator === "undefined") return false;
   const ua = navigator.userAgent || "";
   if (/iPad|iPhone|iPod/i.test(ua)) return true;
-  // iPadOS desktop UA
   return navigator.platform === "MacIntel" && navigator.maxTouchPoints > 1;
 }
 
@@ -10,19 +9,12 @@ function copyViaExecCommand(value: string): boolean {
   const field = document.createElement("textarea");
   field.value = value;
   field.setAttribute("readonly", "");
-  field.setAttribute("aria-hidden", "true");
-  // iOS needs the field in-viewport and selectable; opacity-0 often fails.
   field.style.position = "fixed";
-  field.style.top = "0";
-  field.style.left = "0";
-  field.style.width = "2em";
-  field.style.height = "2em";
-  field.style.padding = "0";
-  field.style.border = "none";
-  field.style.outline = "none";
-  field.style.boxShadow = "none";
-  field.style.background = "transparent";
-  field.style.color = "transparent";
+  field.style.top = "10px";
+  field.style.left = "10px";
+  field.style.width = "1px";
+  field.style.height = "1px";
+  field.style.opacity = "0.01";
   field.style.zIndex = "-1";
   document.body.appendChild(field);
 
@@ -52,54 +44,70 @@ async function shareUrl(value: string): Promise<boolean> {
   if (typeof navigator.share !== "function") return false;
   if (!/^https?:\/\//i.test(value)) return false;
   try {
-    await navigator.share({ url: value, title: "Einladung" });
+    const data: ShareData = { url: value, title: "Einladung" };
+    if (typeof navigator.canShare === "function" && !navigator.canShare(data)) {
+      return false;
+    }
+    await navigator.share(data);
     return true;
   } catch (error) {
-    // AbortError = user cancelled — treat as handled, not a hard failure.
     if (error instanceof DOMException && error.name === "AbortError") return true;
     return false;
   }
 }
 
-export type CopyTextResult = "copied" | "shared" | "failed";
+/** Last-resort iOS path — prompt text is selectable/copyable. */
+function promptCopy(value: string): boolean {
+  try {
+    const result = window.prompt("Link markieren und kopieren:", value);
+    // null = cancel; any string (incl. empty edit) means the sheet was shown
+    return result !== null;
+  } catch {
+    return false;
+  }
+}
+
+export type CopyTextResult = "copied" | "shared" | "prompted" | "failed";
 
 /**
- * Copy/share text. On iOS Safari/PWA, Clipboard API is often denied —
- * prefer execCommand, then the native share sheet.
+ * Share/copy invite links. On iOS/PWA Clipboard API is unreliable —
+ * lead with the native share sheet, then execCommand, then prompt().
+ * Never throws NotAllowedError to callers.
  */
 export async function copyTextToClipboard(text: string): Promise<CopyTextResult> {
   const value = text.trim();
   if (!value || typeof window === "undefined") return "failed";
 
-  const apple = isAppleTouchDevice();
+  try {
+    if (isAppleTouchDevice()) {
+      // Share first while the tap gesture is still valid.
+      if (await shareUrl(value)) return "shared";
+      if (copyViaExecCommand(value)) return "copied";
+      if (promptCopy(value)) return "prompted";
+      return "failed";
+    }
 
-  // iOS: never lead with Clipboard API (NotAllowedError after async / in PWA).
-  if (apple) {
-    if (copyViaExecCommand(value)) return "copied";
-    if (await shareUrl(value)) return "shared";
     try {
       if (navigator.clipboard?.writeText) {
         await navigator.clipboard.writeText(value);
         return "copied";
       }
     } catch {
-      // ignore — caller shows selectable link
+      // fall through
+    }
+
+    if (copyViaExecCommand(value)) return "copied";
+    if (await shareUrl(value)) return "shared";
+    if (promptCopy(value)) return "prompted";
+    return "failed";
+  } catch {
+    try {
+      if (promptCopy(value)) return "prompted";
+    } catch {
+      // ignore
     }
     return "failed";
   }
-
-  try {
-    if (navigator.clipboard?.writeText) {
-      await navigator.clipboard.writeText(value);
-      return "copied";
-    }
-  } catch {
-    // fall through
-  }
-
-  if (copyViaExecCommand(value)) return "copied";
-  if (await shareUrl(value)) return "shared";
-  return "failed";
 }
 
 export function isClipboardPermissionError(error: unknown): boolean {
@@ -108,6 +116,13 @@ export function isClipboardPermissionError(error: unknown): boolean {
   return (
     error.name === "NotAllowedError" ||
     /not allowed by the user agent/i.test(message) ||
-    /clipboard/i.test(message)
+    /clipboard|permission/i.test(message)
   );
+}
+
+export function friendlyClipboardError(error: unknown): string {
+  if (isClipboardPermissionError(error)) {
+    return "Link bereit — bitte markieren und kopieren.";
+  }
+  return error instanceof Error ? error.message : "Link konnte nicht geteilt werden.";
 }
