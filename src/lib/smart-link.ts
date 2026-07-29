@@ -1,7 +1,7 @@
 import { fetchAirbnbMetadata, isAirbnbUrl } from "@/lib/airbnb";
 import { enrichFromMapsUrl, isAppMapPreviewUrl, parseLatLngFromMapsUrl } from "@/lib/geo";
 import { fetchPageMetadata } from "@/lib/link-metadata";
-import { searchGooglePlaceQuery } from "@/lib/places-photo";
+import { parsePlaceNameFromMapsUrl, searchGooglePlaceQuery } from "@/lib/places-photo";
 import {
   detectLinkProvider,
   providerLabels,
@@ -166,7 +166,11 @@ async function enrichSmartLinkInner(rawUrl: string): Promise<SmartLinkResult> {
     const fallbackPlace =
       enriched.coords ?? local
         ? null
-        : await searchGooglePlaceQuery(enriched.title || trimmed);
+        : await searchGooglePlaceQuery(
+            enriched.title ||
+              parsePlaceNameFromMapsUrl(enriched.resolvedUrl || trimmed) ||
+              trimmed,
+          );
     const coords =
       enriched.coords ??
       local ??

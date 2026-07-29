@@ -14,6 +14,7 @@ import {
 } from "@/lib/geo";
 import { parseImageFocus, withImageFocus, stripImageFocus } from "@/lib/image-focus";
 import { isOvernightCategory } from "@/lib/overnight";
+import { parsePlaceNameFromMapsUrl, searchGooglePlaceQuery } from "@/lib/places-photo";
 import { parseTags, type OvernightCost, type SpotCategory } from "@/lib/spots";
 import { parseStayNights, parseStayStatus, validateStayRange } from "@/lib/stay";
 
@@ -113,7 +114,18 @@ async function readSpotFields(formData: FormData) {
         }
       } else {
         const enriched = await enrichFromMapsUrl(mapsUrl);
-        const coords = fromUrl ?? enriched.coords;
+        const placeFallback =
+          fromUrl ?? enriched.coords
+            ? null
+            : await searchGooglePlaceQuery(
+                parsePlaceNameFromMapsUrl(enriched.resolvedUrl || mapsUrl) || mapsUrl,
+              );
+        const coords =
+          fromUrl ??
+          enriched.coords ??
+          (placeFallback?.lat != null && placeFallback.lng != null
+            ? { lat: placeFallback.lat, lng: placeFallback.lng }
+            : null);
         if (!coords) {
           return {
             error:
@@ -122,9 +134,9 @@ async function readSpotFields(formData: FormData) {
         }
         lat = coords.lat;
         lng = coords.lng;
-        storedMapsUrl = mapsUrl || enriched.resolvedUrl;
+        storedMapsUrl = placeFallback?.mapsUrl || mapsUrl || enriched.resolvedUrl;
         if (!imageManual) {
-          const preferred = enriched.imageUrl;
+          const preferred = enriched.imageUrl || placeFallback?.imageUrl || null;
           const previousIsPlacePhoto =
             previousAutoImage &&
             isUsablePreviewImage(previousAutoImage) &&
