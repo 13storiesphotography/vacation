@@ -20,13 +20,14 @@ import { VacationTabPanel } from "@/components/app/vacation-tab-panel";
 import { DayPlanPanel } from "./day-plan-ui";
 import { VacationUrlaubDashboard } from "./vacation-urlaub-dashboard";
 import { isCompleteEmail } from "@/lib/email";
+import { permissionLabels, roleLabel as memberRoleLabel } from "@/lib/permissions";
 import { isStaleServerActionError } from "@/lib/stale-action";
 
 type Vacation = Database["public"]["Tables"]["vacations"]["Row"];
 type Member = Database["public"]["Tables"]["vacation_members"]["Row"];
 type Spot = Database["public"]["Tables"]["spots"]["Row"];
 type Profile = Database["public"]["Tables"]["profiles"]["Row"];
-type MemberRole = Member["role"];
+type MemberRole = Extract<Member["role"], "viewer" | "editor" | "admin">;
 
 const ROLE_OPTIONS: Array<{
   value: MemberRole;
@@ -262,16 +263,6 @@ export default function VacationDetailPage() {
       });
   }, [members, profiles]);
 
-  const canEditVacation = useMemo(() => {
-    if (!currentUserId) return false;
-    return members.some(
-      (member) =>
-        member.user_id === currentUserId &&
-        member.status === "active" &&
-        member.role === "admin",
-    );
-  }, [currentUserId, members]);
-
   const currentMember = useMemo(
     () =>
       members.find((member) => member.user_id && member.user_id === currentUserId) ??
@@ -280,11 +271,16 @@ export default function VacationDetailPage() {
     [currentUserEmail, currentUserId, members],
   );
 
+  const canEditVacation = useMemo(() => {
+    return Boolean(currentMember?.status === "active" && currentMember.can_edit_vacation);
+  }, [currentMember]);
+
   const canEditTrip = Boolean(
     currentMember &&
       currentMember.status === "active" &&
-      (currentMember.role === "admin" || currentMember.role === "editor"),
+      (currentMember.can_edit_spots || currentMember.can_edit_plan),
   );
+  const canManageTeam = Boolean(currentMember?.status === "active" && currentMember.can_manage_team);
 
   async function onInvite(event: FormEvent) {
     event.preventDefault();
@@ -340,7 +336,6 @@ export default function VacationDetailPage() {
         body: JSON.stringify({
           vacationId,
           memberId: member.id,
-          role: member.role,
         }),
       });
       const payload = (await response.json()) as {
@@ -387,6 +382,34 @@ export default function VacationDetailPage() {
     }
   }
 
+  async function onTogglePermission(
+    member: Member,
+    key: keyof typeof permissionLabels,
+    value: boolean,
+  ) {
+    setError(null);
+    setMessage(null);
+    setMemberBusyId(member.id);
+    try {
+      const response = await fetch("/api/team-members", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ vacationId, memberId: member.id, [key]: value }),
+      });
+      const payload = (await response.json()) as { error?: string };
+      if (!response.ok) {
+        setError(payload.error ?? "Recht konnte nicht geändert werden.");
+        return;
+      }
+      setMessage("Rechte aktualisiert.");
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Recht konnte nicht geändert werden.");
+    } finally {
+      setMemberBusyId(null);
+    }
+  }
+
   async function onRemoveMember(member: Member) {
     const isInvite = member.status === "invited";
     const confirmed = window.confirm(
@@ -412,10 +435,6 @@ export default function VacationDetailPage() {
     }
     setMessage(payload.note ?? (isInvite ? "Einladung zurückgezogen." : "Mitglied entfernt."));
     await load();
-  }
-
-  function memberRoleLabel(role: Member["role"]) {
-    return ROLE_OPTIONS.find((option) => option.value === role)?.label ?? role;
   }
 
   function memberStatusLabel(status: Member["status"]) {
@@ -562,13 +581,19 @@ export default function VacationDetailPage() {
 
           <div className="ios-group mt-4 p-4">
             <p className="text-[13px] font-semibold text-[var(--ink-soft)]">Rollen</p>
-            <div className="mt-3 grid gap-3 sm:grid-cols-3">
+            <div className="mt-3 grid gap-3 sm:grid-cols-4">
               {ROLE_OPTIONS.map((role) => (
                 <div key={role.value} className="glass-subpanel p-3">
                   <p className="text-[14px] font-semibold">{role.label}</p>
                   <p className="mt-1 text-[12px] text-[var(--ink-soft)]">{role.description}</p>
                 </div>
               ))}
+              <div className="glass-subpanel p-3">
+                <p className="text-[14px] font-semibold">Custom</p>
+                <p className="mt-1 text-[12px] text-[var(--ink-soft)]">
+                  Einzelne Rechte frei kombinieren.
+                </p>
+              </div>
             </div>
           </div>
 
@@ -578,7 +603,7 @@ export default function VacationDetailPage() {
                 currentUserId && member.user_id && member.user_id === currentUserId,
               );
               const busy = memberBusyId === member.id;
-              const canManage = canEditVacation && !isSelf;
+              const canManage = canManageTeam && !isSelf;
 
               return (
                 <div key={member.id} className="ios-row !items-start">
@@ -598,7 +623,7 @@ export default function VacationDetailPage() {
                     <div className="flex shrink-0 flex-col items-end gap-2">
                       <select
                         className="glass-field min-w-[9rem] px-3 py-2 text-[14px]"
-                        value={member.role}
+                        value={ROLE_OPTIONS.some((role) => role.value === member.role) ? member.role : "custom"}
                         disabled={busy}
                         onChange={(event) => void onUpdateRole(member.id, event.target.value as MemberRole)}
                       >
@@ -607,7 +632,26 @@ export default function VacationDetailPage() {
                             {role.label}
                           </option>
                         ))}
+                        <option value="custom" disabled>
+                          Custom
+                        </option>
                       </select>
+                      <div className="grid min-w-[15rem] grid-cols-2 gap-1.5">
+                        {(Object.keys(permissionLabels) as Array<keyof typeof permissionLabels>).map((key) => (
+                          <label key={key} className="glass-chip !justify-start !px-2 !py-1 text-[11px]">
+                            <input
+                              type="checkbox"
+                              className="mr-1.5"
+                              checked={Boolean(member[key])}
+                              disabled={busy}
+                              onChange={(event) =>
+                                void onTogglePermission(member, key, event.target.checked)
+                              }
+                            />
+                            {permissionLabels[key]}
+                          </label>
+                        ))}
+                      </div>
                       <div className="flex flex-wrap items-center justify-end gap-2">
                       {member.status === "invited" ? (
                         <button
@@ -646,7 +690,7 @@ export default function VacationDetailPage() {
             </div>
           )}
 
-          {canEditVacation && (
+          {canManageTeam && (
             <div className="mt-4">
               {!showInvite ? (
                 <button

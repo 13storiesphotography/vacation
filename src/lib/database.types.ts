@@ -63,11 +63,15 @@ export type Database = {
           vacation_id: string;
           user_id: string | null;
           email: string;
-          role: "admin" | "editor" | "viewer";
+          role: "admin" | "custom" | "editor" | "viewer";
           status: "invited" | "active";
           invited_by: string | null;
           invite_token: string | null;
           invite_expires_at: string | null;
+          can_manage_team: boolean;
+          can_edit_vacation: boolean;
+          can_edit_spots: boolean;
+          can_edit_plan: boolean;
           created_at: string;
         };
         Insert: {
@@ -75,11 +79,15 @@ export type Database = {
           vacation_id: string;
           user_id?: string | null;
           email: string;
-          role?: "admin" | "editor" | "viewer";
+          role?: "admin" | "custom" | "editor" | "viewer";
           status?: "invited" | "active";
           invited_by?: string | null;
           invite_token?: string | null;
           invite_expires_at?: string | null;
+          can_manage_team?: boolean;
+          can_edit_vacation?: boolean;
+          can_edit_spots?: boolean;
+          can_edit_plan?: boolean;
           created_at?: string;
         };
         Update: {
@@ -87,11 +95,15 @@ export type Database = {
           vacation_id?: string;
           user_id?: string | null;
           email?: string;
-          role?: "admin" | "editor" | "viewer";
+          role?: "admin" | "custom" | "editor" | "viewer";
           status?: "invited" | "active";
           invited_by?: string | null;
           invite_token?: string | null;
           invite_expires_at?: string | null;
+          can_manage_team?: boolean;
+          can_edit_vacation?: boolean;
+          can_edit_spots?: boolean;
+          can_edit_plan?: boolean;
           created_at?: string;
         };
         Relationships: [];
@@ -280,6 +292,10 @@ export type Database = {
     Functions: {
       is_vacation_member: { Args: { p_vacation_id: string }; Returns: boolean };
       is_vacation_admin: { Args: { p_vacation_id: string }; Returns: boolean };
+      is_vacation_team_manager: { Args: { p_vacation_id: string }; Returns: boolean };
+      is_vacation_settings_editor: { Args: { p_vacation_id: string }; Returns: boolean };
+      is_vacation_spots_editor: { Args: { p_vacation_id: string }; Returns: boolean };
+      is_vacation_plan_editor: { Args: { p_vacation_id: string }; Returns: boolean };
       is_vacation_editor: { Args: { p_vacation_id: string }; Returns: boolean };
       is_day_plan_vacation_editor: { Args: { p_day_plan_id: string }; Returns: boolean };
       get_vacation_invite: {
@@ -288,7 +304,7 @@ export type Database = {
           vacation_id: string;
           vacation_title: string;
           email: string;
-          role: "admin" | "editor" | "viewer";
+          role: "admin" | "custom" | "editor" | "viewer";
           status: "invited" | "active";
           invite_expires_at: string | null;
         }[];
@@ -302,7 +318,7 @@ export type Database = {
       activate_my_vacation_invites: { Args: Record<string, never>; Returns: number };
     };
     Enums: {
-      member_role: "admin" | "editor" | "viewer";
+      member_role: "admin" | "custom" | "editor" | "viewer";
       member_status: "invited" | "active";
       spot_category:
         | "stellplatz"

@@ -23,7 +23,7 @@ async function requireVacationAdmin(vacationId: string): Promise<AdminContext> {
     };
   }
 
-  const { data: isAdmin, error: adminError } = await supabase.rpc("is_vacation_admin", {
+  const { data: canManageTeam, error: adminError } = await supabase.rpc("is_vacation_team_manager", {
     p_vacation_id: vacationId,
   });
   if (adminError) {
@@ -32,11 +32,11 @@ async function requireVacationAdmin(vacationId: string): Promise<AdminContext> {
       response: NextResponse.json({ error: adminError.message }, { status: 400 }),
     };
   }
-  if (!isAdmin) {
+  if (!canManageTeam) {
     return {
       ok: false,
       response: NextResponse.json(
-        { error: "Nur Admins können das Team verwalten." },
+        { error: "Nur Team-Manager können das Team verwalten." },
         { status: 403 },
       ),
     };

@@ -9,7 +9,7 @@ type InvitePreview = {
   vacation_id: string;
   vacation_title: string;
   email: string;
-  role: "viewer" | "editor" | "admin";
+  role: "viewer" | "editor" | "admin" | "custom";
   status: "invited" | "active";
   invite_expires_at: string | null;
 };
@@ -18,6 +18,7 @@ const ROLE_COPY: Record<InvitePreview["role"], string> = {
   viewer: "Kann alles ansehen, aber nichts ändern.",
   editor: "Kann Spots und Planung bearbeiten.",
   admin: "Kann Team und Urlaub verwalten.",
+  custom: "Hat individuell freigeschaltete Rechte.",
 };
 
 export default function InvitePage() {

@@ -1,10 +1,13 @@
 import { NextResponse } from "next/server";
+import type { Database } from "@/lib/database.types";
 import { isCompleteEmail, normalizeEmail } from "@/lib/email";
 import { sendInviteEmail } from "@/lib/invite-mail";
+import { permissionSetForRole } from "@/lib/permissions";
 import { createClient as createServerSupabase } from "@/lib/supabase/server";
 
 const INVITE_ROLES = ["viewer", "editor", "admin"] as const;
 type InviteRole = (typeof INVITE_ROLES)[number];
+type StoredRole = Database["public"]["Tables"]["vacation_members"]["Row"]["role"];
 
 export async function POST(request: Request) {
   const body = (await request.json()) as {
@@ -18,7 +21,7 @@ export async function POST(request: Request) {
   const memberId = body.memberId?.trim();
   const role = INVITE_ROLES.includes(body.role ?? "editor") ? (body.role ?? "editor") : null;
 
-  if (!vacationId || (!email && !memberId) || !role) {
+  if (!vacationId || (!email && !memberId) || (!memberId && !role)) {
     return NextResponse.json(
       { error: "vacationId und (email oder memberId) sind nötig." },
       { status: 400 },
@@ -39,24 +42,25 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Nicht angemeldet." }, { status: 401 });
   }
 
-  const { data: isAdmin, error: adminError } = await supabase.rpc("is_vacation_admin", {
+  const { data: canManageTeam, error: adminError } = await supabase.rpc("is_vacation_team_manager", {
     p_vacation_id: vacationId,
   });
   if (adminError) {
     return NextResponse.json({ error: adminError.message }, { status: 400 });
   }
-  if (!isAdmin) {
-    return NextResponse.json({ error: "Nur Admins können einladen." }, { status: 403 });
+  if (!canManageTeam) {
+    return NextResponse.json({ error: "Nur Team-Manager können einladen." }, { status: 403 });
   }
 
   let targetEmail = email;
-  let targetRole = role;
+  let targetRole: StoredRole = role ?? "editor";
   let existingStatus: "invited" | "active" | null = null;
+  let permissions = role ? permissionSetForRole(role) : null;
 
   if (memberId) {
     const { data: memberData, error: memberLookupError } = await supabase
       .from("vacation_members")
-      .select("email, role, status")
+      .select("email, role, status, can_manage_team, can_edit_vacation, can_edit_spots, can_edit_plan")
       .eq("id", memberId)
       .eq("vacation_id", vacationId)
       .single();
@@ -66,6 +70,12 @@ export async function POST(request: Request) {
     targetEmail = memberData.email;
     targetRole = memberData.role;
     existingStatus = memberData.status;
+    permissions = {
+      can_manage_team: memberData.can_manage_team,
+      can_edit_vacation: memberData.can_edit_vacation,
+      can_edit_spots: memberData.can_edit_spots,
+      can_edit_plan: memberData.can_edit_plan,
+    };
   } else {
     const { data: existing } = await supabase
       .from("vacation_members")
@@ -95,6 +105,7 @@ export async function POST(request: Request) {
       user_id: null,
       invite_token: inviteToken,
       invite_expires_at: inviteExpiresAt,
+      ...(permissions ?? permissionSetForRole("editor")),
     },
     { onConflict: "vacation_id,email" },
   );
