@@ -1,5 +1,7 @@
 import {
   fetchGooglePlacePhoto,
+  isGenericMapsTitle,
+  parsePlaceNameFromMapsHtml,
   parsePlaceNameFromMapsUrl,
 } from "@/lib/places-photo";
 
@@ -216,14 +218,48 @@ function parsePlacePhotoCandidate(html: string): string | null {
   return null;
 }
 
+/** Follow Maps short-link redirects without downloading the full HTML body. */
+export async function expandMapsShareUrl(url: string): Promise<string> {
+  let current = url.trim();
+  for (let hop = 0; hop < 6; hop++) {
+    if (!isShortMapsUrl(current) && hop > 0) return current;
+    try {
+      const response = await fetch(current, {
+        method: "GET",
+        redirect: "manual",
+        headers: browserHeaders(),
+        signal: AbortSignal.timeout(8000),
+      });
+      const location = response.headers.get("location");
+      if (location) {
+        current = new URL(location, current).toString();
+        // First hop already carries q=/ftid= — enough for place resolution.
+        if (parsePlaceNameFromMapsUrl(current)) return current;
+        continue;
+      }
+      if (response.url) current = response.url;
+      break;
+    } catch {
+      break;
+    }
+  }
+  return current;
+}
+
 async function fetchMapsPage(url: string): Promise<{
   finalUrl: string;
   html: string | null;
 }> {
+  let current = url;
   try {
-    // Short links often need an explicit 302 hop; fetch(redirect:follow) can stall on goo.gl.
+    // Expand short links first so a later HTML timeout still keeps q=/ftid=.
     if (isShortMapsUrl(url)) {
-      const head = await fetch(url, {
+      current = await expandMapsShareUrl(url);
+    }
+
+    // Short links often need an explicit 302 hop; fetch(redirect:follow) can stall on goo.gl.
+    if (isShortMapsUrl(current)) {
+      const head = await fetch(current, {
         method: "GET",
         redirect: "manual",
         headers: browserHeaders(),
@@ -231,12 +267,12 @@ async function fetchMapsPage(url: string): Promise<{
       });
       const location = head.headers.get("location");
       if (location) {
-        const absolute = new URL(location, url).toString();
+        const absolute = new URL(location, current).toString();
         return fetchMapsPage(absolute);
       }
     }
 
-    const response = await fetch(url, {
+    const response = await fetch(current, {
       method: "GET",
       redirect: "follow",
       headers: browserHeaders(),
@@ -244,11 +280,11 @@ async function fetchMapsPage(url: string): Promise<{
     });
     const html = await response.text();
     return {
-      finalUrl: response.url || url,
+      finalUrl: response.url || current,
       html,
     };
   } catch {
-    return { finalUrl: url, html: null };
+    return { finalUrl: current, html: null };
   }
 }
 
@@ -291,12 +327,13 @@ function parseOgTitle(html: string): string | null {
   for (const pattern of patterns) {
     const match = html.match(pattern);
     if (!match?.[1]) continue;
-    const title = decodeHtmlEntities(match[1]).trim();
-    if (!title) continue;
-    return title
+    const title = decodeHtmlEntities(match[1])
+      .trim()
       .replace(/\s*[-–|]\s*Google\s*Maps\s*$/i, "")
       .replace(/\s*-\s*Maps\s*$/i, "")
       .trim();
+    if (!title || isGenericMapsTitle(title)) continue;
+    return title;
   }
   return null;
 }
@@ -329,9 +366,10 @@ export async function enrichFromMapsUrl(
 
   const placeName =
     parsePlaceNameFromMapsUrl(resolvedUrl) ??
-    parsePlaceNameFromMapsUrl(original);
-  if (placeName) {
-    title = title || placeName;
+    parsePlaceNameFromMapsUrl(original) ??
+    parsePlaceNameFromMapsHtml(page.html);
+  if (placeName && isGenericMapsTitle(title)) {
+    title = placeName;
   }
 
   // Google no longer embeds place hero photos in Maps HTML — use Places API.
