@@ -12,10 +12,13 @@ export async function POST(request: Request) {
     email?: string;
     role?: InviteRole;
     memberId?: string;
+    /** Return/create link only — no e-mail (used by „Link kopieren“). */
+    linkOnly?: boolean;
   };
   const vacationId = body.vacationId?.trim();
   const email = normalizeEmail(body.email ?? "");
   const memberId = body.memberId?.trim();
+  const linkOnly = Boolean(body.linkOnly);
   const role = INVITE_ROLES.includes(body.role ?? "editor") ? (body.role ?? "editor") : null;
 
   if (!vacationId || (!email && !memberId) || !role) {
@@ -52,11 +55,13 @@ export async function POST(request: Request) {
   let targetEmail = email;
   let targetRole = role;
   let existingStatus: "invited" | "active" | null = null;
+  let existingToken: string | null = null;
+  let existingExpires: string | null = null;
 
   if (memberId) {
     const { data: memberData, error: memberLookupError } = await supabase
       .from("vacation_members")
-      .select("email, role, status")
+      .select("email, role, status, invite_token, invite_expires_at")
       .eq("id", memberId)
       .eq("vacation_id", vacationId)
       .single();
@@ -66,14 +71,18 @@ export async function POST(request: Request) {
     targetEmail = memberData.email;
     targetRole = memberData.role;
     existingStatus = memberData.status;
+    existingToken = memberData.invite_token;
+    existingExpires = memberData.invite_expires_at;
   } else {
     const { data: existing } = await supabase
       .from("vacation_members")
-      .select("id, status")
+      .select("id, status, invite_token, invite_expires_at")
       .eq("vacation_id", vacationId)
       .eq("email", targetEmail)
       .maybeSingle();
     existingStatus = existing?.status ?? null;
+    existingToken = existing?.invite_token ?? null;
+    existingExpires = existing?.invite_expires_at ?? null;
   }
 
   if (existingStatus === "active" && !memberId) {
@@ -81,6 +90,22 @@ export async function POST(request: Request) {
       { error: "Diese Person ist bereits aktives Teammitglied." },
       { status: 400 },
     );
+  }
+
+  const origin = new URL(request.url).origin;
+  const expiresMs = existingExpires ? new Date(existingExpires).getTime() : NaN;
+  const existingStillValid =
+    Boolean(existingToken) &&
+    existingStatus === "invited" &&
+    Number.isFinite(expiresMs) &&
+    expiresMs > Date.now();
+
+  // „Link kopieren“: reuse the current token — do not rotate or re-mail.
+  if (linkOnly && existingStillValid && existingToken) {
+    return NextResponse.json({
+      ok: true,
+      inviteLink: `${origin}/invite/${existingToken}`,
+    });
   }
 
   const inviteToken = crypto.randomUUID();
@@ -102,8 +127,12 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: memberError.message }, { status: 400 });
   }
 
-  const origin = new URL(request.url).origin;
   const inviteLink = `${origin}/invite/${inviteToken}`;
+
+  if (linkOnly) {
+    return NextResponse.json({ ok: true, inviteLink });
+  }
+
   const mail = await sendInviteEmail(
     targetEmail,
     `${origin}/auth/callback?next=/auth/set-password`,

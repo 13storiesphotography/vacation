@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
 import { useParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import type { Database } from "@/lib/database.types";
@@ -21,7 +21,7 @@ import { DayPlanPanel } from "./day-plan-ui";
 import { VacationUrlaubDashboard } from "./vacation-urlaub-dashboard";
 import { isCompleteEmail } from "@/lib/email";
 import { isStaleServerActionError } from "@/lib/stale-action";
-import { copyTextToClipboard } from "@/lib/clipboard";
+import { copyTextToClipboard, isClipboardPermissionError } from "@/lib/clipboard";
 
 type Vacation = Database["public"]["Tables"]["vacations"]["Row"];
 type Member = Database["public"]["Tables"]["vacation_members"]["Row"];
@@ -166,6 +166,12 @@ export default function VacationDetailPage() {
   useEffect(() => {
     void Promise.resolve().then(load);
   }, [load]);
+
+  const origin = useSyncExternalStore(
+    () => () => {},
+    () => window.location.origin,
+    () => "",
+  );
 
   useEffect(() => {
     let cancelled = false;
@@ -330,32 +336,50 @@ export default function VacationDetailPage() {
     }
   }
 
+  function memberInviteLink(member: Member): string | null {
+    const token = member.invite_token?.trim();
+    if (!token || member.status !== "invited" || !origin) return null;
+    return `${origin}/invite/${token}`;
+  }
+
+  async function finishInviteLinkCopy(link: string, note?: string) {
+    setInviteLink(link);
+    setError(null);
+    try {
+      const result = await copyTextToClipboard(link);
+      if (result === "copied") {
+        setMessage(note ? `${note} Link wurde kopiert.` : "Einladungslink kopiert.");
+        return;
+      }
+      if (result === "shared") {
+        setMessage(note ? `${note} Link wurde geteilt.` : "Einladungslink geteilt.");
+        return;
+      }
+    } catch (err) {
+      if (!isClipboardPermissionError(err)) {
+        setError(err instanceof Error ? err.message : "Link konnte nicht kopiert werden.");
+        return;
+      }
+    }
+    setShowInvite(true);
+    setMessage("Link bereit — markieren und kopieren, oder über „Teilen“ senden.");
+  }
+
   async function onCopyInviteLink(member: Member) {
     setError(null);
     setMessage(null);
 
-    const existingToken = member.invite_token?.trim() || null;
+    const existing = memberInviteLink(member);
     const expiresAt = member.invite_expires_at
       ? new Date(member.invite_expires_at).getTime()
       : null;
-    const tokenStillValid =
-      Boolean(existingToken) &&
-      (expiresAt == null || Number.isFinite(expiresAt)) &&
-      (expiresAt == null || expiresAt > Date.now());
-
-    // Prefer the existing token so copy stays inside the click gesture (iOS).
-    if (tokenStillValid && existingToken) {
-      const link = `${window.location.origin}/invite/${existingToken}`;
-      const copied = await copyTextToClipboard(link);
-      setInviteLink(link);
-      if (copied) {
-        setMessage("Einladungslink kopiert.");
-      } else {
-        setShowInvite(true);
-        setMessage(
-          "Link bereit — bitte unten markieren und manuell kopieren (Zwischenablage blockiert).",
-        );
-      }
+    const stillValid =
+      Boolean(existing) &&
+      (expiresAt == null ||
+        !Number.isFinite(expiresAt) ||
+        expiresAt > Date.now());
+    if (existing && stillValid) {
+      await finishInviteLinkCopy(existing);
       return;
     }
 
@@ -368,6 +392,7 @@ export default function VacationDetailPage() {
           vacationId,
           memberId: member.id,
           role: member.role,
+          linkOnly: true,
         }),
       });
       const payload = (await response.json()) as {
@@ -379,21 +404,15 @@ export default function VacationDetailPage() {
         setError(payload.error ?? "Link konnte nicht erzeugt werden.");
         return;
       }
-      setInviteLink(payload.inviteLink);
-      const copied = await copyTextToClipboard(payload.inviteLink);
-      if (copied) {
-        setMessage(
-          payload.note ? `${payload.note} Link wurde kopiert.` : "Einladungslink kopiert.",
-        );
-      } else {
-        setShowInvite(true);
-        setMessage(
-          "Link bereit — bitte unten markieren und manuell kopieren (Zwischenablage blockiert).",
-        );
-      }
+      await finishInviteLinkCopy(payload.inviteLink, payload.note);
       await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Link konnte nicht erzeugt werden.");
+      if (isClipboardPermissionError(err)) {
+        setShowInvite(true);
+        setMessage("Link bereit — markieren und kopieren, oder über „Teilen“ senden.");
+      } else {
+        setError(err instanceof Error ? err.message : "Link konnte nicht erzeugt werden.");
+      }
     } finally {
       setMemberBusyId(null);
     }
@@ -401,13 +420,7 @@ export default function VacationDetailPage() {
 
   async function onCopyVisibleInviteLink() {
     if (!inviteLink) return;
-    setError(null);
-    const copied = await copyTextToClipboard(inviteLink);
-    if (copied) {
-      setMessage("Einladungslink kopiert.");
-      return;
-    }
-    setError("Kopieren blockiert — Link markieren und manuell kopieren.");
+    await finishInviteLinkCopy(inviteLink);
   }
 
   async function onUpdateRole(memberId: string, role: MemberRole) {
@@ -663,7 +676,7 @@ export default function VacationDetailPage() {
                           disabled={busy}
                           onClick={() => void onCopyInviteLink(member)}
                         >
-                          {busy ? "…" : "Link kopieren"}
+                          {busy ? "…" : "Link teilen"}
                         </button>
                       ) : null}
                       <button
@@ -679,6 +692,15 @@ export default function VacationDetailPage() {
                             : "Entfernen"}
                       </button>
                       </div>
+                      {member.status === "invited" && memberInviteLink(member) ? (
+                        <input
+                          readOnly
+                          className="glass-field mt-1 w-full max-w-[16rem] px-2 py-1.5 text-[11px]"
+                          value={memberInviteLink(member) ?? ""}
+                          onFocus={(event) => event.currentTarget.select()}
+                          aria-label="Einladungslink"
+                        />
+                      ) : null}
                     </div>
                   ) : null}
                 </div>
@@ -686,8 +708,30 @@ export default function VacationDetailPage() {
             })}
           </div>
 
-          {(message || error) && tab === "team" && !showInvite && (
-            <div className="mt-3">
+          {(message || error || inviteLink) && tab === "team" && !showInvite && (
+            <div className="mt-3 space-y-2">
+              {inviteLink ? (
+                <div className="glass-subpanel p-3">
+                  <p className="text-[12px] font-semibold uppercase tracking-wide text-[var(--ink-faint)]">
+                    Einladungslink
+                  </p>
+                  <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+                    <input
+                      readOnly
+                      className="glass-field px-3 py-3 text-[13px]"
+                      value={inviteLink}
+                      onFocus={(event) => event.currentTarget.select()}
+                    />
+                    <button
+                      type="button"
+                      className="glass-chip shrink-0"
+                      onClick={() => void onCopyVisibleInviteLink()}
+                    >
+                      Link teilen
+                    </button>
+                  </div>
+                </div>
+              ) : null}
               {message && <p className="text-[13px] text-[var(--pine)]">{message}</p>}
               {error && <p className="text-[13px] text-[var(--danger)]">{error}</p>}
             </div>
@@ -792,7 +836,7 @@ export default function VacationDetailPage() {
                           className="glass-chip shrink-0"
                           onClick={() => void onCopyVisibleInviteLink()}
                         >
-                          Link kopieren
+                          Link teilen
                         </button>
                       </div>
                     </div>
