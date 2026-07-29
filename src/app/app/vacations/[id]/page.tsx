@@ -26,6 +26,17 @@ type Vacation = Database["public"]["Tables"]["vacations"]["Row"];
 type Member = Database["public"]["Tables"]["vacation_members"]["Row"];
 type Spot = Database["public"]["Tables"]["spots"]["Row"];
 type Profile = Database["public"]["Tables"]["profiles"]["Row"];
+type MemberRole = Member["role"];
+
+const ROLE_OPTIONS: Array<{
+  value: MemberRole;
+  label: string;
+  description: string;
+}> = [
+  { value: "viewer", label: "Viewer", description: "Nur ansehen" },
+  { value: "editor", label: "Editor", description: "Plan & Spots bearbeiten" },
+  { value: "admin", label: "Admin", description: "Team & Urlaub verwalten" },
+];
 
 function readInitialTab(): VacationTabId {
   if (typeof window === "undefined") return "spots";
@@ -51,7 +62,10 @@ export default function VacationDetailPage() {
   const [ratings, setRatings] = useState<SpotRating[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
   const [inviteEmail, setInviteEmail] = useState("");
+  const [inviteRole, setInviteRole] = useState<MemberRole>("editor");
+  const [inviteLink, setInviteLink] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -61,16 +75,13 @@ export default function VacationDetailPage() {
   const [spotFormKey, setSpotFormKey] = useState(0);
   const [editingVacation, setEditingVacation] = useState(false);
   const [showInvite, setShowInvite] = useState(false);
-  const [tab, setTab] = useState<VacationTabId>("spots");
+  const [tab, setTab] = useState<VacationTabId>(() => readInitialTab());
   const [visitedTabs, setVisitedTabs] = useState<ReadonlySet<VacationTabId>>(
-    () => new Set<VacationTabId>(["spots"]),
+    () => {
+      const initial = readInitialTab();
+      return new Set<VacationTabId>([initial]);
+    },
   );
-
-  useEffect(() => {
-    const initial = readInitialTab();
-    setTab(initial);
-    setVisitedTabs(new Set<VacationTabId>([initial]));
-  }, []);
 
   function changeTab(next: VacationTabId) {
     setTab(next);
@@ -98,6 +109,7 @@ export default function VacationDetailPage() {
         data: { user },
       } = await supabase.auth.getUser();
       setCurrentUserId(user?.id ?? null);
+      setCurrentUserEmail(user?.email?.toLowerCase() ?? null);
 
       const [{ data: vacationData }, { data: memberData }, { data: spotData }] =
         await Promise.all([
@@ -151,7 +163,7 @@ export default function VacationDetailPage() {
   }, [vacationId]);
 
   useEffect(() => {
-    void load();
+    void Promise.resolve().then(load);
   }, [load]);
 
   useEffect(() => {
@@ -260,10 +272,25 @@ export default function VacationDetailPage() {
     );
   }, [currentUserId, members]);
 
+  const currentMember = useMemo(
+    () =>
+      members.find((member) => member.user_id && member.user_id === currentUserId) ??
+      members.find((member) => currentUserEmail && member.email === currentUserEmail) ??
+      null,
+    [currentUserEmail, currentUserId, members],
+  );
+
+  const canEditTrip = Boolean(
+    currentMember &&
+      currentMember.status === "active" &&
+      (currentMember.role === "admin" || currentMember.role === "editor"),
+  );
+
   async function onInvite(event: FormEvent) {
     event.preventDefault();
     setError(null);
     setMessage(null);
+    setInviteLink(null);
 
     if (!isCompleteEmail(inviteEmail)) {
       setError("Bitte gib eine vollständige E-Mail-Adresse ein (z. B. name@domain.de).");
@@ -272,44 +299,28 @@ export default function VacationDetailPage() {
 
     setInviting(true);
     try {
-      const supabase = createClient();
-      const redirectTo = `${window.location.origin}/auth/callback?next=/auth/set-password`;
-      const { data, error: fnError } = await supabase.functions.invoke("invite-member", {
-        body: {
+      const response = await fetch("/api/invite", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
           vacationId,
           email: inviteEmail.trim().toLowerCase(),
-          redirectTo,
-        },
+          role: inviteRole,
+        }),
       });
-      const payload = (data ?? {}) as { error?: string; ok?: boolean; note?: string };
-
-      if (fnError || payload.error) {
-        // Fallback to Next API (Edge Function + service role paths).
-        const response = await fetch("/api/invite", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ vacationId, email: inviteEmail }),
-        });
-        const apiPayload = (await response.json()) as {
-          error?: string;
-          ok?: boolean;
-          note?: string;
-        };
-        if (!response.ok) {
-          setError(apiPayload.error ?? payload.error ?? fnError?.message ?? "Einladung fehlgeschlagen");
-          return;
-        }
-        setMessage(apiPayload.note ?? "Einladung gesendet.");
-      } else if (payload.note && /invite:/i.test(payload.note)) {
-        setMessage(
-          "Person ist eingeladen, aber die E-Mail konnte nicht gesendet werden. Bitte erneut versuchen.",
-        );
-      } else {
-        setMessage("Einladung per E-Mail gesendet.");
+      const payload = (await response.json()) as {
+        error?: string;
+        note?: string;
+        inviteLink?: string;
+      };
+      if (!response.ok) {
+        setError(payload.error ?? "Einladung fehlgeschlagen");
+        return;
       }
+      setMessage(payload.note ?? "Einladung gesendet.");
+      setInviteLink(payload.inviteLink ?? null);
 
       setInviteEmail("");
-      setShowInvite(false);
       await load();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Einladung fehlgeschlagen");
@@ -318,48 +329,59 @@ export default function VacationDetailPage() {
     }
   }
 
-  async function onResendInvite(member: Member) {
+  async function onCopyInviteLink(member: Member) {
     setError(null);
     setMessage(null);
     setMemberBusyId(member.id);
     try {
-      const supabase = createClient();
-      const redirectTo = `${window.location.origin}/auth/callback?next=/auth/set-password`;
-      const { data, error: fnError } = await supabase.functions.invoke("invite-member", {
-        body: {
+      const response = await fetch("/api/invite", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
           vacationId,
-          email: member.email,
-          redirectTo,
-        },
+          memberId: member.id,
+          role: member.role,
+        }),
       });
-      const payload = (data ?? {}) as { error?: string; note?: string };
-
-      if (fnError || payload.error) {
-        const response = await fetch("/api/members", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            vacationId,
-            memberId: member.id,
-            action: "resend",
-          }),
-        });
-        const apiPayload = (await response.json()) as { error?: string; note?: string };
-        if (!response.ok) {
-          setError(apiPayload.error ?? payload.error ?? "Erneutes Senden fehlgeschlagen");
-          return;
-        }
-        setMessage(apiPayload.note ?? "Einladung erneut gesendet.");
+      const payload = (await response.json()) as {
+        error?: string;
+        note?: string;
+        inviteLink?: string;
+      };
+      if (!response.ok || !payload.inviteLink) {
+        setError(payload.error ?? "Link konnte nicht erzeugt werden.");
         return;
       }
-
-      if (payload.note && /invite:/i.test(payload.note)) {
-        setError("E-Mail konnte nicht gesendet werden. Bitte später erneut versuchen.");
-        return;
-      }
-      setMessage("Einladung erneut gesendet.");
+      await navigator.clipboard.writeText(payload.inviteLink);
+      setInviteLink(payload.inviteLink);
+      setMessage(payload.note ? `${payload.note} Link wurde kopiert.` : "Einladungslink kopiert.");
+      await load();
     } catch (err) {
-      setError(err instanceof Error ? err.message : "Erneutes Senden fehlgeschlagen");
+      setError(err instanceof Error ? err.message : "Link konnte nicht erzeugt werden.");
+    } finally {
+      setMemberBusyId(null);
+    }
+  }
+
+  async function onUpdateRole(memberId: string, role: MemberRole) {
+    setError(null);
+    setMessage(null);
+    setMemberBusyId(memberId);
+    try {
+      const response = await fetch("/api/team-members", {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ vacationId, memberId, role }),
+      });
+      const payload = (await response.json()) as { error?: string };
+      if (!response.ok) {
+        setError(payload.error ?? "Rolle konnte nicht geändert werden.");
+        return;
+      }
+      setMessage("Rolle aktualisiert.");
+      await load();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Rolle konnte nicht geändert werden.");
     } finally {
       setMemberBusyId(null);
     }
@@ -393,7 +415,7 @@ export default function VacationDetailPage() {
   }
 
   function memberRoleLabel(role: Member["role"]) {
-    return role === "admin" ? "Admin" : "Mitglied";
+    return ROLE_OPTIONS.find((option) => option.value === role)?.label ?? role;
   }
 
   function memberStatusLabel(status: Member["status"]) {
@@ -471,13 +493,15 @@ export default function VacationDetailPage() {
                   : ""}
               </p>
             </div>
-            <button
-              type="button"
-              className="cta !px-3 !py-2 text-[13px]"
-              onClick={() => setShowSpotForm((value) => !value)}
-            >
-              {showSpotForm ? "Schließen" : "Hinzufügen"}
-            </button>
+            {canEditTrip ? (
+              <button
+                type="button"
+                className="cta !px-3 !py-2 text-[13px]"
+                onClick={() => setShowSpotForm((value) => !value)}
+              >
+                {showSpotForm ? "Schließen" : "Hinzufügen"}
+              </button>
+            ) : null}
           </div>
 
           {showSpotForm && (
@@ -536,6 +560,18 @@ export default function VacationDetailPage() {
             {members.length} Mitglied{members.length === 1 ? "" : "er"}
           </p>
 
+          <div className="ios-group mt-4 p-4">
+            <p className="text-[13px] font-semibold text-[var(--ink-soft)]">Rollen</p>
+            <div className="mt-3 grid gap-3 sm:grid-cols-3">
+              {ROLE_OPTIONS.map((role) => (
+                <div key={role.value} className="glass-subpanel p-3">
+                  <p className="text-[14px] font-semibold">{role.label}</p>
+                  <p className="mt-1 text-[12px] text-[var(--ink-soft)]">{role.description}</p>
+                </div>
+              ))}
+            </div>
+          </div>
+
           <div className="ios-group mt-4">
             {members.map((member) => {
               const isSelf = Boolean(
@@ -545,24 +581,42 @@ export default function VacationDetailPage() {
               const canManage = canEditVacation && !isSelf;
 
               return (
-                <div key={member.id} className="ios-row !items-center">
+                <div key={member.id} className="ios-row !items-start">
                   <div className="min-w-0 flex-1">
                     <p className="truncate text-[15px] font-semibold">{member.email}</p>
                     <p className="text-[12px] font-semibold uppercase tracking-wide text-[var(--ink-faint)]">
                       {memberRoleLabel(member.role)} · {memberStatusLabel(member.status)}
                       {isSelf ? " · Du" : ""}
                     </p>
+                    {member.invite_expires_at && member.status === "invited" ? (
+                      <p className="mt-1 text-[12px] text-[var(--ink-soft)]">
+                        Link gültig bis {new Date(member.invite_expires_at).toLocaleDateString("de-DE")}
+                      </p>
+                    ) : null}
                   </div>
                   {canManage ? (
-                    <div className="flex shrink-0 flex-wrap items-center justify-end gap-2">
+                    <div className="flex shrink-0 flex-col items-end gap-2">
+                      <select
+                        className="glass-field min-w-[9rem] px-3 py-2 text-[14px]"
+                        value={member.role}
+                        disabled={busy}
+                        onChange={(event) => void onUpdateRole(member.id, event.target.value as MemberRole)}
+                      >
+                        {ROLE_OPTIONS.map((role) => (
+                          <option key={role.value} value={role.value}>
+                            {role.label}
+                          </option>
+                        ))}
+                      </select>
+                      <div className="flex flex-wrap items-center justify-end gap-2">
                       {member.status === "invited" ? (
                         <button
                           type="button"
                           className="glass-chip"
                           disabled={busy}
-                          onClick={() => void onResendInvite(member)}
+                          onClick={() => void onCopyInviteLink(member)}
                         >
-                          {busy ? "…" : "Erneut senden"}
+                          {busy ? "…" : "Link kopieren"}
                         </button>
                       ) : null}
                       <button
@@ -577,6 +631,7 @@ export default function VacationDetailPage() {
                             ? "Zurückziehen"
                             : "Entfernen"}
                       </button>
+                      </div>
                     </div>
                   ) : null}
                 </div>
@@ -649,10 +704,22 @@ export default function VacationDetailPage() {
                       value={inviteEmail}
                       onChange={(e) => {
                         setInviteEmail(e.target.value);
+                        setInviteLink(null);
                         if (message) setMessage(null);
                         if (error) setError(null);
                       }}
                     />
+                    <select
+                      className="glass-field px-3 py-3"
+                      value={inviteRole}
+                      onChange={(event) => setInviteRole(event.target.value as MemberRole)}
+                    >
+                      {ROLE_OPTIONS.map((role) => (
+                        <option key={role.value} value={role.value}>
+                          {role.label}
+                        </option>
+                      ))}
+                    </select>
                     <button
                       type="submit"
                       className="cta shrink-0"
@@ -661,6 +728,27 @@ export default function VacationDetailPage() {
                       {inviting ? "…" : "Einladen"}
                     </button>
                   </div>
+                  {inviteLink ? (
+                    <div className="glass-subpanel mt-3 p-3">
+                      <p className="text-[12px] font-semibold uppercase tracking-wide text-[var(--ink-faint)]">
+                        Teilbarer Link
+                      </p>
+                      <div className="mt-2 flex flex-col gap-3 sm:flex-row">
+                        <input
+                          readOnly
+                          className="glass-field px-3 py-3 text-[13px]"
+                          value={inviteLink}
+                        />
+                        <button
+                          type="button"
+                          className="glass-chip shrink-0"
+                          onClick={() => void navigator.clipboard.writeText(inviteLink)}
+                        >
+                          Link kopieren
+                        </button>
+                      </div>
+                    </div>
+                  ) : null}
                   {message && <p className="mt-3 text-[13px] text-[var(--pine)]">{message}</p>}
                   {error && <p className="mt-3 text-[13px] text-[var(--danger)]">{error}</p>}
                 </form>
