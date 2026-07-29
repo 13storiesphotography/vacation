@@ -14,11 +14,29 @@ export function parsePlaceNameFromMapsUrl(
 ): string | null {
   if (!url?.trim()) return null;
   try {
-    const decoded = decodeURIComponent(url.trim());
+    const parsed = new URL(url.trim());
+    const decoded = decodeURIComponent(parsed.toString());
     const match = decoded.match(/\/maps\/place\/([^/@]+)/i);
-    if (!match?.[1]) return null;
-    const name = match[1].replace(/\+/g, " ").trim();
-    return name || null;
+    if (match?.[1]) {
+      const name = match[1].replace(/\+/g, " ").trim();
+      if (name) return name;
+    }
+
+    const query =
+      parsed.searchParams.get("q") ||
+      parsed.searchParams.get("query") ||
+      parsed.searchParams.get("destination");
+    if (query && !/^-?\d+(?:\.\d+)?\s*,\s*-?\d+(?:\.\d+)?$/.test(query.trim())) {
+      return query.trim();
+    }
+
+    const searchMatch = decoded.match(/\/(?:maps\/)?search\/([^/?#]+)/i);
+    if (searchMatch?.[1]) {
+      const name = searchMatch[1].replace(/\+/g, " ").trim();
+      if (name) return name;
+    }
+
+    return null;
   } catch {
     return null;
   }
@@ -46,11 +64,23 @@ export function parsePlaceIdFromMapsUrl(
 type PlacePhotoSource = {
   id?: string;
   displayName?: { text?: string };
+  formattedAddress?: string;
+  location?: { latitude?: number; longitude?: number };
   photos?: Array<{ name?: string }>;
 };
 
 type PlacesSearchResponse = {
   places?: PlacePhotoSource[];
+};
+
+export type GooglePlaceSearchResult = {
+  title: string | null;
+  locationHint: string | null;
+  imageUrl: string | null;
+  lat: number | null;
+  lng: number | null;
+  mapsUrl: string | null;
+  placeId: string | null;
 };
 
 type PhotoMediaResponse = {
@@ -133,6 +163,78 @@ async function searchTextPhoto(
   }
   const data = (await search.json()) as PlacesSearchResponse;
   return firstPhotoFromPlaces(data.places, key);
+}
+
+export async function searchGooglePlaceQuery(
+  textQuery: string,
+  coords?: LatLng | null,
+): Promise<GooglePlaceSearchResult | null> {
+  const key = serverMapsKey();
+  const query = textQuery.trim();
+  if (!key || !query) return null;
+
+  const body: Record<string, unknown> = {
+    textQuery: query,
+    languageCode: "de",
+    maxResultCount: 3,
+  };
+  if (coords) {
+    body.locationBias = {
+      circle: {
+        center: {
+          latitude: coords.lat,
+          longitude: coords.lng,
+        },
+        radius: 3000,
+      },
+    };
+  }
+
+  try {
+    const response = await fetch("https://places.googleapis.com/v1/places:searchText", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "X-Goog-Api-Key": key,
+        "X-Goog-FieldMask":
+          "places.id,places.displayName,places.formattedAddress,places.location,places.photos",
+      },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(12000),
+    });
+    if (!response.ok) {
+      console.warn("places searchText failed", response.status, await response.text());
+      return null;
+    }
+
+    const data = (await response.json()) as PlacesSearchResponse;
+    const place = data.places?.[0];
+    if (!place) return null;
+
+    const imageUrl = await firstPhotoFromPlaces(data.places, key);
+    const lat = place.location?.latitude ?? null;
+    const lng = place.location?.longitude ?? null;
+    const placeId = place.id?.trim() || null;
+    const mapsUrl =
+      lat != null && lng != null
+        ? `https://www.google.com/maps/search/?api=1&query=${lat},${lng}${
+            placeId ? `&query_place_id=${encodeURIComponent(placeId)}` : ""
+          }`
+        : null;
+
+    return {
+      title: place.displayName?.text?.trim() || query,
+      locationHint: place.formattedAddress?.trim() || null,
+      imageUrl,
+      lat,
+      lng,
+      mapsUrl,
+      placeId,
+    };
+  } catch (error) {
+    console.warn("place search failed", error);
+    return null;
+  }
 }
 
 async function searchNearbyPhoto(
