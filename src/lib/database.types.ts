@@ -63,9 +63,11 @@ export type Database = {
           vacation_id: string;
           user_id: string | null;
           email: string;
-          role: "admin" | "member";
+          role: "admin" | "editor" | "viewer";
           status: "invited" | "active";
           invited_by: string | null;
+          invite_token: string | null;
+          invite_expires_at: string | null;
           created_at: string;
         };
         Insert: {
@@ -73,9 +75,11 @@ export type Database = {
           vacation_id: string;
           user_id?: string | null;
           email: string;
-          role?: "admin" | "member";
+          role?: "admin" | "editor" | "viewer";
           status?: "invited" | "active";
           invited_by?: string | null;
+          invite_token?: string | null;
+          invite_expires_at?: string | null;
           created_at?: string;
         };
         Update: {
@@ -83,9 +87,11 @@ export type Database = {
           vacation_id?: string;
           user_id?: string | null;
           email?: string;
-          role?: "admin" | "member";
+          role?: "admin" | "editor" | "viewer";
           status?: "invited" | "active";
           invited_by?: string | null;
+          invite_token?: string | null;
+          invite_expires_at?: string | null;
           created_at?: string;
         };
         Relationships: [];
@@ -209,9 +215,23 @@ export type Database = {
     Functions: {
       is_vacation_member: { Args: { p_vacation_id: string }; Returns: boolean };
       is_vacation_admin: { Args: { p_vacation_id: string }; Returns: boolean };
+      is_vacation_editor: { Args: { p_vacation_id: string }; Returns: boolean };
+      is_day_plan_vacation_editor: { Args: { p_day_plan_id: string }; Returns: boolean };
+      get_vacation_invite: {
+        Args: { p_token: string };
+        Returns: {
+          vacation_id: string;
+          vacation_title: string;
+          email: string;
+          role: "admin" | "editor" | "viewer";
+          status: "invited" | "active";
+          invite_expires_at: string | null;
+        }[];
+      };
+      accept_vacation_invite: { Args: { p_token: string }; Returns: string };
     };
     Enums: {
-      member_role: "admin" | "member";
+      member_role: "admin" | "editor" | "viewer";
       member_status: "invited" | "active";
       spot_category:
         | "stellplatz"
