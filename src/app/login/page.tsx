@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { FormEvent, Suspense, useState } from "react";
+import { FormEvent, Suspense, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 
 function LoginForm() {
@@ -14,63 +14,89 @@ function LoginForm() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
 
+  const queryError = useMemo(() => {
+    const code = searchParams.get("error");
+    const message = searchParams.get("message");
+    if (message) return message;
+    if (code === "invite") {
+      return "Zugang nur per Einladung. Bitte lass dich zuerst einladen.";
+    }
+    if (code === "auth") {
+      return "Anmeldung fehlgeschlagen. Bitte erneut versuchen.";
+    }
+    return null;
+  }, [searchParams]);
+
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
     setLoading(true);
     setError(null);
-    const supabase = createClient();
-    const { error: signInError } = await supabase.auth.signInWithPassword({
-      email,
-      password,
-    });
-    setLoading(false);
-    if (signInError) {
-      setError(signInError.message);
-      return;
+    try {
+      const supabase = createClient();
+      const { error: signInError } = await supabase.auth.signInWithPassword({
+        email,
+        password,
+      });
+      if (signInError) {
+        setError(signInError.message);
+        return;
+      }
+      router.replace(next);
+      router.refresh();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Anmeldung fehlgeschlagen.");
+    } finally {
+      setLoading(false);
     }
-    router.replace(next);
-    router.refresh();
   }
 
+  const shownError = error ?? queryError;
+
   return (
-    <form onSubmit={onSubmit} className="ios-group mx-auto w-full max-w-md p-6">
+    <div className="ios-group mx-auto w-full max-w-md p-6">
       <h1 className="display text-2xl">Anmelden</h1>
       <p className="mt-2 text-[14px] text-[var(--ink-soft)]">
         Mit E-Mail und Passwort. Danach MFA, falls eingerichtet.
       </p>
-      <label className="mt-6 block text-[13px] font-semibold text-[var(--ink-soft)]">
-        E-Mail
-        <input
-          className="mt-1.5 w-full rounded-[12px] border-0 bg-black/5 px-3 py-3 text-[15px] outline-none ring-[var(--fjord)] focus:ring-2"
-          type="email"
-          autoComplete="email"
-          required
-          value={email}
-          onChange={(e) => setEmail(e.target.value)}
-        />
-      </label>
-      <label className="mt-4 block text-[13px] font-semibold text-[var(--ink-soft)]">
-        Passwort
-        <input
-          className="mt-1.5 w-full rounded-[12px] border-0 bg-black/5 px-3 py-3 text-[15px] outline-none ring-[var(--fjord)] focus:ring-2"
-          type="password"
-          autoComplete="current-password"
-          required
-          value={password}
-          onChange={(e) => setPassword(e.target.value)}
-        />
-      </label>
-      {error && <p className="mt-4 text-[14px] text-[var(--danger)]">{error}</p>}
-      <button type="submit" className="cta mt-6 w-full" disabled={loading}>
-        {loading ? "…" : "Weiter"}
-      </button>
+
+      <form onSubmit={onSubmit} className="mt-6">
+        <label className="form-label">
+          E-Mail
+          <input
+            className="glass-field mt-1.5 px-3 py-3"
+            type="email"
+            autoComplete="email"
+            required
+            value={email}
+            onChange={(e) => setEmail(e.target.value)}
+          />
+        </label>
+        <label className="form-label mt-4">
+          Passwort
+          <input
+            className="glass-field mt-1.5 px-3 py-3"
+            type="password"
+            autoComplete="current-password"
+            required
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
+        </label>
+        {shownError && (
+          <p className="mt-4 text-[14px] text-[var(--danger)]">{shownError}</p>
+        )}
+        <button type="submit" className="cta mt-6 w-full" disabled={loading}>
+          {loading ? "…" : "Anmelden"}
+        </button>
+      </form>
+
       <p className="mt-4 text-center text-[13px] text-[var(--ink-soft)]">
-        Noch kein Konto?{" "}
+        Zugang nur per Einladung.{" "}
         <Link href="/signup" className="font-semibold text-[var(--fjord)]">
-          Registrieren
+          Mehr Infos
         </Link>
       </p>
-    </form>
+    </div>
   );
 }
 

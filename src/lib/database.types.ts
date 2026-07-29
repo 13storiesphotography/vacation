@@ -103,6 +103,7 @@ export type Database = {
           name: string;
           category:
             | "stellplatz"
+            | "unterkunft"
             | "sehenswuerdigkeit"
             | "ort"
             | "freizeit"
@@ -112,9 +113,16 @@ export type Database = {
           lng: number | null;
           maps_url: string | null;
           info_url: string | null;
+          image_url: string | null;
+          image_manual: boolean;
           overnight_cost: "frei" | "kostenpflichtig" | null;
           price_hint: string | null;
+          stay_check_in: string | null;
+          stay_check_out: string | null;
+          stay_nights: number | null;
+          stay_status: "interessiert" | "gebucht" | null;
           tags: string[];
+          is_relevant: boolean;
           created_by: string | null;
           created_at: string;
         };
@@ -124,6 +132,7 @@ export type Database = {
           name: string;
           category:
             | "stellplatz"
+            | "unterkunft"
             | "sehenswuerdigkeit"
             | "ort"
             | "freizeit"
@@ -133,9 +142,16 @@ export type Database = {
           lng?: number | null;
           maps_url?: string | null;
           info_url?: string | null;
+          image_url?: string | null;
+          image_manual?: boolean;
           overnight_cost?: "frei" | "kostenpflichtig" | null;
           price_hint?: string | null;
+          stay_check_in?: string | null;
+          stay_check_out?: string | null;
+          stay_nights?: number | null;
+          stay_status?: "interessiert" | "gebucht" | null;
           tags?: string[];
+          is_relevant?: boolean;
           created_by?: string | null;
           created_at?: string;
         };
@@ -145,6 +161,7 @@ export type Database = {
           name?: string;
           category?:
             | "stellplatz"
+            | "unterkunft"
             | "sehenswuerdigkeit"
             | "ort"
             | "freizeit"
@@ -154,11 +171,51 @@ export type Database = {
           lng?: number | null;
           maps_url?: string | null;
           info_url?: string | null;
+          image_url?: string | null;
+          image_manual?: boolean;
           overnight_cost?: "frei" | "kostenpflichtig" | null;
           price_hint?: string | null;
+          stay_check_in?: string | null;
+          stay_check_out?: string | null;
+          stay_nights?: number | null;
+          stay_status?: "interessiert" | "gebucht" | null;
           tags?: string[];
+          is_relevant?: boolean;
           created_by?: string | null;
           created_at?: string;
+        };
+        Relationships: [];
+      };
+      spot_ratings: {
+        Row: {
+          id: string;
+          spot_id: string;
+          user_id: string;
+          rating: number | null;
+          note: string | null;
+          is_favorite: boolean;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          spot_id: string;
+          user_id: string;
+          rating?: number | null;
+          note?: string | null;
+          is_favorite?: boolean;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          spot_id?: string;
+          user_id?: string;
+          rating?: number | null;
+          note?: string | null;
+          is_favorite?: boolean;
+          created_at?: string;
+          updated_at?: string;
         };
         Relationships: [];
       };
@@ -170,6 +227,8 @@ export type Database = {
           title: string | null;
           notes: string | null;
           overnight_spot_id: string | null;
+          /** HH:MM[:SS] local clock — day start / leave morning origin. */
+          depart_at: string | null;
         };
         Insert: {
           id?: string;
@@ -178,6 +237,7 @@ export type Database = {
           title?: string | null;
           notes?: string | null;
           overnight_spot_id?: string | null;
+          depart_at?: string | null;
         };
         Update: {
           id?: string;
@@ -186,6 +246,7 @@ export type Database = {
           title?: string | null;
           notes?: string | null;
           overnight_spot_id?: string | null;
+          depart_at?: string | null;
         };
         Relationships: [];
       };
@@ -195,18 +256,22 @@ export type Database = {
           day_plan_id: string;
           spot_id: string;
           position: number;
+          /** Minutes on site; null = app default. */
+          dwell_minutes: number | null;
         };
         Insert: {
           id?: string;
           day_plan_id: string;
           spot_id: string;
           position?: number;
+          dwell_minutes?: number | null;
         };
         Update: {
           id?: string;
           day_plan_id?: string;
           spot_id?: string;
           position?: number;
+          dwell_minutes?: number | null;
         };
         Relationships: [];
       };
@@ -229,17 +294,25 @@ export type Database = {
         }[];
       };
       accept_vacation_invite: { Args: { p_token: string }; Returns: string };
+      is_spot_vacation_member: { Args: { p_spot_id: string }; Returns: boolean };
+      is_day_plan_vacation_member: {
+        Args: { p_day_plan_id: string };
+        Returns: boolean;
+      };
+      activate_my_vacation_invites: { Args: Record<string, never>; Returns: number };
     };
     Enums: {
       member_role: "admin" | "editor" | "viewer";
       member_status: "invited" | "active";
       spot_category:
         | "stellplatz"
+        | "unterkunft"
         | "sehenswuerdigkeit"
         | "ort"
         | "freizeit"
         | "versorgung";
       overnight_cost: "frei" | "kostenpflichtig";
+      stay_status: "interessiert" | "gebucht";
       vacation_type: "van" | "hotel" | "camping" | "other";
     };
     CompositeTypes: Record<string, never>;

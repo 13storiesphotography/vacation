@@ -2,18 +2,24 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { FormEvent, Suspense, useState } from "react";
+import { FormEvent, Suspense, useMemo, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 
 function SignupForm() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const next = searchParams.get("next") || "/app";
+  const invitedFlow = next.startsWith("/invite/");
   const [displayName, setDisplayName] = useState("");
   const [email, setEmail] = useState(searchParams.get("email") || "");
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+
+  const loginHref = useMemo(() => {
+    const params = new URLSearchParams(email ? { next, email } : { next });
+    return `/login?${params.toString()}`;
+  }, [email, next]);
 
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
@@ -37,12 +43,30 @@ function SignupForm() {
     router.refresh();
   }
 
+  if (!invitedFlow) {
+    return (
+      <div className="ios-group mx-auto w-full max-w-md p-6">
+        <h1 className="display text-2xl">Nur per Einladung</h1>
+        <p className="mt-2 text-[14px] leading-relaxed text-[var(--ink-soft)]">
+          Neue Konten können sich nicht selbst registrieren. Ein Admin lädt dich ein — danach
+          meldest du dich mit E-Mail und Passwort an und richtest MFA ein.
+        </p>
+        <p className="mt-4 text-[14px] leading-relaxed text-[var(--ink-soft)]">
+          Bist du der erste Admin? Lege den Account einmalig im Supabase Dashboard an
+          (Authentication → Users → Add user), melde dich hier an und richte MFA ein.
+        </p>
+        <Link href="/login" className="cta mt-6 inline-flex w-full">
+          Zur Anmeldung
+        </Link>
+      </div>
+    );
+  }
+
   return (
     <form onSubmit={onSubmit} className="ios-group mx-auto w-full max-w-md p-6">
-      <h1 className="display text-2xl">Konto erstellen</h1>
+      <h1 className="display text-2xl">Konto für Einladung erstellen</h1>
       <p className="mt-2 text-[14px] text-[var(--ink-soft)]">
-        Für den ersten Admin-Account. Danach MFA einrichten. Weitere Personen kommen per
-        Einladung.
+        Erstelle dein Konto mit der eingeladenen E-Mail-Adresse und nimm danach die Einladung an.
       </p>
       <label className="mt-6 block text-[13px] font-semibold text-[var(--ink-soft)]">
         Name
@@ -82,12 +106,7 @@ function SignupForm() {
       </button>
       <p className="mt-4 text-center text-[13px] text-[var(--ink-soft)]">
         Schon registriert?{" "}
-        <Link
-          href={`/login?${new URLSearchParams(
-            email ? { next, email } : { next },
-          ).toString()}`}
-          className="font-semibold text-[var(--fjord)]"
-        >
+        <Link href={loginHref} className="font-semibold text-[var(--fjord)]">
           Anmelden
         </Link>
       </p>

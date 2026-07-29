@@ -1,0 +1,1059 @@
+"use client";
+
+import { useEffect, useMemo, useRef, useState } from "react";
+import type { Database } from "@/lib/database.types";
+import { categoryLabels, isSpotRelevant, type SpotCategory } from "@/lib/spots";
+import { isOvernightCategory } from "@/lib/overnight";
+import { formatDayLabel, type DayPlanWithStops } from "@/lib/day-plans";
+import {
+  addSpotToDayClient,
+  ensureAndLoadDayPlans,
+  moveSpotOnDayClient,
+  removeSpotFromDayClient,
+  setDayOvernightClient,
+  updateDayPlanMetaClient,
+  updateStopDwellClient,
+} from "@/lib/day-plans-api";
+import {
+  buildDayRoute,
+  buildTripRoutes,
+  formatLegMeta,
+  formatRouteDuration,
+  formatRouteKm,
+} from "@/lib/day-route";
+import {
+  buildDayTimeline,
+  formatClockTime,
+  normalizeClockTime,
+  previousOvernightSpotId,
+} from "@/lib/day-timeline";
+import { syncAllSpotStays } from "@/lib/apply-stay";
+import { createClient } from "@/lib/supabase/client";
+import { CategoryIcon } from "@/components/category-icon";
+import { GlassTimeField } from "@/components/ui/glass-time-field";
+import { formatStaySummary, stayStatusLabels } from "@/lib/stay";
+import { useEnrichedDayRoute } from "./use-enriched-day-route";
+import { TripRouteOverview } from "./trip-route-overview";
+import { EditSpotForm } from "./spot-ui";
+
+type Spot = Database["public"]["Tables"]["spots"]["Row"];
+type Vacation = Database["public"]["Tables"]["vacations"]["Row"];
+
+const LOAD_TIMEOUT_MS = 15000;
+
+function friendlyError(message: string): string {
+  const lower = message.toLowerCase();
+  if (
+    lower.includes("server components") ||
+    lower.includes("digest") ||
+    lower.includes("failed to find") ||
+    lower.includes("unexpected response")
+  ) {
+    return "Verbindung zum Server gestört. Bitte Seite neu laden und nochmal versuchen.";
+  }
+  if (lower.includes("timeout")) {
+    return "Das hat zu lange gedauert. Bitte nochmal versuchen.";
+  }
+  return message;
+}
+
+export function DayPlanPanel({
+  vacation,
+  spots,
+  onSpotsChanged,
+  onSpotPatch,
+}: {
+  vacation: Vacation;
+  spots: Spot[];
+  onSpotsChanged?: () => void | Promise<void>;
+  onSpotPatch?: (spotId: string, patch: Partial<Spot>) => void;
+}) {
+  const [days, setDays] = useState<DayPlanWithStops[]>([]);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [pending, setPending] = useState(false);
+  const [pickerOpen, setPickerOpen] = useState(false);
+  const [query, setQuery] = useState("");
+  const [titleDraft, setTitleDraft] = useState("");
+  const [editingSpotId, setEditingSpotId] = useState<string | null>(null);
+  const [deletingSpotId, setDeletingSpotId] = useState<string | null>(null);
+
+  const selectedIdRef = useRef<string | null>(null);
+  const dayStripRef = useRef<HTMLDivElement>(null);
+  const reloadSeq = useRef(0);
+  const actionChain = useRef(Promise.resolve());
+  const pendingCount = useRef(0);
+
+  useEffect(() => {
+    selectedIdRef.current = selectedId;
+  }, [selectedId]);
+
+  const spotsById = useMemo(() => {
+    const map = new Map<string, Spot>();
+    for (const spot of spots) map.set(spot.id, spot);
+    return map;
+  }, [spots]);
+
+  const assignedSpotIds = useMemo(() => {
+    const ids = new Set<string>();
+    for (const day of days) {
+      for (const stop of day.stops) ids.add(stop.spot_id);
+      if (day.overnight_spot_id) ids.add(day.overnight_spot_id);
+    }
+    return ids;
+  }, [days]);
+
+  const unplannedSpots = useMemo(
+    () =>
+      spots.filter(
+        (spot) => isSpotRelevant(spot) && !assignedSpotIds.has(spot.id),
+      ),
+    [spots, assignedSpotIds],
+  );
+
+  const tripRoutes = useMemo(
+    () => buildTripRoutes(days, spotsById),
+    [days, spotsById],
+  );
+
+  async function reload(preferId?: string | null) {
+    const seq = ++reloadSeq.current;
+    try {
+      const supabase = createClient();
+      await syncAllSpotStays(supabase, vacation.id);
+      const result = await Promise.race([
+        ensureAndLoadDayPlans(
+          supabase,
+          vacation.id,
+          vacation.start_date,
+          vacation.end_date,
+        ),
+        new Promise<{ days: DayPlanWithStops[]; error: string }>((resolve) => {
+          window.setTimeout(
+            () =>
+              resolve({
+                days: [],
+                error: "Tagesplan-Timeout — bitte erneut versuchen.",
+              }),
+            LOAD_TIMEOUT_MS,
+          );
+        }),
+      ]);
+      if (seq !== reloadSeq.current) return;
+
+      if (result.error) {
+        setError(friendlyError(result.error));
+        setLoading(false);
+        return;
+      }
+      setDays(result.days);
+      setSelectedId((current) => {
+        const next = preferId ?? current;
+        if (next && result.days.some((day) => day.id === next)) return next;
+        // Prefer first empty day, else first day.
+        const empty = result.days.find((day) => day.stops.length === 0);
+        return empty?.id ?? result.days[0]?.id ?? null;
+      });
+      setLoading(false);
+      setError(null);
+    } catch (err) {
+      if (seq !== reloadSeq.current) return;
+      setError(
+        friendlyError(
+          err instanceof Error
+            ? err.message
+            : "Tagesplan konnte nicht geladen werden.",
+        ),
+      );
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    void reload();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [vacation.id, vacation.start_date, vacation.end_date]);
+
+  const selectedIndex = days.findIndex((day) => day.id === selectedId);
+  const selected = selectedIndex >= 0 ? days[selectedIndex] : null;
+
+  const overnightCandidates = useMemo(
+    () =>
+      spots.filter(
+        (spot) =>
+          isOvernightCategory(spot.category as SpotCategory) &&
+          (isSpotRelevant(spot) ||
+            // Keep currently selected overnight visible even if shelved.
+            spot.id === selected?.overnight_spot_id),
+      ),
+    [spots, selected?.overnight_spot_id],
+  );
+
+  useEffect(() => {
+    setTitleDraft(selected?.title ?? "");
+    setPickerOpen(false);
+    setQuery("");
+    setEditingSpotId(null);
+  }, [selected?.id, selected?.title]);
+
+  // Keep active day chip visible in the horizontal strip.
+  useEffect(() => {
+    if (!selectedId || !dayStripRef.current) return;
+    const chip = dayStripRef.current.querySelector<HTMLElement>(
+      `[data-day-id="${selectedId}"]`,
+    );
+    chip?.scrollIntoView({
+      behavior: "smooth",
+      inline: "center",
+      block: "nearest",
+    });
+  }, [selectedId]);
+
+  const availableForDay = useMemo(() => {
+    if (!selected) return [];
+    const used = new Set(selected.stops.map((stop) => stop.spot_id));
+    if (selected.overnight_spot_id) used.add(selected.overnight_spot_id);
+    return spots.filter(
+      (spot) => isSpotRelevant(spot) && !used.has(spot.id),
+    );
+  }, [selected, spots]);
+
+  const pickerSpots = useMemo(() => {
+    const q = query.trim().toLowerCase();
+    const filtered = availableForDay.filter((spot) => {
+      if (!q) return true;
+      return (
+        spot.name.toLowerCase().includes(q) ||
+        categoryLabels[spot.category as SpotCategory].toLowerCase().includes(q)
+      );
+    });
+    // Unplanned first — the smart default.
+    return [...filtered].sort((a, b) => {
+      const aOpen = unplannedSpots.some((spot) => spot.id === a.id) ? 0 : 1;
+      const bOpen = unplannedSpots.some((spot) => spot.id === b.id) ? 0 : 1;
+      if (aOpen !== bOpen) return aOpen - bOpen;
+      return a.name.localeCompare(b.name, "de");
+    });
+  }, [availableForDay, query, unplannedSpots]);
+
+  const daysWithStops = days.filter((day) => day.stops.length > 0).length;
+
+  const morningOriginId = useMemo(
+    () => (selected ? previousOvernightSpotId(days, selected.id) : null),
+    [days, selected],
+  );
+
+  const selectedRouteEstimate = useMemo(
+    () =>
+      selected
+        ? buildDayRoute(selected, spotsById, selectedIndex, {
+            originSpotId: morningOriginId,
+          })
+        : null,
+    [selected, spotsById, selectedIndex, morningOriginId],
+  );
+  const {
+    route: selectedRoute,
+    loading: routeEnriching,
+  } = useEnrichedDayRoute(selectedRouteEstimate);
+
+  const categoryBySpotId = useMemo(() => {
+    const map = new Map<string, SpotCategory>();
+    for (const spot of spots) {
+      map.set(spot.id, spot.category as SpotCategory);
+    }
+    return map;
+  }, [spots]);
+
+  const timeline = useMemo(
+    () =>
+      selected
+        ? buildDayTimeline({
+            day: selected,
+            route: selectedRoute,
+            categoryBySpotId,
+          })
+        : [],
+    [selected, selectedRoute, categoryBySpotId],
+  );
+
+  const timelineBySpotId = useMemo(() => {
+    const map = new Map<string, (typeof timeline)[number]>();
+    for (const entry of timeline) {
+      if (entry.role === "stop") map.set(entry.spotId, entry);
+    }
+    return map;
+  }, [timeline]);
+
+  const originEntry = timeline.find((entry) => entry.role === "origin") ?? null;
+  const overnightEntry =
+    timeline.find((entry) => entry.role === "overnight") ?? null;
+
+  function patchSelectedDay(
+    updater: (day: DayPlanWithStops) => DayPlanWithStops,
+  ) {
+    const id = selectedIdRef.current;
+    if (!id) return;
+    setDays((prev) =>
+      prev.map((day) => (day.id === id ? updater(day) : day)),
+    );
+  }
+
+  function run(
+    action: () => Promise<{ error?: string; ok?: boolean }>,
+    optimistic?: () => void,
+  ) {
+    optimistic?.();
+    pendingCount.current += 1;
+    setPending(true);
+    setError(null);
+
+    actionChain.current = actionChain.current
+      .then(async () => {
+        const result = await action();
+        if (result.error) {
+          setError(friendlyError(result.error));
+          await reload(selectedIdRef.current);
+          return;
+        }
+        await reload(selectedIdRef.current);
+        setPickerOpen(false);
+        setQuery("");
+      })
+      .catch((err: unknown) => {
+        setError(
+          friendlyError(
+            err instanceof Error ? err.message : "Unbekannter Fehler",
+          ),
+        );
+      })
+      .finally(() => {
+        pendingCount.current = Math.max(0, pendingCount.current - 1);
+        if (pendingCount.current === 0) setPending(false);
+      });
+  }
+
+  function selectDay(id: string) {
+    setSelectedId(id);
+  }
+
+  function goDay(delta: number) {
+    if (selectedIndex < 0) return;
+    const next = days[selectedIndex + delta];
+    if (next) selectDay(next.id);
+  }
+
+  if (loading) {
+    return (
+      <p className="mt-4 text-[14px] text-[var(--ink-soft)]">
+        Tagesplan wird geladen…
+      </p>
+    );
+  }
+
+  if (error && days.length === 0) {
+    return (
+      <div className="ios-group mt-4 p-5">
+        <p className="text-[15px] font-semibold text-[var(--danger)]">
+          Tagesplan-Fehler
+        </p>
+        <p className="mt-2 text-[14px] text-[var(--ink-soft)]">
+          {friendlyError(error)}
+        </p>
+        <button
+          type="button"
+          className="glass-chip mt-4"
+          onClick={() => {
+            setLoading(true);
+            setError(null);
+            void reload();
+          }}
+        >
+          Erneut versuchen
+        </button>
+      </div>
+    );
+  }
+
+  if (days.length === 0) {
+    return (
+      <div className="ios-group mt-4 p-5">
+        <p className="text-[15px] font-semibold">Kein Zeitraum</p>
+        <p className="mt-2 text-[14px] text-[var(--ink-soft)]">
+          Unter Urlaub Start- und Enddatum setzen — daraus entstehen die Tage.
+        </p>
+      </div>
+    );
+  }
+
+  const overnight = selected?.overnight_spot_id
+    ? spotsById.get(selected.overnight_spot_id)
+    : null;
+  const needsOvernight =
+    vacation.type === "van" ||
+    vacation.type === "camping" ||
+    vacation.type === "hotel";
+  return (
+    <div className="mt-3 space-y-4">
+      {error && (
+        <p className="text-[13px] text-[var(--danger)]">{friendlyError(error)}</p>
+      )}
+
+      {/* Overview */}
+      <div className="flex items-center justify-between gap-3 px-0.5">
+        <p className="text-[13px] text-[var(--ink-soft)]">
+          <span className="font-semibold text-[var(--ink)]">
+            {daysWithStops}/{days.length}
+          </span>{" "}
+          Tage befüllt
+          {tripRoutes.daysWithRoute > 0
+            ? ` · ca. ${formatRouteKm(tripRoutes.totalKm)} · ~${formatRouteDuration(tripRoutes.totalMinutes)}`
+            : ""}
+          {unplannedSpots.length > 0
+            ? ` · ${unplannedSpots.length} Spot${unplannedSpots.length === 1 ? "" : "s"} noch offen`
+            : spots.length > 0
+              ? " · alle Spots eingeplant"
+              : ""}
+        </p>
+      </div>
+
+      <TripRouteOverview
+        days={days}
+        spotsById={spotsById}
+        vacationStart={vacation.start_date}
+        vacationEnd={vacation.end_date}
+        onSelectDay={selectDay}
+      />
+
+      {/* Day strip */}
+      <div
+        ref={dayStripRef}
+        className="plan-day-strip flex gap-2 overflow-x-auto pb-1"
+      >
+        {days.map((day, index) => {
+          const active = day.id === selectedId;
+          const hasStops = day.stops.length > 0;
+          const hasNight = Boolean(day.overnight_spot_id);
+          return (
+            <button
+              key={day.id}
+              type="button"
+              data-day-id={day.id}
+              data-active={active}
+              className="plan-day-chip"
+              onClick={() => selectDay(day.id)}
+            >
+              <span className="plan-day-chip-num">Tag {index + 1}</span>
+              <span className="plan-day-chip-date">{formatDayLabel(day.date)}</span>
+              <span className="plan-day-chip-dots" aria-hidden>
+                <i data-on={hasStops} />
+                {needsOvernight && <i data-on={hasNight} data-kind="night" />}
+              </span>
+            </button>
+          );
+        })}
+      </div>
+
+      {selected && (
+        <>
+          {/* Focused day header */}
+          <div className="flex items-start justify-between gap-3">
+            <div className="min-w-0 flex-1">
+              <p className="text-[12px] font-semibold uppercase tracking-wide text-[var(--fjord)]">
+                {formatDayLabel(selected.date)}
+              </p>
+              <input
+                value={titleDraft}
+                disabled={pending}
+                className="inline-title-field"
+                placeholder={`Tag ${selectedIndex + 1}`}
+                onChange={(event) => setTitleDraft(event.target.value)}
+                onBlur={() => {
+                  const value = titleDraft;
+                  if ((selected.title ?? "") === value) return;
+                  patchSelectedDay((day) => ({
+                    ...day,
+                    title: value.trim() || null,
+                  }));
+                  run(() =>
+                    updateDayPlanMetaClient(
+                      createClient(),
+                      vacation.id,
+                      selected.id,
+                      { title: value },
+                    ),
+                  );
+                }}
+              />
+            </div>
+            <div className="flex shrink-0 gap-1 pt-1">
+              <button
+                type="button"
+                className="plan-nav-btn"
+                disabled={pending || selectedIndex <= 0}
+                aria-label="Vorheriger Tag"
+                onClick={() => goDay(-1)}
+              >
+                ‹
+              </button>
+              <button
+                type="button"
+                className="plan-nav-btn"
+                disabled={pending || selectedIndex >= days.length - 1}
+                aria-label="Nächster Tag"
+                onClick={() => goDay(1)}
+              >
+                ›
+              </button>
+            </div>
+          </div>
+
+          {/* Route timeline */}
+          <div className="ios-group overflow-hidden">
+            <div className="flex items-center justify-between gap-3 px-4 pt-3.5 pb-2">
+              <p className="text-[12px] font-semibold uppercase tracking-wide text-[var(--fjord)]">
+                Route
+              </p>
+              <button
+                type="button"
+                className="glass-chip"
+                disabled={pending || availableForDay.length === 0}
+                onClick={() => setPickerOpen((value) => !value)}
+              >
+                {pickerOpen ? "Schließen" : "+ Spot"}
+              </button>
+            </div>
+
+            <div className="mx-3 mb-3 flex flex-wrap items-end gap-3 rounded-[14px] bg-[var(--fjord-soft)]/35 px-3 py-2.5">
+              <label className="form-label min-w-[7.5rem] flex-1">
+                Abfahrt
+                <GlassTimeField
+                  value={normalizeClockTime(selected.depart_at) ?? ""}
+                  disabled={pending}
+                  onChange={(clock) => {
+                    const value = clock ? normalizeClockTime(clock) : null;
+                    patchSelectedDay((day) => ({ ...day, depart_at: value }));
+                    run(() =>
+                      updateDayPlanMetaClient(
+                        createClient(),
+                        vacation.id,
+                        selected.id,
+                        { depart_at: value },
+                      ),
+                    );
+                  }}
+                />
+              </label>
+              <p className="pb-2 text-[12px] text-[var(--ink-soft)]">
+                {originEntry
+                  ? `von ${originEntry.name}`
+                  : selected.stops[0]
+                    ? `erster Stop: ${spotsById.get(selected.stops[0].spot_id)?.name ?? "—"}`
+                    : "Zeit für den Tagesstart"}
+                {!selected.depart_at
+                  ? " · Uhrzeit setzen für Ankunft/Abfahrt"
+                  : ""}
+              </p>
+            </div>
+
+            {originEntry && originEntry.driveMinutesBefore == null ? (
+              <div className="px-4 pb-2">
+                <p className="text-[12px] font-semibold text-[var(--ink)]">
+                  {formatClockTime(originEntry.departAt)} · Losfahren
+                </p>
+                <p className="text-[11px] text-[var(--ink-faint)]">
+                  {originEntry.name} (Übernachtung gestern)
+                </p>
+              </div>
+            ) : null}
+
+            {pickerOpen && (
+              <div className="glass-subpanel mx-3 mb-3 p-2">
+                <input
+                  autoFocus
+                  value={query}
+                  onChange={(event) => setQuery(event.target.value)}
+                  placeholder="Suchen oder tippen…"
+                  className="glass-field mb-2 px-3 py-2.5 text-[14px]"
+                />
+                {pickerSpots.length === 0 ? (
+                  <p className="px-2 py-3 text-[13px] text-[var(--ink-soft)]">
+                    {spots.length === 0
+                      ? "Noch keine Spots — zuerst unter Spots sammeln."
+                      : "Keine passenden Spots mehr für diesen Tag."}
+                  </p>
+                ) : (
+                  <ul className="max-h-56 overflow-y-auto">
+                    {pickerSpots.map((spot) => {
+                      const open = unplannedSpots.some((s) => s.id === spot.id);
+                      return (
+                        <li key={spot.id}>
+                          <button
+                            type="button"
+                            disabled={pending}
+                            className="flex w-full items-center gap-2.5 rounded-[12px] px-2 py-2.5 text-left hover:bg-[var(--fjord-soft)] disabled:opacity-50"
+                            onClick={() =>
+                              run(
+                                () =>
+                                  addSpotToDayClient(
+                                    createClient(),
+                                    vacation.id,
+                                    selected.id,
+                                    spot.id,
+                                  ),
+                                () => {
+                                  patchSelectedDay((day) => ({
+                                    ...day,
+                                    stops: [
+                                      ...day.stops,
+                                      {
+                                        id: `local-${spot.id}`,
+                                        day_plan_id: day.id,
+                                        spot_id: spot.id,
+                                        position: day.stops.length,
+                                        dwell_minutes: null,
+                                      },
+                                    ],
+                                  }));
+                                  setPickerOpen(false);
+                                  setQuery("");
+                                },
+                              )
+                            }
+                          >
+                            <CategoryIcon
+                              category={spot.category as SpotCategory}
+                              size={16}
+                            />
+                            <span className="min-w-0 flex-1">
+                              <span className="block truncate text-[14px] font-semibold">
+                                {spot.name}
+                              </span>
+                              <span className="text-[11px] text-[var(--ink-faint)]">
+                                {categoryLabels[spot.category as SpotCategory]}
+                                {open ? " · noch offen" : " · schon geplant"}
+                              </span>
+                            </span>
+                            <span className="text-[18px] font-light text-[var(--fjord)]">
+                              +
+                            </span>
+                          </button>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
+              </div>
+            )}
+
+            {!pickerOpen && selected.stops.length === 0 ? (
+              <button
+                type="button"
+                disabled={pending || availableForDay.length === 0}
+                className="glass-subpanel mx-3 mb-3 flex w-[calc(100%-1.5rem)] flex-col items-start border-dashed px-4 py-5 text-left disabled:opacity-50"
+                onClick={() => setPickerOpen(true)}
+              >
+                <span className="text-[15px] font-semibold">Noch leer</span>
+                <span className="mt-1 text-[13px] text-[var(--ink-soft)]">
+                  Tippe, um Spots aus der Sammlung hierher zu legen.
+                </span>
+              </button>
+            ) : selected.stops.length > 0 ? (
+              <ol className="px-2 pb-2">
+                {selected.stops.map((stop, index) => {
+                  const spot = spotsById.get(stop.spot_id);
+                  if (!spot) return null;
+                  const entry = timelineBySpotId.get(stop.spot_id);
+                  const relevant = isSpotRelevant(spot);
+                  const isEditing = editingSpotId === spot.id;
+                  return (
+                    <li key={stop.id}>
+                      {entry?.driveMinutesBefore != null ? (
+                        <p className="px-4 pb-1 pl-11 text-[11px] font-medium text-[var(--ink-faint)]">
+                          ↓{" "}
+                          {formatLegMeta({
+                            km: entry.driveKmBefore ?? 0,
+                            minutes: entry.driveMinutesBefore,
+                            source: entry.driveSource ?? "estimate",
+                          })}
+                          {entry.driveSource === "estimate" && routeEnriching
+                            ? " · lädt…"
+                            : ""}
+                        </p>
+                      ) : null}
+                      <div
+                        className={`flex items-center gap-2 rounded-[14px] px-2 py-2 ${
+                          isEditing ? "bg-[rgba(15,110,140,0.06)]" : ""
+                        }`}
+                      >
+                        <span className="flex h-7 w-7 shrink-0 items-center justify-center rounded-full bg-[var(--fjord-soft)] text-[12px] font-bold text-[var(--fjord)]">
+                          {index + 1}
+                        </span>
+                        <button
+                          type="button"
+                          className="min-w-0 flex-1 rounded-[12px] px-1 py-0.5 text-left hover:bg-[var(--fjord-soft)]/50"
+                          onClick={() =>
+                            setEditingSpotId((current) =>
+                              current === spot.id ? null : spot.id,
+                            )
+                          }
+                        >
+                          <p className="truncate text-[15px] font-semibold">
+                            {spot.name}
+                          </p>
+                          <p className="text-[11px] text-[var(--ink-faint)]">
+                            {categoryLabels[spot.category as SpotCategory]}
+                            {!relevant ? " · archiviert" : ""}
+                            {isEditing ? " · wird bearbeitet" : ""}
+                          </p>
+                          {selected.depart_at ? (
+                            <p className="mt-0.5 text-[11px] font-medium text-[var(--ink-soft)]">
+                              Ankunft {formatClockTime(entry?.arriveAt)}
+                              {" · Abfahrt "}
+                              {formatClockTime(entry?.departAt)}
+                            </p>
+                          ) : null}
+                        </button>
+                        <label className="flex shrink-0 flex-col items-end gap-0.5">
+                          <span className="text-[10px] font-semibold uppercase tracking-wide text-[var(--ink-faint)]">
+                            Min
+                          </span>
+                          <input
+                            type="number"
+                            min={0}
+                            max={24 * 60}
+                            inputMode="numeric"
+                            disabled={pending}
+                            placeholder={String(entry?.dwellMinutes ?? 60)}
+                            value={
+                              stop.dwell_minutes == null
+                                ? ""
+                                : String(stop.dwell_minutes)
+                            }
+                            title={
+                              stop.dwell_minutes == null
+                                ? `Standard ${entry?.dwellMinutes ?? 60} Min`
+                                : "Aufenthaltsdauer"
+                            }
+                            className="glass-field w-14 px-2 py-1.5 text-center text-[13px]"
+                            onClick={(event) => event.stopPropagation()}
+                            onChange={(event) => {
+                              const raw = event.target.value.trim();
+                              const next =
+                                raw === ""
+                                  ? null
+                                  : Math.max(
+                                      0,
+                                      Math.min(24 * 60, Number(raw) || 0),
+                                    );
+                              patchSelectedDay((day) => ({
+                                ...day,
+                                stops: day.stops.map((entryStop) =>
+                                  entryStop.id === stop.id
+                                    ? { ...entryStop, dwell_minutes: next }
+                                    : entryStop,
+                                ),
+                              }));
+                              if (stop.id.startsWith("local-")) return;
+                              run(() =>
+                                updateStopDwellClient(
+                                  createClient(),
+                                  selected.id,
+                                  stop.id,
+                                  next,
+                                ),
+                              );
+                            }}
+                          />
+                        </label>
+                        <div className="flex shrink-0 items-center">
+                          <button
+                            type="button"
+                            className="plan-icon-btn"
+                            disabled={pending || index === 0}
+                            aria-label="Nach oben"
+                            onClick={() =>
+                              run(
+                                () =>
+                                  moveSpotOnDayClient(
+                                    createClient(),
+                                    selected.id,
+                                    spot.id,
+                                    "up",
+                                  ),
+                                () => {
+                                  patchSelectedDay((day) => {
+                                    const stops = [...day.stops];
+                                    const i = stops.findIndex(
+                                      (entryStop) => entryStop.spot_id === spot.id,
+                                    );
+                                    if (i <= 0) return day;
+                                    const copy = [...stops];
+                                    [copy[i - 1], copy[i]] = [
+                                      copy[i],
+                                      copy[i - 1],
+                                    ];
+                                    return { ...day, stops: copy };
+                                  });
+                                },
+                              )
+                            }
+                          >
+                            ↑
+                          </button>
+                          <button
+                            type="button"
+                            className="plan-icon-btn"
+                            disabled={
+                              pending || index === selected.stops.length - 1
+                            }
+                            aria-label="Nach unten"
+                            onClick={() =>
+                              run(
+                                () =>
+                                  moveSpotOnDayClient(
+                                    createClient(),
+                                    selected.id,
+                                    spot.id,
+                                    "down",
+                                  ),
+                                () => {
+                                  patchSelectedDay((day) => {
+                                    const stops = [...day.stops];
+                                    const i = stops.findIndex(
+                                      (entryStop) => entryStop.spot_id === spot.id,
+                                    );
+                                    if (i < 0 || i >= stops.length - 1) {
+                                      return day;
+                                    }
+                                    const copy = [...stops];
+                                    [copy[i], copy[i + 1]] = [
+                                      copy[i + 1],
+                                      copy[i],
+                                    ];
+                                    return { ...day, stops: copy };
+                                  });
+                                },
+                              )
+                            }
+                          >
+                            ↓
+                          </button>
+                          <button
+                            type="button"
+                            className="plan-icon-btn text-[var(--danger)]"
+                            disabled={pending}
+                            aria-label="Aus dem Tag entfernen"
+                            onClick={() =>
+                              run(
+                                () =>
+                                  removeSpotFromDayClient(
+                                    createClient(),
+                                    selected.id,
+                                    spot.id,
+                                  ),
+                                () => {
+                                  if (editingSpotId === spot.id) {
+                                    setEditingSpotId(null);
+                                  }
+                                  patchSelectedDay((day) => ({
+                                    ...day,
+                                    stops: day.stops.filter(
+                                      (entryStop) => entryStop.spot_id !== spot.id,
+                                    ),
+                                  }));
+                                },
+                              )
+                            }
+                          >
+                            ×
+                          </button>
+                        </div>
+                      </div>
+                      {isEditing ? (
+                        <EditSpotForm
+                          vacationId={vacation.id}
+                          spot={spot}
+                          deleting={deletingSpotId === spot.id}
+                          onToggleRelevant={
+                            onSpotPatch
+                              ? () => {
+                                  const next = !isSpotRelevant(spot);
+                                  onSpotPatch(spot.id, { is_relevant: next });
+                                  void (async () => {
+                                    const supabase = createClient();
+                                    const { error: updateError } = await supabase
+                                      .from("spots")
+                                      .update({ is_relevant: next })
+                                      .eq("id", spot.id)
+                                      .eq("vacation_id", vacation.id);
+                                    if (updateError) {
+                                      onSpotPatch(spot.id, {
+                                        is_relevant: spot.is_relevant,
+                                      });
+                                      setError(friendlyError(updateError.message));
+                                    }
+                                  })();
+                                }
+                              : undefined
+                          }
+                          onDelete={() => {
+                            void (async () => {
+                              setDeletingSpotId(spot.id);
+                              setError(null);
+                              const { deleteSpot } = await import("./spot-actions");
+                              const result = await deleteSpot(vacation.id, spot.id);
+                              setDeletingSpotId(null);
+                              if (result.error) {
+                                setError(friendlyError(result.error));
+                                return;
+                              }
+                              setEditingSpotId(null);
+                              await onSpotsChanged?.();
+                              await reload(selectedIdRef.current);
+                            })();
+                          }}
+                          onDone={() => {
+                            setEditingSpotId(null);
+                            void (async () => {
+                              await onSpotsChanged?.();
+                              await reload(selectedIdRef.current);
+                            })();
+                          }}
+                        />
+                      ) : null}
+                    </li>
+                  );
+                })}
+              </ol>
+            ) : null}
+          </div>
+
+          {/* Overnight — van / camping / hotel */}
+          {needsOvernight && (
+            <div className="ios-group p-4">
+              <p className="text-[12px] font-semibold uppercase tracking-wide text-[var(--fjord)]">
+                Übernachtung
+              </p>
+              <select
+                className="glass-field mt-2 px-3 py-2.5 text-[14px]"
+                disabled={pending}
+                value={selected.overnight_spot_id ?? ""}
+                onChange={(event) => {
+                  const value = event.target.value || null;
+                  patchSelectedDay((day) => ({
+                    ...day,
+                    overnight_spot_id: value,
+                  }));
+                  run(() =>
+                    setDayOvernightClient(
+                      createClient(),
+                      vacation.id,
+                      selected.id,
+                      value,
+                    ),
+                  );
+                }}
+              >
+                <option value="">Noch offen</option>
+                {overnightCandidates.map((spot) => (
+                  <option key={spot.id} value={spot.id}>
+                    {spot.name}
+                    {spot.stay_status
+                      ? ` · ${stayStatusLabels[spot.stay_status]}`
+                      : ""}
+                    {formatStaySummary(spot)
+                      ? ` · ${formatStaySummary(spot)}`
+                      : spot.overnight_cost
+                        ? ` · ${spot.overnight_cost}`
+                        : ""}
+                  </option>
+                ))}
+              </select>
+              {overnightCandidates.length === 0 ? (
+                <p className="mt-2 text-[12px] text-[var(--ink-faint)]">
+                  Stellplätze oder Airbnbs unter Spots anlegen — dann erscheinen sie hier.
+                </p>
+              ) : overnight ? (
+                <div className="mt-2 space-y-1">
+                  {overnightEntry?.driveMinutesBefore != null ? (
+                    <p className="text-[11px] font-medium text-[var(--ink-faint)]">
+                      ↓{" "}
+                      {formatLegMeta({
+                        km: overnightEntry.driveKmBefore ?? 0,
+                        minutes: overnightEntry.driveMinutesBefore,
+                        source: overnightEntry.driveSource ?? "estimate",
+                      })}
+                    </p>
+                  ) : null}
+                  <p className="text-[12px] text-[var(--ink-soft)]">
+                    Heute Nacht: {overnight.name}
+                    {overnight.stay_status
+                      ? ` · ${stayStatusLabels[overnight.stay_status]}`
+                      : ""}
+                    {selected.depart_at && overnightEntry?.arriveAt
+                      ? ` · Ankunft ${formatClockTime(overnightEntry.arriveAt)}`
+                      : ""}
+                  </p>
+                </div>
+              ) : null}
+            </div>
+          )}
+
+          {/* Quick pool of still-open spots */}
+          {!pickerOpen && unplannedSpots.length > 0 && (
+            <div>
+              <p className="mb-2 px-0.5 text-[12px] font-semibold uppercase tracking-wide text-[var(--ink-faint)]">
+                Noch nicht eingeplant
+              </p>
+              <div className="plan-quick-row flex gap-2 overflow-x-auto pb-1">
+                {unplannedSpots.slice(0, 12).map((spot) => (
+                  <button
+                    key={spot.id}
+                    type="button"
+                    disabled={pending}
+                    className="plan-quick-spot"
+                    onClick={() =>
+                      run(
+                        () =>
+                          addSpotToDayClient(
+                            createClient(),
+                            vacation.id,
+                            selected.id,
+                            spot.id,
+                          ),
+                        () => {
+                          patchSelectedDay((day) => ({
+                            ...day,
+                            stops: [
+                              ...day.stops,
+                              {
+                                id: `local-${spot.id}`,
+                                day_plan_id: day.id,
+                                spot_id: spot.id,
+                                position: day.stops.length,
+                                dwell_minutes: null,
+                              },
+                            ],
+                          }));
+                        },
+                      )
+                    }
+                  >
+                    <CategoryIcon
+                      category={spot.category as SpotCategory}
+                      size={14}
+                    />
+                    <span className="truncate">{spot.name}</span>
+                    <span className="text-[var(--fjord)]">+</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          )}
+        </>
+      )}
+    </div>
+  );
+}

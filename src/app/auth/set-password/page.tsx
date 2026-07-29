@@ -16,11 +16,14 @@ export default function SetPasswordPage() {
     setError(null);
     const supabase = createClient();
     const { error: updateError } = await supabase.auth.updateUser({ password });
-    setLoading(false);
     if (updateError) {
+      setLoading(false);
       setError(updateError.message);
       return;
     }
+    // Ensure membership flips from invited → active after accepting the invite.
+    await supabase.rpc("activate_my_vacation_invites");
+    setLoading(false);
     router.replace("/app/mfa/enroll");
     router.refresh();
   }
@@ -32,10 +35,10 @@ export default function SetPasswordPage() {
         <p className="mt-2 text-[14px] text-[var(--ink-soft)]">
           Du wurdest eingeladen. Vergib jetzt dein Passwort, danach richte MFA ein.
         </p>
-        <label className="mt-6 block text-[13px] font-semibold text-[var(--ink-soft)]">
+        <label className="form-label mt-6">
           Neues Passwort
           <input
-            className="mt-1.5 w-full rounded-[12px] border-0 bg-black/5 px-3 py-3 text-[15px] outline-none ring-[var(--fjord)] focus:ring-2"
+            className="glass-field mt-1.5 px-3 py-3"
             type="password"
             autoComplete="new-password"
             minLength={8}

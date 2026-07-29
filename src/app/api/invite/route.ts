@@ -1,5 +1,6 @@
-import { createClient } from "@supabase/supabase-js";
 import { NextResponse } from "next/server";
+import { isCompleteEmail, normalizeEmail } from "@/lib/email";
+import { sendInviteEmail } from "@/lib/invite-mail";
 import { createClient as createServerSupabase } from "@/lib/supabase/server";
 
 const INVITE_ROLES = ["viewer", "editor", "admin"] as const;
@@ -13,13 +14,19 @@ export async function POST(request: Request) {
     memberId?: string;
   };
   const vacationId = body.vacationId?.trim();
-  const email = body.email?.trim().toLowerCase();
-  const role = INVITE_ROLES.includes(body.role ?? "editor") ? (body.role ?? "editor") : null;
+  const email = normalizeEmail(body.email ?? "");
   const memberId = body.memberId?.trim();
+  const role = INVITE_ROLES.includes(body.role ?? "editor") ? (body.role ?? "editor") : null;
 
   if (!vacationId || (!email && !memberId) || !role) {
     return NextResponse.json(
       { error: "vacationId und (email oder memberId) sind nötig." },
+      { status: 400 },
+    );
+  }
+  if (email && !isCompleteEmail(email)) {
+    return NextResponse.json(
+      { error: "Bitte gib eine vollständige E-Mail-Adresse ein (z. B. name@domain.de)." },
       { status: 400 },
     );
   }
@@ -42,7 +49,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Nur Admins können einladen." }, { status: 403 });
   }
 
-  let targetEmail = email ?? "";
+  let targetEmail = email;
   let targetRole = role;
   let existingStatus: "invited" | "active" | null = null;
 
@@ -60,18 +67,18 @@ export async function POST(request: Request) {
     targetRole = memberData.role;
     existingStatus = memberData.status;
   } else {
-    const { data: existingMember } = await supabase
+    const { data: existing } = await supabase
       .from("vacation_members")
-      .select("status")
+      .select("id, status")
       .eq("vacation_id", vacationId)
       .eq("email", targetEmail)
       .maybeSingle();
-    existingStatus = existingMember?.status ?? null;
+    existingStatus = existing?.status ?? null;
   }
 
   if (existingStatus === "active" && !memberId) {
     return NextResponse.json(
-      { error: "Diese Person ist bereits aktiv im Team. Rolle unten direkt ändern." },
+      { error: "Diese Person ist bereits aktives Teammitglied." },
       { status: 400 },
     );
   }
@@ -97,35 +104,19 @@ export async function POST(request: Request) {
 
   const origin = new URL(request.url).origin;
   const inviteLink = `${origin}/invite/${inviteToken}`;
+  const mail = await sendInviteEmail(
+    targetEmail,
+    `${origin}/auth/callback?next=/auth/set-password`,
+    { supabase, vacationId },
+  );
 
-  const serviceRole = process.env.SUPABASE_SERVICE_ROLE_KEY;
-  const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
-  if (!serviceRole || !url) {
+  if (!mail.ok) {
     return NextResponse.json({
       ok: true,
       inviteLink,
-      note: "Einladungslink erstellt. E-Mail-Versand ist in dieser Umgebung nicht aktiv.",
+      note: `Person ist eingeladen, aber ${mail.note.charAt(0).toLowerCase()}${mail.note.slice(1)}`,
     });
   }
 
-  const admin = createClient(url, serviceRole, {
-    auth: { autoRefreshToken: false, persistSession: false },
-  });
-  const { error: inviteError } = await admin.auth.admin.inviteUserByEmail(targetEmail, {
-    redirectTo: `${origin}/auth/callback?next=/auth/set-password`,
-  });
-
-  if (inviteError) {
-    return NextResponse.json({
-      ok: true,
-      inviteLink,
-      note: `Einladungslink erstellt. E-Mail-Invite: ${inviteError.message}`,
-    });
-  }
-
-  return NextResponse.json({
-    ok: true,
-    inviteLink,
-    note: "Einladung per E-Mail gesendet und als Link bereitgestellt.",
-  });
+  return NextResponse.json({ ok: true, inviteLink, note: mail.note });
 }

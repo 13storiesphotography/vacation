@@ -1,8 +1,14 @@
 "use client";
 
 import { FormEvent, useEffect, useState } from "react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
+import {
+  formatMfaGraceRemaining,
+  isWithinMfaEnrollGrace,
+  MFA_ENROLL_GRACE_DAYS,
+} from "@/lib/mfa";
 
 export default function EnrollMfaPage() {
   const router = useRouter();
@@ -12,15 +18,43 @@ export default function EnrollMfaPage() {
   const [code, setCode] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
+  const [graceLabel, setGraceLabel] = useState<string | null>(null);
+  const [canSkip, setCanSkip] = useState(false);
 
   useEffect(() => {
     const supabase = createClient();
     (async () => {
+      const {
+        data: { user },
+      } = await supabase.auth.getUser();
+      if (user && isWithinMfaEnrollGrace(user.created_at)) {
+        setCanSkip(true);
+        setGraceLabel(formatMfaGraceRemaining(user.created_at));
+      }
+
+      // Prefer an existing unverified TOTP factor instead of creating another on every visit.
+      const listed = await supabase.auth.mfa.listFactors();
+      const pending = listed.data?.all?.find(
+        (factor) => factor.factor_type === "totp" && factor.status !== "verified",
+      );
+      if (pending) {
+        setFactorId(pending.id);
+        // Re-enroll is required to get a fresh QR for an unverified factor in some setups;
+        // if we already have an id, try challenge path after user enters code.
+      }
+
       const { data, error: enrollError } = await supabase.auth.mfa.enroll({
         factorType: "totp",
         friendlyName: "Vacation Planer",
       });
       if (enrollError) {
+        // If a factor already exists, point the user at verify instead.
+        if (/already exists|factor/i.test(enrollError.message)) {
+          setError(
+            "Authenticator ist schon angelegt. Bitte mit dem Code freischalten oder unter Verify fortfahren.",
+          );
+          return;
+        }
         setError(enrollError.message);
         return;
       }
@@ -60,24 +94,35 @@ export default function EnrollMfaPage() {
       <form onSubmit={onSubmit} className="ios-group mx-auto w-full max-w-md p-6">
         <h1 className="display text-2xl">MFA einrichten</h1>
         <p className="mt-2 text-[14px] text-[var(--ink-soft)]">
-          Scanne den QR-Code mit deiner Authenticator-App (z. B. Authy, 1Password, Google
-          Authenticator).
+          Scanne den QR-Code mit einer Authenticator-App (1Password, Authy, Google
+          Authenticator). Danach bist du mit Passwort + Code geschützt.
         </p>
+        {canSkip && (
+          <p className="glass-callout mt-3 px-3 py-2 text-[13px]">
+            Du hast {MFA_ENROLL_GRACE_DAYS} Tage Zeit nach der Einladung
+            {graceLabel ? ` (${graceLabel})` : ""}. Später einrichten geht — danach wird MFA
+            Pflicht.
+          </p>
+        )}
         {qr ? (
           // eslint-disable-next-line @next/next/no-img-element
-          <img src={qr} alt="MFA QR Code" className="mx-auto mt-6 h-48 w-48 rounded-[16px] bg-white p-3" />
+          <img
+            src={qr}
+            alt="MFA QR Code"
+            className="mx-auto mt-6 h-48 w-48 rounded-[16px] bg-white p-3"
+          />
         ) : (
-          <div className="mx-auto mt-6 h-48 w-48 animate-pulse rounded-[16px] bg-black/5" />
+          <div className="mx-auto mt-6 h-48 w-48 animate-pulse rounded-[16px] bg-[var(--surface-strong)]" />
         )}
         {secret && (
           <p className="mt-3 break-all text-center text-[12px] text-[var(--ink-faint)]">
             Secret: {secret}
           </p>
         )}
-        <label className="mt-6 block text-[13px] font-semibold text-[var(--ink-soft)]">
+        <label className="form-label mt-6">
           6-stelliger Code
           <input
-            className="mt-1.5 w-full rounded-[12px] border-0 bg-black/5 px-3 py-3 text-center text-[20px] tracking-[0.3em] outline-none ring-[var(--fjord)] focus:ring-2"
+            className="glass-field mt-1.5 px-3 py-3 text-center text-[20px] tracking-[0.3em]"
             inputMode="numeric"
             pattern="[0-9]*"
             maxLength={6}
@@ -90,6 +135,11 @@ export default function EnrollMfaPage() {
         <button type="submit" className="cta mt-6 w-full" disabled={loading || !factorId}>
           {loading ? "…" : "Aktivieren"}
         </button>
+        {canSkip && (
+          <Link href="/app" className="cta cta-secondary mt-3 w-full">
+            Später einrichten
+          </Link>
+        )}
       </form>
     </main>
   );

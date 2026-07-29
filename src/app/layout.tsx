@@ -9,9 +9,17 @@ const sans = Plus_Jakarta_Sans({
 });
 
 export const metadata: Metadata = {
-  title: "Vacation Planer · Konzept",
+  title: "Vacation Planer",
   description:
-    "Konzept und Live-Demo für den Vacation Planer: Spots sammeln, Karte, Tagesplan und Team-Einladungen mit MFA.",
+    "Gemeinsam Urlaub planen: Spots sammeln, Karte, Tagesplan und Team — mit Login und MFA.",
+};
+
+export const viewport = {
+  width: "device-width",
+  initialScale: 1,
+  maximumScale: 1,
+  userScalable: false,
+  viewportFit: "cover",
 };
 
 export default function RootLayout({
