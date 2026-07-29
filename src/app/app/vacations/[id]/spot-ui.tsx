@@ -108,7 +108,7 @@ function SmartLinkField({
 
   const trimmed = value.trim();
   const idleMessage =
-    "Einfach Link einfügen — Google Maps, Airbnb, Park4Night, Booking, …";
+    "Ort oder Link eingeben — Google Maps, Airbnb, Park4Night, Booking, …";
   const ok = !trimmed ? null : remote.ok;
   const message = !trimmed ? idleMessage : remote.message;
   const providerLabel = !trimmed ? null : remote.providerLabel;
@@ -184,16 +184,17 @@ function SmartLinkField({
 
   return (
     <label className="form-label mt-3">
-      Link einfügen
+      Ort oder Link
       <input
-        type="url"
+        type="text"
+        inputMode="url"
         value={value}
         onChange={(e) => {
           onChange(e.target.value);
           setRemote({ ok: null, message: null, providerLabel: null });
         }}
         className="glass-field mt-1.5 px-3 py-3"
-        placeholder="https://maps.app.goo.gl/… · airbnb.de/rooms/… · park4night.com/…"
+        placeholder="Lofoten Beach · https://maps.app.goo.gl/… · airbnb.de/rooms/…"
         autoComplete="off"
       />
       <span className="mt-1.5 flex flex-wrap items-center gap-2">
@@ -1353,7 +1354,7 @@ export function SpotList({
   );
 
   const visibleSpots = useMemo(() => {
-    let list =
+    const list =
       filter === "alle" ? [...spots] : spots.filter((spot) => spot.category === filter);
 
     list.sort((a, b) => {

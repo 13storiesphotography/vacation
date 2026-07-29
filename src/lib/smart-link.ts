@@ -1,6 +1,7 @@
 import { fetchAirbnbMetadata, isAirbnbUrl } from "@/lib/airbnb";
 import { enrichFromMapsUrl, isAppMapPreviewUrl, parseLatLngFromMapsUrl } from "@/lib/geo";
 import { fetchPageMetadata } from "@/lib/link-metadata";
+import { parsePlaceNameFromMapsUrl, searchGooglePlaceQuery } from "@/lib/places-photo";
 import {
   detectLinkProvider,
   providerLabels,
@@ -119,14 +120,38 @@ export async function enrichSmartLink(rawUrl: string): Promise<SmartLinkResult> 
 async function enrichSmartLinkInner(rawUrl: string): Promise<SmartLinkResult> {
   const trimmed = rawUrl.trim();
   if (!trimmed) {
-    return emptyResult("Link einfügen — Google Maps, Airbnb, Park4Night, …");
+    return emptyResult("Ort oder Link einfügen — Google Maps, Airbnb, Park4Night, …");
   }
 
   let url: URL;
   try {
     url = new URL(trimmed);
   } catch {
-    return emptyResult("Bitte einen gültigen https://-Link einfügen.");
+    const place = await searchGooglePlaceQuery(trimmed);
+    if (place?.lat != null && place.lng != null) {
+      return {
+        ok: true,
+        message: summarize([
+          providerLabels.google_maps,
+          place.title,
+          place.locationHint,
+          place.imageUrl ? "Bild" : "Position",
+        ]),
+        provider: "google_maps",
+        providerLabel: providerLabels.google_maps,
+        title: place.title,
+        description: null,
+        imageUrl: place.imageUrl,
+        locationHint: place.locationHint,
+        mapsUrl: place.mapsUrl,
+        infoUrl: null,
+        lat: place.lat,
+        lng: place.lng,
+        suggestedCategory: "ort",
+        overnightCost: null,
+      };
+    }
+    return emptyResult("Bitte Ort oder gültigen https://-Link eingeben.");
   }
   if (url.protocol !== "http:" && url.protocol !== "https:") {
     return emptyResult("Bitte einen https://-Link einfügen.");
@@ -138,7 +163,20 @@ async function enrichSmartLinkInner(rawUrl: string): Promise<SmartLinkResult> {
   if (provider === "google_maps") {
     const local = parseLatLngFromMapsUrl(trimmed);
     const enriched = await enrichFromMapsUrl(trimmed);
-    const coords = enriched.coords ?? local;
+    const fallbackPlace =
+      enriched.coords ?? local
+        ? null
+        : await searchGooglePlaceQuery(
+            enriched.title ||
+              parsePlaceNameFromMapsUrl(enriched.resolvedUrl || trimmed) ||
+              trimmed,
+          );
+    const coords =
+      enriched.coords ??
+      local ??
+      (fallbackPlace?.lat != null && fallbackPlace.lng != null
+        ? { lat: fallbackPlace.lat, lng: fallbackPlace.lng }
+        : null);
     if (!coords) {
       return {
         ...emptyResult(
@@ -148,17 +186,19 @@ async function enrichSmartLinkInner(rawUrl: string): Promise<SmartLinkResult> {
         mapsUrl: trimmed,
       };
     }
-    const title = enriched.title;
+    const title = enriched.title || fallbackPlace?.title || null;
     const suggestedCategory = suggestedCategoryForProvider(provider, title, null);
-    const realPhoto =
-      enriched.imageUrl && !isAppMapPreviewUrl(enriched.imageUrl)
+    const realPhoto = enriched.imageUrl
+      ? !isAppMapPreviewUrl(enriched.imageUrl)
         ? enriched.imageUrl
-        : null;
+        : fallbackPlace?.imageUrl ?? null
+      : fallbackPlace?.imageUrl ?? null;
     return {
       ok: true,
       message: summarize([
         providerLabel,
         title,
+        fallbackPlace?.locationHint,
         `Position ${coords.lat.toFixed(4)}, ${coords.lng.toFixed(4)}`,
         realPhoto ? "Ortsfoto" : enriched.imageUrl ? "Karten-Vorschau" : null,
       ]),
@@ -167,8 +207,8 @@ async function enrichSmartLinkInner(rawUrl: string): Promise<SmartLinkResult> {
       title,
       description: null,
       imageUrl: realPhoto,
-      locationHint: null,
-      mapsUrl: enriched.resolvedUrl || trimmed,
+      locationHint: fallbackPlace?.locationHint ?? null,
+      mapsUrl: fallbackPlace?.mapsUrl || enriched.resolvedUrl || trimmed,
       infoUrl: null,
       lat: coords.lat,
       lng: coords.lng,
