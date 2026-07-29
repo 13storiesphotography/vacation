@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useCallback, useEffect, useMemo, useState, useSyncExternalStore } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import { useParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import type { Database } from "@/lib/database.types";
@@ -21,7 +21,7 @@ import { DayPlanPanel } from "./day-plan-ui";
 import { VacationUrlaubDashboard } from "./vacation-urlaub-dashboard";
 import { isCompleteEmail } from "@/lib/email";
 import { isStaleServerActionError } from "@/lib/stale-action";
-import { copyTextToClipboard, isClipboardPermissionError } from "@/lib/clipboard";
+import { copyTextToClipboard, friendlyClipboardError } from "@/lib/clipboard";
 
 type Vacation = Database["public"]["Tables"]["vacations"]["Row"];
 type Member = Database["public"]["Tables"]["vacation_members"]["Row"];
@@ -67,6 +67,7 @@ export default function VacationDetailPage() {
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState<MemberRole>("editor");
   const [inviteLink, setInviteLink] = useState<string | null>(null);
+  const inviteLinkInputRef = useRef<HTMLInputElement | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
@@ -172,6 +173,13 @@ export default function VacationDetailPage() {
     () => window.location.origin,
     () => "",
   );
+
+  useEffect(() => {
+    if (!inviteLink || !inviteLinkInputRef.current) return;
+    const input = inviteLinkInputRef.current;
+    input.focus({ preventScroll: true });
+    input.select();
+  }, [inviteLink]);
 
   useEffect(() => {
     let cancelled = false;
@@ -355,14 +363,16 @@ export default function VacationDetailPage() {
         setMessage(note ? `${note} Link wurde geteilt.` : "Einladungslink geteilt.");
         return;
       }
-    } catch (err) {
-      if (!isClipboardPermissionError(err)) {
-        setError(err instanceof Error ? err.message : "Link konnte nicht kopiert werden.");
+      if (result === "prompted") {
+        setMessage("Link zum Kopieren angezeigt.");
         return;
       }
+    } catch (err) {
+      // Never show the raw iOS NotAllowedError string.
+      setMessage(friendlyClipboardError(err));
+      return;
     }
-    setShowInvite(true);
-    setMessage("Link bereit — markieren und kopieren, oder über „Teilen“ senden.");
+    setMessage("Link bereit — Feld antippen, markieren und kopieren.");
   }
 
   async function onCopyInviteLink(member: Member) {
@@ -378,7 +388,10 @@ export default function VacationDetailPage() {
       (expiresAt == null ||
         !Number.isFinite(expiresAt) ||
         expiresAt > Date.now());
+
+    // Show the link immediately so the user can long-press even if share fails.
     if (existing && stillValid) {
+      setInviteLink(existing);
       await finishInviteLinkCopy(existing);
       return;
     }
@@ -407,12 +420,7 @@ export default function VacationDetailPage() {
       await finishInviteLinkCopy(payload.inviteLink, payload.note);
       await load();
     } catch (err) {
-      if (isClipboardPermissionError(err)) {
-        setShowInvite(true);
-        setMessage("Link bereit — markieren und kopieren, oder über „Teilen“ senden.");
-      } else {
-        setError(err instanceof Error ? err.message : "Link konnte nicht erzeugt werden.");
-      }
+      setError(friendlyClipboardError(err));
     } finally {
       setMemberBusyId(null);
     }
@@ -717,6 +725,7 @@ export default function VacationDetailPage() {
                   </p>
                   <div className="mt-2 flex flex-col gap-2 sm:flex-row">
                     <input
+                      ref={inviteLinkInputRef}
                       readOnly
                       className="glass-field px-3 py-3 text-[13px]"
                       value={inviteLink}
