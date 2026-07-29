@@ -1,7 +1,12 @@
 import { fetchAirbnbMetadata, isAirbnbUrl } from "@/lib/airbnb";
 import { enrichFromMapsUrl, isAppMapPreviewUrl, parseLatLngFromMapsUrl } from "@/lib/geo";
 import { fetchPageMetadata } from "@/lib/link-metadata";
-import { parsePlaceNameFromMapsUrl, searchGooglePlaceQuery } from "@/lib/places-photo";
+import {
+  displayTitleFromPlaceQuery,
+  isGenericMapsTitle,
+  parsePlaceNameFromMapsUrl,
+  resolvePlaceQuery,
+} from "@/lib/places-photo";
 import {
   detectLinkProvider,
   providerLabels,
@@ -127,7 +132,7 @@ async function enrichSmartLinkInner(rawUrl: string): Promise<SmartLinkResult> {
   try {
     url = new URL(trimmed);
   } catch {
-    const place = await searchGooglePlaceQuery(trimmed);
+    const place = await resolvePlaceQuery(trimmed);
     if (place?.lat != null && place.lng != null) {
       return {
         ok: true,
@@ -163,14 +168,16 @@ async function enrichSmartLinkInner(rawUrl: string): Promise<SmartLinkResult> {
   if (provider === "google_maps") {
     const local = parseLatLngFromMapsUrl(trimmed);
     const enriched = await enrichFromMapsUrl(trimmed);
+    const placeQuery =
+      (!isGenericMapsTitle(enriched.title) ? enriched.title : null) ||
+      parsePlaceNameFromMapsUrl(enriched.resolvedUrl || trimmed) ||
+      null;
     const fallbackPlace =
       enriched.coords ?? local
         ? null
-        : await searchGooglePlaceQuery(
-            enriched.title ||
-              parsePlaceNameFromMapsUrl(enriched.resolvedUrl || trimmed) ||
-              trimmed,
-          );
+        : placeQuery
+          ? await resolvePlaceQuery(placeQuery)
+          : null;
     const coords =
       enriched.coords ??
       local ??
@@ -180,13 +187,20 @@ async function enrichSmartLinkInner(rawUrl: string): Promise<SmartLinkResult> {
     if (!coords) {
       return {
         ...emptyResult(
-          "Google Maps erkannt, aber keine Position im Link. Ort öffnen und „Link teilen“ nutzen.",
+          placeQuery
+            ? "Google Maps erkannt, Ort gefunden — Position konnte nicht ermittelt werden. Bitte erneut versuchen."
+            : "Google Maps erkannt, aber keine Position im Link. Ort öffnen und „Link teilen“ nutzen.",
           provider,
         ),
-        mapsUrl: trimmed,
+        title: displayTitleFromPlaceQuery(placeQuery) || placeQuery,
+        mapsUrl: enriched.resolvedUrl || trimmed,
       };
     }
-    const title = enriched.title || fallbackPlace?.title || null;
+    const title =
+      fallbackPlace?.title ||
+      displayTitleFromPlaceQuery(placeQuery) ||
+      (!isGenericMapsTitle(enriched.title) ? enriched.title : null) ||
+      null;
     const suggestedCategory = suggestedCategoryForProvider(provider, title, null);
     const realPhoto = enriched.imageUrl
       ? !isAppMapPreviewUrl(enriched.imageUrl)

@@ -14,7 +14,7 @@ import {
 } from "@/lib/geo";
 import { parseImageFocus, withImageFocus, stripImageFocus } from "@/lib/image-focus";
 import { isOvernightCategory } from "@/lib/overnight";
-import { parsePlaceNameFromMapsUrl, searchGooglePlaceQuery } from "@/lib/places-photo";
+import { parsePlaceNameFromMapsUrl, resolvePlaceQuery } from "@/lib/places-photo";
 import { parseTags, type OvernightCost, type SpotCategory } from "@/lib/spots";
 import { parseStayNights, parseStayStatus, validateStayRange } from "@/lib/stay";
 
@@ -114,12 +114,16 @@ async function readSpotFields(formData: FormData) {
         }
       } else {
         const enriched = await enrichFromMapsUrl(mapsUrl);
+        const placeQuery =
+          parsePlaceNameFromMapsUrl(enriched.resolvedUrl || mapsUrl) ||
+          (!enriched.title ? null : enriched.title) ||
+          null;
         const placeFallback =
           fromUrl ?? enriched.coords
             ? null
-            : await searchGooglePlaceQuery(
-                parsePlaceNameFromMapsUrl(enriched.resolvedUrl || mapsUrl) || mapsUrl,
-              );
+            : placeQuery
+              ? await resolvePlaceQuery(placeQuery)
+              : null;
         const coords =
           fromUrl ??
           enriched.coords ??
