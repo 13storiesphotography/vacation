@@ -4,7 +4,7 @@ import { useEffect, useMemo, useRef, useState } from "react";
 import type { Database } from "@/lib/database.types";
 import { categoryLabels, isSpotRelevant, type SpotCategory } from "@/lib/spots";
 import { isOvernightCategory } from "@/lib/overnight";
-import { formatDayLabel, type DayPlanWithStops } from "@/lib/day-plans";
+import { formatDayLabel, type DayPlanWithStops, previousMorningOriginMeta } from "@/lib/day-plans";
 import {
   addSpotToDayClient,
   ensureAndLoadDayPlans,
@@ -25,7 +25,7 @@ import {
   buildDayTimeline,
   formatClockTime,
   normalizeClockTime,
-  previousOvernightSpotId,
+  previousMorningOriginSpotId,
 } from "@/lib/day-timeline";
 import { computeDayHints, hasWarningHint } from "@/lib/plan-hints";
 import { syncAllSpotStays } from "@/lib/apply-stay";
@@ -244,7 +244,12 @@ export function DayPlanPanel({
   const daysWithStops = days.filter((day) => day.stops.length > 0).length;
 
   const morningOriginId = useMemo(
-    () => (selected ? previousOvernightSpotId(days, selected.id) : null),
+    () => (selected ? previousMorningOriginSpotId(days, selected.id) : null),
+    [days, selected],
+  );
+
+  const morningOriginMeta = useMemo(
+    () => (selected ? previousMorningOriginMeta(days, selected.id) : null),
     [days, selected],
   );
 
@@ -253,7 +258,8 @@ export function DayPlanPanel({
       selected
         ? buildDayRoute(selected, spotsById, selectedIndex, {
             originSpotId: morningOriginId,
-            home: morningOriginId ? null : home,
+            // Home only on the first vacation day — never after a plan gap.
+            home: selectedIndex === 0 ? home : null,
           })
         : null,
     [selected, spotsById, selectedIndex, morningOriginId, home],
@@ -642,7 +648,17 @@ export function DayPlanPanel({
               </label>
               <p className="pb-2 text-[12px] text-[var(--ink-soft)]">
                 {originEntry
-                  ? `von ${originEntry.name}`
+                  ? `von ${originEntry.name}${
+                      morningOriginMeta
+                        ? ` · ${formatDayLabel(morningOriginMeta.fromDate)}${
+                            morningOriginMeta.kind === "overnight"
+                              ? " (Übernachtung)"
+                              : " (letzter Stop)"
+                          }`
+                        : selectedIndex === 0
+                          ? " (Start)"
+                          : ""
+                    }`
                   : selected.stops[0]
                     ? `erster Stop: ${spotsById.get(selected.stops[0].spot_id)?.name ?? "—"}`
                     : "Zeit für den Tagesstart"}
@@ -658,7 +674,12 @@ export function DayPlanPanel({
                   {formatClockTime(originEntry.departAt)} · Losfahren
                 </p>
                 <p className="text-[11px] text-[var(--ink-faint)]">
-                  {originEntry.name} (Übernachtung gestern)
+                  {originEntry.name}
+                  {morningOriginMeta
+                    ? ` · zuletzt ${formatDayLabel(morningOriginMeta.fromDate)}`
+                    : selectedIndex === 0
+                      ? " (Start Zuhause)"
+                      : ""}
                 </p>
               </div>
             ) : null}

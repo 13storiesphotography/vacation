@@ -1,6 +1,6 @@
 import type { Database } from "@/lib/database.types";
 import type { DayPlanWithStops } from "@/lib/day-plans";
-import { formatDayLabel } from "@/lib/day-plans";
+import { formatDayLabel, previousMorningOriginSpotId } from "@/lib/day-plans";
 import { resolveSpotCoords, type LatLng } from "@/lib/geo";
 import { VACATION_HOME_ID, type VacationHome } from "@/lib/vacation-home";
 
@@ -194,8 +194,9 @@ export function buildDayRoute(
 
   if (originId && originId !== firstStopId) {
     pushSpot(originId, "origin");
-  } else if (!originId) {
-    // Day 1 / no previous overnight → start from home when set.
+  } else if (!originId && dayIndex === 0) {
+    // Only the first vacation day starts from home — mid-trip gaps use the
+    // last known overnight/stop (passed as originId by the caller).
     pushHome("origin");
   }
 
@@ -254,10 +255,11 @@ export function buildTripRoutes(
 } {
   const routes = days.map((day, index) => {
     const originSpotId =
-      index > 0 ? days[index - 1]?.overnight_spot_id ?? null : null;
+      index > 0 ? previousMorningOriginSpotId(days, day.id) : null;
     return buildDayRoute(day, spotsById, index, {
       originSpotId,
-      home: index === 0 ? options?.home : null,
+      // Home only as trip start — return home is handled in buildTripRoute.
+      home: index === 0 && !originSpotId ? options?.home : null,
     });
   });
   const withLegs = routes.filter((route) => route.legs.length > 0);
