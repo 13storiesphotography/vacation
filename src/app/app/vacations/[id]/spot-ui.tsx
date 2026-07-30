@@ -1390,6 +1390,7 @@ export function SpotList({
 }) {
   const [filter, setFilter] = useState<"alle" | SpotCategory>("alle");
   const [sortMode, setSortMode] = useState<SortMode>("newest");
+  const [showShelved, setShowShelved] = useState(false);
   const [expandedId, setExpandedId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
@@ -1401,8 +1402,12 @@ export function SpotList({
   );
 
   const visibleSpots = useMemo(() => {
-    const list =
+    let list =
       filter === "alle" ? [...spots] : spots.filter((spot) => spot.category === filter);
+
+    if (!showShelved) {
+      list = list.filter((spot) => isSpotRelevant(spot));
+    }
 
     list.sort((a, b) => {
       const summaryA = summaries[a.id] ?? emptySummary();
@@ -1420,7 +1425,7 @@ export function SpotList({
       if (sortMode === "mine") {
         return (summaryB.myRating ?? -1) - (summaryA.myRating ?? -1);
       }
-      // Newest: keep DB order, but sink shelved spots.
+      // Newest: keep DB order, but sink shelved spots when shown.
       const aRel = isSpotRelevant(a) ? 0 : 1;
       const bRel = isSpotRelevant(b) ? 0 : 1;
       if (aRel !== bRel) return aRel - bRel;
@@ -1428,7 +1433,7 @@ export function SpotList({
     });
 
     return list;
-  }, [filter, sortMode, spots, summaries]);
+  }, [filter, showShelved, sortMode, spots, summaries]);
 
   async function onDelete(spotId: string) {
     setDeletingId(spotId);
@@ -1550,10 +1555,21 @@ export function SpotList({
       </div>
 
       {shelvedCount > 0 ? (
-        <p className="mb-3 text-[12px] text-[var(--ink-faint)]">
-          {shelvedCount} Spot{shelvedCount === 1 ? "" : "s"} archiviert — unten in der
-          Liste, nicht in Plan/Karte.
-        </p>
+        <div className="mb-3">
+          <button
+            type="button"
+            className="glass-chip"
+            data-active={showShelved}
+            onClick={() => setShowShelved((value) => !value)}
+          >
+            {showShelved
+              ? `Archivierte ausblenden (${shelvedCount})`
+              : `${shelvedCount} archiviert · einblenden`}
+          </button>
+          <p className="mt-1.5 text-[12px] text-[var(--ink-faint)]">
+            Archivierte Spots sind nicht in Plan und Karte.
+          </p>
+        </div>
       ) : null}
 
       {error && <p className="mb-3 text-[13px] text-[var(--danger)]">{error}</p>}
@@ -1563,7 +1579,9 @@ export function SpotList({
           <div className="p-5 text-[14px] text-[var(--ink-soft)]">
             {spots.length === 0
               ? "Noch keine Spots in dieser Kategorie."
-              : "Keine Spots für diesen Filter."}
+              : !showShelved && shelvedCount > 0 && filter === "alle"
+                ? "Keine aktiven Spots — archivierte oben einblenden."
+                : "Keine Spots für diesen Filter."}
           </div>
         ) : (
           visibleSpots.map((spot) => {
