@@ -27,7 +27,7 @@ export function VacationUrlaubDashboard({
   spots: Spot[];
   canEdit: boolean;
   onEdit: () => void;
-  onOpenTab: (tab: "plan" | "karte" | "spots" | "team") => void;
+  onOpenTab: (tab: "plan" | "karte" | "spots" | "team" | "kosten" | "urlaub") => void;
 }) {
   const [featured, setFeatured] = useState<FeaturedDashboard | null>(null);
   const [days, setDays] = useState<DayPlanWithStops[]>([]);
