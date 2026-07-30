@@ -10,6 +10,21 @@ export function hasFinePointer(): boolean {
 }
 
 /**
+ * Google Maps gestureHandling for embedded maps:
+ * - touch: cooperative (one finger scrolls the page; two fingers pan)
+ * - desktop / expanded / fullscreen: greedy (mouse or one finger pans)
+ *
+ * Prefer this over "auto" — on iOS Safari/PWA "auto" often falls back to
+ * greedy and the map steals one-finger scroll again.
+ */
+export function googleGestureHandling(
+  opts: { expanded?: boolean; fullscreen?: boolean } = {},
+): "cooperative" | "greedy" {
+  if (opts.expanded || opts.fullscreen) return "greedy";
+  return hasFinePointer() ? "greedy" : "cooperative";
+}
+
+/**
  * Mobile-friendly map gestures:
  * - cooperative: one finger scrolls the page; two fingers pan the map
  * - greedy (expanded): mouse or one finger pans the map; wheel zooms
@@ -44,6 +59,7 @@ export function LeafletGestureMode({
       map.dragging.enable();
       map.scrollWheelZoom.enable();
       container.classList.remove("map-gestures-cooperative");
+      container.style.touchAction = "";
       return;
     }
 
@@ -54,8 +70,10 @@ export function LeafletGestureMode({
     if (desktop) {
       map.dragging.enable();
       map.scrollWheelZoom.enable();
+      container.style.touchAction = "";
       return () => {
         container.classList.remove("map-gestures-cooperative");
+        container.style.touchAction = "";
         map.dragging.enable();
         map.scrollWheelZoom.enable();
       };
@@ -63,14 +81,18 @@ export function LeafletGestureMode({
 
     map.dragging.disable();
     map.scrollWheelZoom.disable();
+    // Let the page take vertical one-finger scroll on iOS Safari.
+    container.style.touchAction = "pan-y";
 
     let activeTouches = 0;
 
     const syncDragging = () => {
       if (activeTouches >= 2) {
         map.dragging.enable();
+        container.style.touchAction = "none";
       } else {
         map.dragging.disable();
+        container.style.touchAction = "pan-y";
       }
     };
 
@@ -93,6 +115,7 @@ export function LeafletGestureMode({
       container.removeEventListener("touchend", onTouchEnd);
       container.removeEventListener("touchcancel", onTouchEnd);
       container.classList.remove("map-gestures-cooperative");
+      container.style.touchAction = "";
       map.dragging.enable();
       map.scrollWheelZoom.enable();
     };

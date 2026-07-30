@@ -5,6 +5,7 @@ import { importLibrary, setOptions } from "@googlemaps/js-api-loader";
 import { DEFAULT_MAP_CENTER } from "@/lib/geo";
 import { getBrowserGoogleMapsKey } from "@/lib/google-maps";
 import type { RouteWaypoint } from "@/lib/day-route";
+import { googleGestureHandling } from "./map-gestures";
 
 let mapsOptionsReady = false;
 
@@ -71,7 +72,12 @@ export default function DayRouteMapGoogle({
             mapTypeControl: false,
             streetViewControl: false,
             fullscreenControl: false,
-            gestureHandling: "greedy",
+            // Embedded plan maps: two-finger pan on iPhone so the page can scroll.
+            gestureHandling: googleGestureHandling(),
+          });
+        } else {
+          mapRef.current.setOptions({
+            gestureHandling: googleGestureHandling(),
           });
         }
 

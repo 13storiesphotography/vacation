@@ -968,9 +968,10 @@ textarea {
   right: max(12px, env(safe-area-inset-right));
 }
 
-/* Leaflet cooperative: one finger scrolls the page */
+/* Leaflet cooperative: one finger scrolls the page (iOS needs pan-y). */
 .map-gestures-cooperative.leaflet-container {
   cursor: grab;
+  touch-action: pan-y;
 }
 
 .map-gestures-cooperative .leaflet-control-zoom {
