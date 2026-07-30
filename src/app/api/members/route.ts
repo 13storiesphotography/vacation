@@ -23,20 +23,23 @@ async function requireVacationAdmin(vacationId: string): Promise<AdminContext> {
     };
   }
 
-  const { data: isAdmin, error: adminError } = await supabase.rpc("is_vacation_admin", {
-    p_vacation_id: vacationId,
-  });
+  const { data: canManageTeam, error: adminError } = await supabase.rpc(
+    "is_vacation_team_manager",
+    {
+      p_vacation_id: vacationId,
+    },
+  );
   if (adminError) {
     return {
       ok: false,
       response: NextResponse.json({ error: adminError.message }, { status: 400 }),
     };
   }
-  if (!isAdmin) {
+  if (!canManageTeam) {
     return {
       ok: false,
       response: NextResponse.json(
-        { error: "Nur Admins können das Team verwalten." },
+        { error: "Nur Team-Manager können das Team verwalten." },
         { status: 403 },
       ),
     };
@@ -147,12 +150,12 @@ export async function DELETE(request: Request) {
     );
   }
 
-  if (member.role === "admin" && member.status === "active") {
+  if (member.can_manage_team && member.status === "active") {
     const { count, error: countError } = await auth.supabase
       .from("vacation_members")
       .select("id", { count: "exact", head: true })
       .eq("vacation_id", vacationId)
-      .eq("role", "admin")
+      .eq("can_manage_team", true)
       .eq("status", "active");
 
     if (countError) {
@@ -160,7 +163,7 @@ export async function DELETE(request: Request) {
     }
     if ((count ?? 0) <= 1) {
       return NextResponse.json(
-        { error: "Der letzte Admin kann nicht entfernt werden." },
+        { error: "Der letzte Team-Manager kann nicht entfernt werden." },
         { status: 400 },
       );
     }
