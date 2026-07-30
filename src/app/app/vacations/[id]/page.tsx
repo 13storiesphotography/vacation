@@ -425,7 +425,7 @@ export default function VacationDetailPage() {
 
       </main>
 
-      {/* Fixed: bottom on mobile, under topbar on desktop (see .app-tabbar). */}
+      {/* Fixed bottom liquid-glass pill on all breakpoints (see .app-tabbar). */}
       <VacationTabBar active={tab} onChange={changeTab} />
     </>
   );
