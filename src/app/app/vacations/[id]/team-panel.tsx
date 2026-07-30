@@ -245,13 +245,26 @@ export function TeamPanel({
         error?: string;
         note?: string;
         inviteLink?: string;
+        emailSent?: boolean;
       };
       if (!response.ok) {
         setError(payload.error ?? "Einladung fehlgeschlagen");
         return;
       }
-      setMessage(payload.note ?? "Einladung gesendet.");
-      if (payload.inviteLink) await finishInviteLinkCopy(payload.inviteLink);
+      if (payload.inviteLink) {
+        setInviteLink(payload.inviteLink);
+        if (payload.emailSent === false) {
+          setMessage(
+            payload.note ??
+              "Person ist eingeladen, aber die E-Mail ging nicht raus — bitte Link teilen.",
+          );
+        } else {
+          setMessage(payload.note ?? "Einladung gesendet.");
+          await finishInviteLinkCopy(payload.inviteLink, payload.note);
+        }
+      } else {
+        setMessage(payload.note ?? "Einladung gesendet.");
+      }
       setInviteEmail("");
       await onChanged();
     } catch (err) {

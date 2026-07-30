@@ -125,18 +125,24 @@ export async function POST(request: Request) {
 
   const inviteToken = crypto.randomUUID();
   const inviteExpiresAt = new Date(Date.now() + 14 * 24 * 60 * 60 * 1000).toISOString();
-  const { error: memberError } = await supabase.from("vacation_members").upsert(
-    {
-      vacation_id: vacationId,
-      email: targetEmail,
-      role: targetRole,
-      status: "invited",
-      invited_by: user.id,
-      user_id: null,
-      invite_token: inviteToken,
-      invite_expires_at: inviteExpiresAt,
-      ...(permissions ?? permissionSetForRole("editor")),
-    },
+  const memberPayload = {
+    vacation_id: vacationId,
+    email: targetEmail,
+    role: targetRole,
+    status: "invited" as const,
+    invited_by: user.id,
+    user_id: null,
+    invite_token: inviteToken,
+    invite_expires_at: inviteExpiresAt,
+    ...(permissions ?? permissionSetForRole("editor")),
+  };
+
+  // Prefer service-role upsert so RLS cannot block the invite row.
+  const { createAdminClient } = await import("@/lib/supabase/admin");
+  const admin = createAdminClient();
+  const writer = admin ?? supabase;
+  const { error: memberError } = await writer.from("vacation_members").upsert(
+    memberPayload,
     { onConflict: "vacation_id,email" },
   );
   if (memberError) {
@@ -144,24 +150,31 @@ export async function POST(request: Request) {
   }
 
   const inviteLink = `${origin}/invite/${inviteToken}`;
+  // After accepting the auth invite, land on the vacation invite page.
+  const redirectTo = `${origin}/auth/callback?next=${encodeURIComponent(`/invite/${inviteToken}`)}`;
 
   if (linkOnly) {
     return NextResponse.json({ ok: true, inviteLink });
   }
 
-  const mail = await sendInviteEmail(
-    targetEmail,
-    `${origin}/auth/callback?next=/auth/set-password`,
-    { supabase, vacationId },
-  );
+  const mail = await sendInviteEmail(targetEmail, redirectTo, {
+    supabase,
+    vacationId,
+  });
 
   if (!mail.ok) {
     return NextResponse.json({
       ok: true,
       inviteLink,
-      note: `Person ist eingeladen, aber ${mail.note.charAt(0).toLowerCase()}${mail.note.slice(1)}`,
+      emailSent: false,
+      note: mail.note,
     });
   }
 
-  return NextResponse.json({ ok: true, inviteLink, note: mail.note });
+  return NextResponse.json({
+    ok: true,
+    inviteLink,
+    emailSent: true,
+    note: mail.note,
+  });
 }

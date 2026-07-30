@@ -18,13 +18,13 @@ function mapInviteErrorMessage(message: string): InviteMailResult {
   if (alreadyRegistered) {
     return {
       ok: true,
-      note: "Dieses Konto existiert bereits — die Person kann sich einfach anmelden.",
+      note: "Dieses Konto existiert bereits — die Person kann sich mit dem Einladungslink anmelden.",
     };
   }
 
   return {
     ok: false,
-    note: "Der E-Mail-Versand ist fehlgeschlagen. Bitte später erneut versuchen.",
+    note: "Der E-Mail-Versand ist fehlgeschlagen. Bitte den Link unten teilen.",
   };
 }
 
@@ -60,26 +60,26 @@ async function sendViaEdgeFunction(
   });
 
   if (error) {
-    console.error("[invite] edge invite-member failed:", error.message);
+    console.error("[invite] edge invite-member failed:", error.message, data);
+    const payload = (data ?? {}) as { error?: string; note?: string };
+    if (payload.error) {
+      return mapInviteErrorMessage(payload.error);
+    }
     return {
       ok: false,
-      note: "Die E-Mail konnte nicht automatisch gesendet werden. Bitte später erneut versuchen.",
+      note: "Die E-Mail konnte nicht automatisch gesendet werden. Bitte den Link unten teilen.",
     };
   }
 
   const payload = (data ?? {}) as { ok?: boolean; error?: string; note?: string };
   if (payload.error) {
-    return { ok: false, note: payload.error };
+    return mapInviteErrorMessage(payload.error);
   }
 
   if (payload.note) {
     const mapped = mapInviteErrorMessage(payload.note);
     if (!mapped.ok || mapped.note.includes("Konto existiert")) {
       return mapped;
-    }
-    // Edge sometimes returns "Member saved; invite: …" on partial success.
-    if (/invite:/i.test(payload.note)) {
-      return mapInviteErrorMessage(payload.note);
     }
   }
 
@@ -118,6 +118,6 @@ export async function sendInviteEmail(
   );
   return {
     ok: false,
-    note: "Die E-Mail konnte nicht automatisch gesendet werden. Bitte den App-Admin kontaktieren oder die Einladung manuell in Supabase senden.",
+    note: "Die E-Mail konnte nicht automatisch gesendet werden. Bitte den Link unten teilen.",
   };
 }
