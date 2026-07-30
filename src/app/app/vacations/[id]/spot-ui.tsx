@@ -338,6 +338,48 @@ function ExternalLinkActions({
   );
 }
 
+function primarySpotLink(mapsUrl?: string | null, infoUrl?: string | null): {
+  href: string;
+  label: string;
+} | null {
+  if (mapsUrl) return { href: mapsUrl, label: "Karte öffnen" };
+  if (infoUrl) {
+    return {
+      href: infoUrl,
+      label: isAirbnbUrl(infoUrl) ? "Airbnb öffnen" : "Seite öffnen",
+    };
+  }
+  return null;
+}
+
+function ImageLinkOverlay({
+  href,
+  label,
+  className = "absolute top-1.5 right-1.5",
+  size = "md",
+}: {
+  href: string;
+  label: string;
+  className?: string;
+  size?: "sm" | "md";
+}) {
+  const dim = size === "sm" ? "h-6 w-6 text-[12px]" : "h-8 w-8 text-[14px]";
+  return (
+    <a
+      href={href}
+      target="_blank"
+      rel="noreferrer"
+      aria-label={label}
+      title={label}
+      className={`${className} inline-flex ${dim} items-center justify-center rounded-full bg-[rgba(20,36,48,0.72)] font-semibold text-white shadow-md backdrop-blur-sm`}
+      onClick={(event) => event.stopPropagation()}
+      onPointerDown={(event) => event.stopPropagation()}
+    >
+      ↗
+    </a>
+  );
+}
+
 function SpotThumb({
   spot,
   size = 56,
@@ -354,44 +396,57 @@ function SpotThumb({
   const focusStyle = imageFocusStyle(focus);
   const imageSrc = spot.image_url?.replace(/#.*$/, "") || null;
   const showImage = Boolean(imageSrc) && !broken;
+  const link = primarySpotLink(spot.maps_url, spot.info_url);
 
   return (
-    <button
-      type="button"
-      onClick={(event) => {
-        event.stopPropagation();
-        onOpen?.();
-      }}
-      aria-label={`${spot.name} bearbeiten`}
+    <div
       className={`relative shrink-0 overflow-hidden rounded-[12px] media-fallback ${
         selected ? "ring-2 ring-[var(--fjord)]" : ""
       }`}
       style={{ width: size, height: size }}
     >
-      {showImage ? (
-        // eslint-disable-next-line @next/next/no-img-element
-        <img
-          src={imageSrc!}
-          alt=""
-          className="h-full w-full object-cover"
-          style={{
-            objectPosition: focusStyle.objectPosition,
-            transform: focusStyle.transform,
-            transformOrigin: focusStyle.objectPosition,
-          }}
-          loading="lazy"
-          referrerPolicy="no-referrer"
-          onError={() => setBroken(true)}
-        />
-      ) : (
-        <div className="flex h-full w-full items-center justify-center bg-black/5">
-          <CategoryIcon category={spot.category} size={Math.round(size * 0.36)} tone="#ffffff" />
-        </div>
-      )}
-      <span className="absolute bottom-0.5 left-0.5 inline-flex rounded-full bg-[var(--surface-strong)] p-0.5 shadow-sm">
+      <button
+        type="button"
+        onClick={(event) => {
+          event.stopPropagation();
+          onOpen?.();
+        }}
+        aria-label={`${spot.name} öffnen`}
+        className="absolute inset-0 z-0"
+      >
+        {showImage ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={imageSrc!}
+            alt=""
+            className="h-full w-full object-cover"
+            style={{
+              objectPosition: focusStyle.objectPosition,
+              transform: focusStyle.transform,
+              transformOrigin: focusStyle.objectPosition,
+            }}
+            loading="lazy"
+            referrerPolicy="no-referrer"
+            onError={() => setBroken(true)}
+          />
+        ) : (
+          <div className="flex h-full w-full items-center justify-center bg-black/5">
+            <CategoryIcon category={spot.category} size={Math.round(size * 0.36)} tone="#ffffff" />
+          </div>
+        )}
+      </button>
+      <span className="pointer-events-none absolute bottom-0.5 left-0.5 z-[1] inline-flex rounded-full bg-[var(--surface-strong)] p-0.5 shadow-sm">
         <CategoryIcon category={spot.category} size={11} />
       </span>
-    </button>
+      {link && showImage ? (
+        <ImageLinkOverlay
+          href={link.href}
+          label={link.label}
+          size="sm"
+          className="absolute top-0.5 right-0.5 z-[1]"
+        />
+      ) : null}
+    </div>
   );
 }
 
@@ -399,10 +454,14 @@ function ImageFocusEditor({
   src,
   focus,
   onChange,
+  openHref,
+  openLabel,
 }: {
   src: string;
   focus: ImageFocus;
   onChange: (value: ImageFocus) => void;
+  openHref?: string | null;
+  openLabel?: string;
 }) {
   const dragging = useRef(false);
   const last = useRef<{ x: number; y: number } | null>(null);
@@ -464,6 +523,13 @@ function ImageFocusEditor({
           }}
           referrerPolicy="no-referrer"
         />
+        {openHref ? (
+          <ImageLinkOverlay
+            href={openHref}
+            label={openLabel ?? "Link öffnen"}
+            className="absolute top-2 right-2 z-[1]"
+          />
+        ) : null}
         <div
           className="absolute bottom-2 right-2 flex items-center gap-1 rounded-full bg-[rgba(20,36,48,0.72)] p-1 shadow-md backdrop-blur-sm"
           onPointerDown={(event) => event.stopPropagation()}
@@ -538,8 +604,6 @@ function SpotFormFields({
   stayStatus,
   onStayStatusChange,
   onSmartResolved,
-  detailsOpen,
-  onDetailsOpenChange,
   tags,
   onTagsChange,
   smartLinkResolveMode = "always",
@@ -573,8 +637,6 @@ function SpotFormFields({
   stayStatus: string;
   onStayStatusChange: (value: string) => void;
   onSmartResolved: (result: SmartLinkResult) => void;
-  detailsOpen: boolean;
-  onDetailsOpenChange: (value: boolean) => void;
   tags: string[];
   onTagsChange: (tags: string[]) => void;
   smartLinkResolveMode?: "always" | "onChange";
@@ -613,6 +675,7 @@ function SpotFormFields({
     (imageUrl && !isAppMapPreviewUrl(imageUrl) ? imageUrl : null) ||
     autoImage ||
     (imageUrl || null);
+  const previewLink = primarySpotLink(mapsUrl, infoUrl);
 
   function clearStay() {
     onStayNightsChange("");
@@ -841,173 +904,140 @@ function SpotFormFields({
           src={previewSrc}
           focus={imageFocus}
           onChange={onImageFocusChange}
+          openHref={previewLink?.href}
+          openLabel={previewLink?.label}
         />
       ) : (
         <input type="hidden" name="image_focus" value="" />
       )}
       {autoImage && isAppMapPreviewUrl(autoImage) && !imageUrl ? (
         <p className="mt-2 text-[12px] text-[var(--ink-faint)]">
-          Automatische Karten-Vorschau — unter Details kannst du ein echtes Foto per URL setzen.
+          Automatische Karten-Vorschau — unten kannst du ein echtes Foto per URL setzen.
         </p>
       ) : null}
 
-      <button
-        type="button"
-        className="glass-chip mt-3"
-        aria-expanded={detailsOpen}
-        onClick={() => onDetailsOpenChange(!detailsOpen)}
-      >
-        {detailsOpen ? "Weniger Details" : "Mehr Details"}
-      </button>
+      <label className="form-label mt-3">
+        Beschreibung
+        <textarea
+          name="description"
+          value={description}
+          onChange={(e) => onDescriptionChange(e.target.value)}
+          className="glass-field mt-1.5 min-h-20 px-3 py-3"
+        />
+      </label>
 
-      {detailsOpen ? (
-        <div className="mt-3">
-          <label className="form-label">
-            Beschreibung
-            <textarea
-              name="description"
-              value={description}
-              onChange={(e) => onDescriptionChange(e.target.value)}
-              className="glass-field mt-1.5 min-h-20 px-3 py-3"
-            />
-          </label>
-
-          <label className="form-label mt-3">
-            Google Maps Link
-            <div className="mt-1.5 flex gap-2">
-              <input
-                type="url"
-                value={mapsUrl}
-                onChange={(e) => onMapsUrlChange(e.target.value)}
-                className="glass-field min-w-0 flex-1 px-3 py-3"
-                placeholder="Optional, wenn schon oben erkannt"
-              />
-              {mapsUrl ? (
-                <a
-                  href={mapsUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="glass-chip shrink-0 self-center"
-                >
-                  Öffnen
-                </a>
-              ) : null}
-            </div>
-          </label>
-
-          <label className="form-label mt-3">
-            Buchungs-/Info-Link
-            <div className="mt-1.5 flex gap-2">
-              <input
-                type="url"
-                value={infoUrl}
-                onChange={(e) => onInfoUrlChange(e.target.value)}
-                className="glass-field min-w-0 flex-1 px-3 py-3"
-                placeholder="Airbnb, Park4Night, Booking, …"
-              />
-              {infoUrl ? (
-                <a
-                  href={infoUrl}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="glass-chip shrink-0 self-center"
-                >
-                  Öffnen
-                </a>
-              ) : null}
-            </div>
-          </label>
-
-          <label className="form-label mt-3">
-            Vorschaubild-URL
-            {spot?.image_url && !spot.image_manual && !imageUrl ? (
-              <input type="hidden" name="previous_image_url" value={spot.image_url} />
-            ) : null}
-            <input
-              name="image_url"
-              type="text"
-              inputMode="url"
-              autoComplete="off"
-              value={imageUrl}
-              onChange={(e) => onImageUrlChange(e.target.value)}
-              className="glass-field mt-1.5 px-3 py-3"
-              placeholder="https://… · leer = automatisch"
-            />
-          </label>
-          <p className="mt-1 text-[11px] text-[var(--ink-faint)]">
-            Direkter Link zu einem Foto (https://…). Leer lassen für Ortsfoto/Karten-Vorschau.
-          </p>
-
-          {showOvernight && (
-            <>
-              <label className="form-label mt-3">
-                Übernachtung
-                <select
-                  name="overnight_cost"
-                  value={overnightCost}
-                  onChange={(e) => onOvernightCostChange(e.target.value)}
-                  className="glass-field mt-1.5 px-3 py-3"
-                >
-                  <option value="">Keine Angabe</option>
-                  <option value="frei">Frei</option>
-                  <option value="kostenpflichtig">Kostenpflichtig</option>
-                </select>
-              </label>
-              <label className="form-label mt-3">
-                Preis-Hinweis
-                <input
-                  name="price_hint"
-                  defaultValue={spot?.price_hint ?? ""}
-                  className="glass-field mt-1.5 px-3 py-3"
-                  placeholder="ab 280 SEK / Nacht"
-                />
-              </label>
-              <label className="form-label mt-3">
-                Preis / Nacht (Zahl)
-                <input
-                  name="price_per_night"
-                  type="number"
-                  min="0"
-                  step="0.01"
-                  inputMode="decimal"
-                  defaultValue={
-                    spot?.price_per_night != null ? String(spot.price_per_night) : ""
-                  }
-                  className="glass-field mt-1.5 px-3 py-3"
-                  placeholder="z. B. 35"
-                />
-              </label>
-            </>
-          )}
+      <label className="form-label mt-3">
+        Google Maps Link
+        <div className="mt-1.5 flex gap-2">
+          <input
+            type="url"
+            value={mapsUrl}
+            onChange={(e) => onMapsUrlChange(e.target.value)}
+            className="glass-field min-w-0 flex-1 px-3 py-3"
+            placeholder="Optional, wenn schon oben erkannt"
+          />
+          {mapsUrl ? (
+            <a
+              href={mapsUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="glass-chip shrink-0 self-center"
+            >
+              Öffnen
+            </a>
+          ) : null}
         </div>
+      </label>
+
+      <label className="form-label mt-3">
+        Buchungs-/Info-Link
+        <div className="mt-1.5 flex gap-2">
+          <input
+            type="url"
+            value={infoUrl}
+            onChange={(e) => onInfoUrlChange(e.target.value)}
+            className="glass-field min-w-0 flex-1 px-3 py-3"
+            placeholder="Airbnb, Park4Night, Booking, …"
+          />
+          {infoUrl ? (
+            <a
+              href={infoUrl}
+              target="_blank"
+              rel="noreferrer"
+              className="glass-chip shrink-0 self-center"
+            >
+              Öffnen
+            </a>
+          ) : null}
+        </div>
+      </label>
+
+      <label className="form-label mt-3">
+        Vorschaubild-URL
+        {spot?.image_url && !spot.image_manual && !imageUrl ? (
+          <input type="hidden" name="previous_image_url" value={spot.image_url} />
+        ) : null}
+        <input
+          name="image_url"
+          type="text"
+          inputMode="url"
+          autoComplete="off"
+          value={imageUrl}
+          onChange={(e) => onImageUrlChange(e.target.value)}
+          className="glass-field mt-1.5 px-3 py-3"
+          placeholder="https://… · leer = automatisch"
+        />
+      </label>
+      <p className="mt-1 text-[11px] text-[var(--ink-faint)]">
+        Direkter Link zu einem Foto (https://…). Leer lassen für Ortsfoto/Karten-Vorschau.
+      </p>
+
+      {showOvernight ? (
+        <>
+          <label className="form-label mt-3">
+            Übernachtung
+            <select
+              name="overnight_cost"
+              value={overnightCost}
+              onChange={(e) => onOvernightCostChange(e.target.value)}
+              className="glass-field mt-1.5 px-3 py-3"
+            >
+              <option value="">Keine Angabe</option>
+              <option value="frei">Frei</option>
+              <option value="kostenpflichtig">Kostenpflichtig</option>
+            </select>
+          </label>
+          <label className="form-label mt-3">
+            Preis-Hinweis
+            <input
+              name="price_hint"
+              defaultValue={spot?.price_hint ?? ""}
+              className="glass-field mt-1.5 px-3 py-3"
+              placeholder="ab 280 SEK / Nacht"
+            />
+          </label>
+          <label className="form-label mt-3">
+            Preis / Nacht (Zahl)
+            <input
+              name="price_per_night"
+              type="number"
+              min="0"
+              step="0.01"
+              inputMode="decimal"
+              defaultValue={
+                spot?.price_per_night != null ? String(spot.price_per_night) : ""
+              }
+              className="glass-field mt-1.5 px-3 py-3"
+              placeholder="z. B. 35"
+            />
+          </label>
+        </>
       ) : (
         <>
-          <input type="hidden" name="description" value={description} />
-          <input type="hidden" name="image_url" value={imageUrl} />
-          {spot?.image_url && !spot.image_manual && !imageUrl ? (
-            <input type="hidden" name="previous_image_url" value={spot.image_url} />
-          ) : null}
-          {showOvernight ? (
-            <input type="hidden" name="overnight_cost" value={overnightCost} />
-          ) : null}
-          {showOvernight ? (
-            <input type="hidden" name="price_hint" value={spot?.price_hint ?? ""} />
-          ) : null}
-          {showOvernight ? (
-            <input
-              type="hidden"
-              name="price_per_night"
-              value={spot?.price_per_night != null ? String(spot.price_per_night) : ""}
-            />
-          ) : null}
-          {!showOvernight ? (
-            <>
-              <input type="hidden" name="stay_check_in" value="" />
-              <input type="hidden" name="stay_check_out" value="" />
-              <input type="hidden" name="stay_nights" value="" />
-              <input type="hidden" name="stay_status" value="" />
-            </>
-          ) : null}
+          <input type="hidden" name="stay_check_in" value="" />
+          <input type="hidden" name="stay_check_out" value="" />
+          <input type="hidden" name="stay_nights" value="" />
+          <input type="hidden" name="stay_status" value="" />
         </>
       )}
     </>
@@ -1098,7 +1128,6 @@ export function CreateSpotForm({
   const [stayNights, setStayNights] = useState("");
   const [stayStatus, setStayStatus] = useState("");
   const [tags, setTags] = useState<string[]>([]);
-  const [detailsOpen, setDetailsOpen] = useState(false);
 
   useEffect(() => {
     if (state.ok) onCreated();
@@ -1141,8 +1170,6 @@ export function CreateSpotForm({
         onStayStatusChange={setStayStatus}
         tags={tags}
         onTagsChange={setTags}
-        detailsOpen={detailsOpen}
-        onDetailsOpenChange={setDetailsOpen}
         onSmartResolved={(result) =>
           applySmartLinkResult(result, {
             setCategory,
@@ -1199,7 +1226,6 @@ export function EditSpotForm({
   );
   const [stayStatus, setStayStatus] = useState(spot.stay_status ?? "");
   const [tags, setTags] = useState<string[]>(() => [...(spot.tags ?? [])]);
-  const [detailsOpen, setDetailsOpen] = useState(false);
   const relevant = isSpotRelevant(spot);
 
   useEffect(() => {
@@ -1297,8 +1323,6 @@ export function EditSpotForm({
           tags={tags}
           onTagsChange={setTags}
           smartLinkResolveMode="onChange"
-          detailsOpen={detailsOpen}
-          onDetailsOpenChange={setDetailsOpen}
           onSmartResolved={(result) =>
             applySmartLinkResult(result, {
               fillEmptyOnly: true,
@@ -1366,6 +1390,7 @@ export function SpotList({
 }) {
   const [filter, setFilter] = useState<"alle" | SpotCategory>("alle");
   const [sortMode, setSortMode] = useState<SortMode>("newest");
+  const [expandedId, setExpandedId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -1543,24 +1568,31 @@ export function SpotList({
         ) : (
           visibleSpots.map((spot) => {
             const summary = summaries[spot.id] ?? emptySummary();
-            const isOpen = editingId === spot.id;
+            const isExpanded = expandedId === spot.id;
+            const isEditing = editingId === spot.id;
             const relevant = isSpotRelevant(spot);
-            function openEdit() {
-              setEditingId((current) => (current === spot.id ? null : spot.id));
+            function toggleExpand() {
+              setExpandedId((current) => {
+                if (current === spot.id) {
+                  setEditingId(null);
+                  return null;
+                }
+                return spot.id;
+              });
             }
             return (
               <div key={spot.id}>
                 <div
                   className={`ios-row !items-center !py-2.5 cursor-pointer ${
-                    isOpen ? "bg-[rgba(15,110,140,0.06)]" : ""
+                    isExpanded ? "bg-[rgba(15,110,140,0.06)]" : ""
                   } ${relevant ? "" : "opacity-55"}`}
-                  onClick={openEdit}
+                  onClick={toggleExpand}
                 >
                   <SpotThumb
                     spot={spot}
                     size={52}
-                    selected={isOpen}
-                    onOpen={openEdit}
+                    selected={isExpanded}
+                    onOpen={toggleExpand}
                   />
                   <div className="min-w-0 flex-1">
                     <div className="flex items-start gap-2">
@@ -1627,47 +1659,95 @@ export function SpotList({
                       </p>
                     ) : null}
 
-                    {!relevant || spot.maps_url || spot.info_url ? (
+                    {!relevant ? (
                       <div
-                        className="mt-1.5 flex flex-wrap gap-1.5"
+                        className="mt-1.5"
                         onClick={(event) => event.stopPropagation()}
                       >
-                        {!relevant ? (
-                          <button
-                            type="button"
-                            className="glass-chip !py-1 !text-[11px]"
-                            data-active="true"
-                            title="Wiederherstellen"
-                            onClick={() => toggleRelevant(spot)}
-                          >
-                            Archiviert
-                          </button>
-                        ) : null}
-                        {spot.maps_url ? (
-                          <a
-                            href={spot.maps_url}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="glass-chip !py-1 !text-[11px]"
-                          >
-                            Karte öffnen
-                          </a>
-                        ) : null}
-                        {spot.info_url ? (
-                          <a
-                            href={spot.info_url}
-                            target="_blank"
-                            rel="noreferrer"
-                            className="glass-chip !py-1 !text-[11px]"
-                          >
-                            {isAirbnbUrl(spot.info_url) ? "Bei Airbnb öffnen" : "Seite öffnen"}
-                          </a>
-                        ) : null}
+                        <button
+                          type="button"
+                          className="glass-chip !py-1 !text-[11px]"
+                          data-active="true"
+                          title="Wiederherstellen"
+                          onClick={() => toggleRelevant(spot)}
+                        >
+                          Archiviert
+                        </button>
                       </div>
                     ) : null}
                   </div>
+                  <span
+                    className={`ios-chevron shrink-0 transition-transform ${
+                      isExpanded ? "rotate-90" : ""
+                    }`}
+                    aria-hidden
+                  />
                 </div>
-                {isOpen && (
+
+                {isExpanded ? (
+                  <div
+                    className="flex flex-wrap gap-1.5 border-t border-black/5 bg-[rgba(255,255,255,0.28)] px-4 py-2.5"
+                    onClick={(event) => event.stopPropagation()}
+                  >
+                    <button
+                      type="button"
+                      className="glass-chip !py-1.5 !text-[12px]"
+                      data-active={isEditing ? "true" : undefined}
+                      onClick={() =>
+                        setEditingId((current) => (current === spot.id ? null : spot.id))
+                      }
+                    >
+                      {isEditing ? "Formular schließen" : "Bearbeiten"}
+                    </button>
+                    {spot.maps_url ? (
+                      <a
+                        href={spot.maps_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="glass-chip !py-1.5 !text-[12px]"
+                      >
+                        Karte öffnen
+                      </a>
+                    ) : null}
+                    {spot.info_url ? (
+                      <a
+                        href={spot.info_url}
+                        target="_blank"
+                        rel="noreferrer"
+                        className="glass-chip !py-1.5 !text-[12px]"
+                      >
+                        {isAirbnbUrl(spot.info_url) ? "Airbnb öffnen" : "Seite öffnen"}
+                      </a>
+                    ) : null}
+                    <button
+                      type="button"
+                      className="glass-chip !py-1.5 !text-[12px]"
+                      data-active={!relevant ? "true" : undefined}
+                      onClick={() => toggleRelevant(spot)}
+                    >
+                      {relevant ? "Archivieren" : "Wiederherstellen"}
+                    </button>
+                    <button
+                      type="button"
+                      className="glass-chip glass-chip-danger !py-1.5 !text-[12px]"
+                      disabled={deletingId === spot.id}
+                      onClick={() => {
+                        if (
+                          !window.confirm(
+                            `„${spot.name}“ wirklich löschen? Das lässt sich nicht rückgängig machen.`,
+                          )
+                        ) {
+                          return;
+                        }
+                        void onDelete(spot.id);
+                      }}
+                    >
+                      {deletingId === spot.id ? "Löschen…" : "Löschen"}
+                    </button>
+                  </div>
+                ) : null}
+
+                {isEditing ? (
                   <EditSpotForm
                     vacationId={vacationId}
                     spot={spot}
@@ -1679,7 +1759,7 @@ export function SpotList({
                     }}
                     onToggleRelevant={() => toggleRelevant(spot)}
                   />
-                )}
+                ) : null}
               </div>
             );
           })

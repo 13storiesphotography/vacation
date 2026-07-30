@@ -13,6 +13,7 @@ import { emptySummary, type SpotRatingSummary } from "@/lib/ratings";
 import type { Database } from "@/lib/database.types";
 import type { MappableSpot } from "@/lib/google-maps";
 import { CategoryIcon } from "@/components/category-icon";
+import { isAirbnbUrl } from "@/lib/airbnb";
 import { hasFinePointer } from "./map-gestures";
 
 type Spot = Database["public"]["Tables"]["spots"]["Row"];
@@ -212,6 +213,23 @@ export function SpotMap({
               <span className="absolute bottom-2 left-2 inline-flex rounded-full bg-[var(--surface-strong)] p-1.5 shadow-sm">
                 <CategoryIcon category={selected.category} size={14} />
               </span>
+              {selected.maps_url || selected.info_url ? (
+                <a
+                  href={(selected.maps_url || selected.info_url)!}
+                  target="_blank"
+                  rel="noreferrer"
+                  aria-label={
+                    selected.maps_url
+                      ? "Karte öffnen"
+                      : selected.info_url && isAirbnbUrl(selected.info_url)
+                        ? "Airbnb öffnen"
+                        : "Seite öffnen"
+                  }
+                  className="absolute top-2 right-2 inline-flex h-9 w-9 items-center justify-center rounded-full bg-[rgba(20,36,48,0.72)] text-[15px] font-semibold text-white shadow-md backdrop-blur-sm"
+                >
+                  ↗
+                </a>
+              ) : null}
             </div>
           ) : null}
           <div className="flex items-start gap-3 p-4">
