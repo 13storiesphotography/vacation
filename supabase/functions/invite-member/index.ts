@@ -7,6 +7,37 @@ const corsHeaders = {
     "authorization, x-client-info, apikey, content-type",
 };
 
+function alreadyExistsMessage(message: string): boolean {
+  const lower = message.toLowerCase();
+  return (
+    lower.includes("already been registered") ||
+    lower.includes("already registered") ||
+    lower.includes("user already exists") ||
+    lower.includes("email_exists")
+  );
+}
+
+function inviteEmailHtml(params: {
+  inviteLink: string;
+  vacationTitle?: string;
+}): { subject: string; html: string; text: string } {
+  const title = params.vacationTitle?.trim() || "Vacation Planer";
+  const subject = `Einladung: ${title}`;
+  const text = [
+    `Du wurdest zu „${title}“ eingeladen.`,
+    "",
+    "Öffne diesen Link, um beizutreten:",
+    params.inviteLink,
+  ].join("\n");
+  const html = `<!doctype html><html><body style="font-family:sans-serif;padding:24px;">
+    <h1>${title}</h1>
+    <p>Du wurdest zum Vacation Planer eingeladen.</p>
+    <p><a href="${params.inviteLink}">Einladung öffnen</a></p>
+    <p style="word-break:break-all;font-size:12px;color:#666;">${params.inviteLink}</p>
+  </body></html>`;
+  return { subject, html, text };
+}
+
 Deno.serve(async (req) => {
   if (req.method === "OPTIONS") {
     return new Response("ok", { headers: corsHeaders });
@@ -43,6 +74,8 @@ Deno.serve(async (req) => {
     const vacationId = String(body.vacationId ?? "").trim();
     const email = String(body.email ?? "").trim().toLowerCase();
     const redirectTo = String(body.redirectTo ?? "").trim() || undefined;
+    const inviteLink = String(body.inviteLink ?? "").trim();
+    const vacationTitle = String(body.vacationTitle ?? "").trim() || undefined;
 
     if (!vacationId || !email) {
       return new Response(
@@ -54,7 +87,6 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Prefer fine-grained team-manager check; fall back to admin alias.
     const { data: canManage, error: manageError } = await userClient.rpc(
       "is_vacation_team_manager",
       { p_vacation_id: vacationId },
@@ -83,10 +115,88 @@ Deno.serve(async (req) => {
       );
     }
 
-    // Email only — member row is created by the Next.js /api/invite route.
     const admin = createClient(supabaseUrl, serviceRole, {
       auth: { autoRefreshToken: false, persistSession: false },
     });
+
+    // Preferred: Resend with the vacation invite link.
+    const resendKey = Deno.env.get("RESEND_API_KEY")?.trim();
+    if (resendKey && inviteLink) {
+      const from =
+        Deno.env.get("RESEND_FROM")?.trim() ||
+        "Vacation Planer <onboarding@resend.dev>";
+      const content = inviteEmailHtml({ inviteLink, vacationTitle });
+      const mailRes = await fetch("https://api.resend.com/emails", {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${resendKey}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          from,
+          to: [email],
+          subject: content.subject,
+          html: content.html,
+          text: content.text,
+        }),
+      });
+      if (mailRes.ok) {
+        return new Response(
+          JSON.stringify({ ok: true, note: "Einladung per E-Mail gesendet." }),
+          { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+        );
+      }
+      console.error("Resend failed", mailRes.status, await mailRes.text());
+    }
+
+    // Existing auth user → magic login link to the invite page.
+    // New user → auth invite email.
+    const list = await fetch(
+      `${supabaseUrl}/auth/v1/admin/users?email=${encodeURIComponent(email)}`,
+      {
+        headers: {
+          Authorization: `Bearer ${serviceRole}`,
+          apikey: serviceRole,
+        },
+      },
+    );
+    const listed = (await list.json()) as {
+      users?: Array<{ id: string; email?: string }>;
+      user?: { id: string; email?: string };
+    };
+    const existing =
+      listed.user ??
+      listed.users?.find((entry) => entry.email?.toLowerCase() === email) ??
+      null;
+
+    if (existing) {
+      const { error: otpError } = await admin.auth.signInWithOtp({
+        email,
+        options: {
+          shouldCreateUser: false,
+          emailRedirectTo: redirectTo,
+        },
+      });
+      if (otpError) {
+        return new Response(
+          JSON.stringify({
+            ok: false,
+            error: `E-Mail-Versand fehlgeschlagen: ${otpError.message}`,
+          }),
+          {
+            status: 502,
+            headers: { ...corsHeaders, "Content-Type": "application/json" },
+          },
+        );
+      }
+      return new Response(
+        JSON.stringify({
+          ok: true,
+          note: "Login-Link per E-Mail gesendet — danach die Einladung annehmen.",
+        }),
+        { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+      );
+    }
 
     const { error: inviteError } = await admin.auth.admin.inviteUserByEmail(
       email,
@@ -94,19 +204,23 @@ Deno.serve(async (req) => {
     );
 
     if (inviteError) {
-      const message = inviteError.message.toLowerCase();
-      const alreadyRegistered =
-        message.includes("already been registered") ||
-        message.includes("already registered") ||
-        message.includes("user already exists");
-      if (alreadyRegistered) {
-        return new Response(
-          JSON.stringify({
-            ok: true,
-            note: "Dieses Konto existiert bereits — die Person kann sich einfach anmelden.",
-          }),
-          { headers: { ...corsHeaders, "Content-Type": "application/json" } },
-        );
+      if (alreadyExistsMessage(inviteError.message)) {
+        const { error: otpError } = await admin.auth.signInWithOtp({
+          email,
+          options: {
+            shouldCreateUser: false,
+            emailRedirectTo: redirectTo,
+          },
+        });
+        if (!otpError) {
+          return new Response(
+            JSON.stringify({
+              ok: true,
+              note: "Login-Link per E-Mail gesendet — danach die Einladung annehmen.",
+            }),
+            { headers: { ...corsHeaders, "Content-Type": "application/json" } },
+          );
+        }
       }
       return new Response(
         JSON.stringify({
