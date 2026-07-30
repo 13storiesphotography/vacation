@@ -34,6 +34,10 @@ export type RouteLeg = {
   km: number;
   /** Drive minutes — Google Routes when source=google, else estimate. */
   minutes: number;
+  /** Traffic-unaware (static) drive time in minutes. Present when trafficAware=true. */
+  minutesStatic?: number;
+  /** Whether this leg used TRAFFIC_AWARE routing preference. */
+  trafficAware?: boolean;
   source: RouteSource;
   dayId?: string;
   dayLabel?: string;
@@ -109,10 +113,25 @@ export function routeSourceHint(source: RouteSource): string {
   return source === "google" ? "Google-Routenzeit" : "Schätzung";
 }
 
-export function formatLegMeta(leg: Pick<RouteLeg, "km" | "minutes" | "source">): string {
+export function formatLegMeta(
+  leg: Pick<RouteLeg, "km" | "minutes" | "source" | "minutesStatic" | "trafficAware">,
+): string {
   const prefix = leg.source === "google" ? "" : "ca. ";
   const durationPrefix = leg.source === "google" ? "" : "~";
-  return `${prefix}${formatRouteKm(leg.km)} · ${durationPrefix}${formatRouteDuration(leg.minutes)}`;
+  let durationStr = `${durationPrefix}${formatRouteDuration(leg.minutes)}`;
+
+  if (
+    leg.trafficAware &&
+    leg.minutesStatic != null &&
+    Math.abs(leg.minutes - leg.minutesStatic) >= 5
+  ) {
+    const delta = leg.minutes - leg.minutesStatic;
+    if (delta > 0) {
+      durationStr += ` (+${delta} Min Stau)`;
+    }
+  }
+
+  return `${prefix}${formatRouteKm(leg.km)} · ${durationStr}`;
 }
 
 /** Ordered waypoints for a day: optional morning origin, stops, then overnight. */

@@ -9,6 +9,8 @@ const MAX_POINTS = 80;
 
 type Body = {
   points?: Array<{ lat?: unknown; lng?: unknown }>;
+  /** ISO-8601 departure datetime for traffic-aware routing (optional). */
+  departureTime?: unknown;
 };
 
 function parsePoints(raw: Body["points"]): LatLng[] | null {
@@ -21,6 +23,13 @@ function parsePoints(raw: Body["points"]): LatLng[] | null {
     points.push({ lat, lng });
   }
   return points;
+}
+
+function parseDepartureTime(raw: unknown): string | undefined {
+  if (typeof raw !== "string" || !raw.trim()) return undefined;
+  // Accept ISO-8601 datetime strings only.
+  if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}/.test(raw.trim())) return undefined;
+  return raw.trim();
 }
 
 /** Authenticated driving ETAs via Google Routes API (chunked for long trips). */
@@ -48,7 +57,8 @@ export async function POST(request: NextRequest) {
     );
   }
 
-  const result = await computeDrivingRouteChunked(points);
+  const departureTime = parseDepartureTime(body.departureTime);
+  const result = await computeDrivingRouteChunked(points, departureTime);
   if (!result) {
     return NextResponse.json(
       {
@@ -67,5 +77,6 @@ export async function POST(request: NextRequest) {
     totalMinutes: result.totalMinutes,
     encodedPolyline: result.encodedPolyline,
     encodedPolylines: result.encodedPolylines,
+    trafficAware: result.legs.some((leg) => leg.trafficAware),
   });
 }

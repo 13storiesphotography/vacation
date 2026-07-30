@@ -3,21 +3,35 @@
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { DayRoute, RouteSource } from "@/lib/day-route";
 
+type ApiLeg = {
+  km: number;
+  minutes: number;
+  minutesStatic?: number;
+  trafficAware?: boolean;
+};
+
 type ApiOk = {
   available: true;
   source: "google";
-  legs: Array<{ km: number; minutes: number }>;
+  legs: ApiLeg[];
   totalKm: number;
   totalMinutes: number;
   encodedPolyline: string | null;
   encodedPolylines?: string[];
+  trafficAware?: boolean;
 };
 
 /**
  * Enrich a local day-route estimate with Google Routes when available.
  * Keeps the estimate visible until/unless Google responds.
+ *
+ * Pass departureTime (ISO-8601) to enable future-departure traffic prediction.
+ * Without it TRAFFIC_AWARE uses current live conditions.
  */
-export function useEnrichedDayRoute(route: DayRoute | null): {
+export function useEnrichedDayRoute(
+  route: DayRoute | null,
+  departureTime?: string,
+): {
   route: DayRoute | null;
   loading: boolean;
   source: RouteSource;
@@ -29,13 +43,15 @@ export function useEnrichedDayRoute(route: DayRoute | null): {
 
   const signature = useMemo(() => {
     if (!route || route.waypoints.length < 2) return null;
-    return route.waypoints
+    const pts = route.waypoints
       .map(
         (point) =>
           `${point.spotId}:${point.coords.lat.toFixed(5)},${point.coords.lng.toFixed(5)}`,
       )
       .join("|");
-  }, [route]);
+    // Include departureTime so a change triggers a re-fetch.
+    return departureTime ? `${pts}@${departureTime}` : pts;
+  }, [route, departureTime]);
 
   useEffect(() => {
     setEnriched(null);
@@ -60,6 +76,7 @@ export function useEnrichedDayRoute(route: DayRoute | null): {
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
             points: baseline.waypoints.map((point) => point.coords),
+            departureTime: departureTime ?? undefined,
           }),
         });
         if (!response.ok) return;
@@ -73,6 +90,8 @@ export function useEnrichedDayRoute(route: DayRoute | null): {
             ...leg,
             km: json.legs[index].km,
             minutes: json.legs[index].minutes,
+            minutesStatic: json.legs[index].minutesStatic,
+            trafficAware: json.legs[index].trafficAware,
             source: "google",
           })),
           totalKm: json.totalKm,
@@ -91,7 +110,7 @@ export function useEnrichedDayRoute(route: DayRoute | null): {
     return () => {
       cancelled = true;
     };
-  }, [signature]);
+  }, [signature, departureTime]);
 
   const effective = enriched ?? route;
   return {

@@ -56,6 +56,10 @@ export type DayTimelineEntry = {
   driveMinutesBefore: number | null;
   driveKmBefore: number | null;
   driveSource: RouteSource | null;
+  /** Traffic-unaware static drive minutes. Present when driveSource=google and trafficAware. */
+  driveMinutesStaticBefore: number | null;
+  /** Whether the leg used TRAFFIC_AWARE routing preference. */
+  driveTrafficAwareBefore: boolean | null;
 };
 
 /**
@@ -130,6 +134,8 @@ export function buildDayTimeline(input: {
       driveMinutesBefore: legBefore?.minutes ?? null,
       driveKmBefore: legBefore?.km ?? null,
       driveSource: legBefore?.source ?? null,
+      driveMinutesStaticBefore: legBefore?.minutesStatic ?? null,
+      driveTrafficAwareBefore: legBefore?.trafficAware ?? null,
     });
   }
 
