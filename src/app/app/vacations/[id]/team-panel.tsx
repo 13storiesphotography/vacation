@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useEffect, useRef, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 import type { Database } from "@/lib/database.types";
 import { isCompleteEmail } from "@/lib/email";
 import { copyTextToClipboard, friendlyClipboardError } from "@/lib/clipboard";
@@ -12,8 +12,17 @@ import {
   type MemberRole,
   type PermissionKey,
 } from "@/lib/permissions";
+import { GlassSheet } from "@/components/ui/glass-sheet";
 
 type Member = Database["public"]["Tables"]["vacation_members"]["Row"];
+type Profile = Database["public"]["Tables"]["profiles"]["Row"];
+
+type SheetState =
+  | { kind: "actions"; memberId: string }
+  | { kind: "rights"; memberId: string }
+  | { kind: "invite" }
+  | { kind: "confirm"; memberId: string }
+  | null;
 
 function statusLabel(status: Member["status"]) {
   return status === "invited" ? "Eingeladen" : "Aktiv";
@@ -25,15 +34,32 @@ function memberInviteLink(member: Member, origin: string | null): string | null 
   return `${origin}/invite/${token}`;
 }
 
+function memberDisplayName(member: Member, profiles: Profile[]): string {
+  if (member.user_id) {
+    const profile = profiles.find((entry) => entry.id === member.user_id);
+    const name = profile?.display_name?.trim();
+    if (name) return name;
+  }
+  const local = member.email.split("@")[0]?.trim();
+  return local || member.email;
+}
+
+function memberInitial(name: string, email: string): string {
+  const source = name.trim() || email.trim();
+  return (source.slice(0, 1) || "?").toUpperCase();
+}
+
 export function TeamPanel({
   vacationId,
   members,
+  profiles,
   currentUserId,
   canManageTeam,
   onChanged,
 }: {
   vacationId: string;
   members: Member[];
+  profiles: Profile[];
   currentUserId: string | null;
   canManageTeam: boolean;
   onChanged: () => Promise<void> | void;
@@ -42,30 +68,27 @@ export function TeamPanel({
   const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
-  const [menuId, setMenuId] = useState<string | null>(null);
-  const [rightsId, setRightsId] = useState<string | null>(null);
-  const [showInvite, setShowInvite] = useState(false);
+  const [sheet, setSheet] = useState<SheetState>(null);
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState<Exclude<MemberRole, "custom">>("editor");
   const [inviteLink, setInviteLink] = useState<string | null>(null);
   const [inviting, setInviting] = useState(false);
   const inviteLinkInputRef = useRef<HTMLInputElement | null>(null);
-  const menuRef = useRef<HTMLDivElement | null>(null);
 
-  useEffect(() => {
-    if (!menuId) return;
-    const onPointer = (event: MouseEvent) => {
-      if (!menuRef.current?.contains(event.target as Node)) setMenuId(null);
-    };
-    document.addEventListener("mousedown", onPointer);
-    return () => document.removeEventListener("mousedown", onPointer);
-  }, [menuId]);
+  const sheetMember = useMemo(() => {
+    if (!sheet || sheet.kind === "invite") return null;
+    return members.find((member) => member.id === sheet.memberId) ?? null;
+  }, [members, sheet]);
 
   useEffect(() => {
     if (!inviteLink || !inviteLinkInputRef.current) return;
     inviteLinkInputRef.current.focus();
     inviteLinkInputRef.current.select();
   }, [inviteLink]);
+
+  function closeSheet() {
+    setSheet(null);
+  }
 
   async function finishInviteLinkCopy(link: string, note?: string) {
     setInviteLink(link);
@@ -94,7 +117,7 @@ export function TeamPanel({
   async function onCopyInviteLink(member: Member) {
     setError(null);
     setMessage(null);
-    setMenuId(null);
+    closeSheet();
 
     const existing = memberInviteLink(member, origin);
     const expiresAt = member.invite_expires_at
@@ -138,6 +161,52 @@ export function TeamPanel({
     }
   }
 
+  async function onResendInvite(member: Member) {
+    setError(null);
+    setMessage(null);
+    closeSheet();
+    setBusyId(member.id);
+    try {
+      const response = await fetch("/api/invite", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          vacationId,
+          memberId: member.id,
+        }),
+      });
+      const payload = (await response.json()) as {
+        error?: string;
+        note?: string;
+        inviteLink?: string;
+        emailSent?: boolean;
+      };
+      if (!response.ok) {
+        setError(payload.error ?? "E-Mail konnte nicht erneut gesendet werden.");
+        return;
+      }
+      if (payload.inviteLink) {
+        setInviteLink(payload.inviteLink);
+        if (payload.emailSent === false) {
+          setMessage(
+            payload.note ??
+              "Link erneuert, aber die E-Mail ging nicht raus — bitte Link teilen.",
+          );
+        } else {
+          setMessage(payload.note ?? "Einladung erneut gesendet.");
+          await finishInviteLinkCopy(payload.inviteLink, payload.note);
+        }
+      } else {
+        setMessage(payload.note ?? "Einladung erneut gesendet.");
+      }
+      await onChanged();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "Erneutes Senden fehlgeschlagen.");
+    } finally {
+      setBusyId(null);
+    }
+  }
+
   async function onUpdateRole(memberId: string, role: Exclude<MemberRole, "custom">) {
     setError(null);
     setMessage(null);
@@ -162,11 +231,7 @@ export function TeamPanel({
     }
   }
 
-  async function onTogglePermission(
-    member: Member,
-    key: PermissionKey,
-    value: boolean,
-  ) {
+  async function onTogglePermission(member: Member, key: PermissionKey, value: boolean) {
     setError(null);
     setMessage(null);
     setBusyId(member.id);
@@ -191,18 +256,11 @@ export function TeamPanel({
   }
 
   async function onRemoveMember(member: Member) {
-    setMenuId(null);
     const isInvite = member.status === "invited";
-    const confirmed = window.confirm(
-      isInvite
-        ? `Einladung an ${member.email} zurückziehen?`
-        : `${member.email} aus dem Team entfernen?`,
-    );
-    if (!confirmed) return;
-
     setError(null);
     setMessage(null);
     setBusyId(member.id);
+    closeSheet();
     const response = await fetch("/api/members", {
       method: "DELETE",
       headers: { "Content-Type": "application/json" },
@@ -214,7 +272,6 @@ export function TeamPanel({
       setError(payload.error ?? "Entfernen fehlgeschlagen");
       return;
     }
-    if (rightsId === member.id) setRightsId(null);
     setMessage(payload.note ?? (isInvite ? "Einladung zurückgezogen." : "Mitglied entfernt."));
     await onChanged();
   }
@@ -266,6 +323,7 @@ export function TeamPanel({
         setMessage(payload.note ?? "Einladung gesendet.");
       }
       setInviteEmail("");
+      closeSheet();
       await onChanged();
     } catch (err) {
       setError(err instanceof Error ? err.message : "Einladung fehlgeschlagen");
@@ -274,6 +332,13 @@ export function TeamPanel({
     }
   }
 
+  const sortedMembers = useMemo(() => {
+    return [...members].sort((a, b) => {
+      if (a.status !== b.status) return a.status === "active" ? -1 : 1;
+      return a.email.localeCompare(b.email, "de");
+    });
+  }, [members]);
+
   return (
     <div>
       <h1 className="display text-2xl">Team</h1>
@@ -281,141 +346,66 @@ export function TeamPanel({
         {members.length} Mitglied{members.length === 1 ? "" : "er"}
       </p>
 
-      <div className="ios-group mt-4">
-        {members.map((member) => {
-          const isSelf = Boolean(
-            currentUserId && member.user_id && member.user_id === currentUserId,
-          );
-          const busy = busyId === member.id;
-          const canManage = canManageTeam && !isSelf;
-          const rightsOpen = rightsId === member.id;
-          const menuOpen = menuId === member.id;
-          const roleValue = inviteRoleOptions.some((option) => option.value === member.role)
-            ? member.role
-            : "custom";
+      <div className="ios-group mt-4 overflow-hidden">
+        {sortedMembers.length === 0 ? (
+          <p className="px-4 py-5 text-[14px] text-[var(--ink-soft)]">
+            Noch niemand im Team.
+          </p>
+        ) : (
+          sortedMembers.map((member) => {
+            const isSelf = Boolean(
+              currentUserId && member.user_id && member.user_id === currentUserId,
+            );
+            const busy = busyId === member.id;
+            const canManage = canManageTeam && !isSelf;
+            const name = memberDisplayName(member, profiles);
+            const pending = member.status === "invited";
 
-          return (
-            <div key={member.id} className="border-b border-black/5 last:border-b-0">
-              <div className="ios-row !items-center">
+            return (
+              <button
+                key={member.id}
+                type="button"
+                className="team-member-row ios-row !items-center"
+                disabled={!canManage || busy}
+                onClick={() => {
+                  if (!canManage || busy) return;
+                  setError(null);
+                  setSheet({ kind: "actions", memberId: member.id });
+                }}
+              >
+                <div
+                  className="team-avatar"
+                  data-pending={pending ? "true" : undefined}
+                  aria-hidden
+                >
+                  {memberInitial(name, member.email)}
+                </div>
                 <div className="min-w-0 flex-1">
-                  <p className="truncate text-[15px] font-semibold">{member.email}</p>
-                  <p className="text-[12px] font-semibold uppercase tracking-wide text-[var(--ink-faint)]">
+                  <p className="truncate text-[15px] font-semibold">
+                    {name}
+                    {isSelf ? (
+                      <span className="ml-1.5 text-[12px] font-semibold text-[var(--ink-faint)]">
+                        Du
+                      </span>
+                    ) : null}
+                  </p>
+                  <p className="truncate text-[13px] text-[var(--ink-soft)]">{member.email}</p>
+                  <p className="mt-1 text-[12px] font-semibold uppercase tracking-wide text-[var(--ink-faint)]">
                     {roleLabel(member.role)} · {statusLabel(member.status)}
-                    {isSelf ? " · Du" : ""}
                   </p>
-                  {member.invite_expires_at && member.status === "invited" ? (
-                    <p className="mt-1 text-[12px] text-[var(--ink-soft)]">
-                      Link gültig bis{" "}
-                      {new Date(member.invite_expires_at).toLocaleDateString("de-DE")}
-                    </p>
-                  ) : null}
                 </div>
-
                 {canManage ? (
-                  <div className="flex shrink-0 items-center gap-2">
-                    <select
-                      className="cost-status-select !max-w-[8.5rem]"
-                      value={roleValue}
-                      disabled={busy}
-                      aria-label={`Rolle für ${member.email}`}
-                      onChange={(event) => {
-                        const next = event.target.value;
-                        if (next === "custom") return;
-                        void onUpdateRole(member.id, next as Exclude<MemberRole, "custom">);
-                      }}
-                    >
-                      {inviteRoleOptions.map((option) => (
-                        <option key={option.value} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                      <option value="custom" disabled>
-                        Angepasst
-                      </option>
-                    </select>
-
-                    <div className="relative" ref={menuOpen ? menuRef : undefined}>
-                      <button
-                        type="button"
-                        className="glass-chip !px-2.5 !py-1.5"
-                        aria-label="Weitere Aktionen"
-                        aria-expanded={menuOpen}
-                        disabled={busy}
-                        onClick={() => setMenuId(menuOpen ? null : member.id)}
-                      >
-                        ···
-                      </button>
-                      {menuOpen ? (
-                        <div className="absolute right-0 z-20 mt-1 min-w-[11rem] overflow-hidden rounded-[14px] border border-white/50 bg-[rgba(248,250,251,0.96)] p-1 shadow-lg backdrop-blur-xl">
-                          <button
-                            type="button"
-                            className="block w-full rounded-[10px] px-3 py-2 text-left text-[13px] font-semibold hover:bg-black/5"
-                            onClick={() => {
-                              setMenuId(null);
-                              setRightsId(rightsOpen ? null : member.id);
-                            }}
-                          >
-                            {rightsOpen ? "Rechte schließen" : "Rechte anpassen"}
-                          </button>
-                          {member.status === "invited" ? (
-                            <button
-                              type="button"
-                              className="block w-full rounded-[10px] px-3 py-2 text-left text-[13px] font-semibold hover:bg-black/5"
-                              onClick={() => void onCopyInviteLink(member)}
-                            >
-                              Link teilen
-                            </button>
-                          ) : null}
-                          <button
-                            type="button"
-                            className="block w-full rounded-[10px] px-3 py-2 text-left text-[13px] font-semibold text-[var(--danger)] hover:bg-black/5"
-                            onClick={() => void onRemoveMember(member)}
-                          >
-                            {member.status === "invited" ? "Zurückziehen" : "Entfernen"}
-                          </button>
-                        </div>
-                      ) : null}
-                    </div>
-                  </div>
+                  <span className="shrink-0 text-[18px] font-light text-[var(--ink-faint)]" aria-hidden>
+                    ›
+                  </span>
                 ) : null}
-              </div>
-
-              {rightsOpen && canManage ? (
-                <div className="glass-subpanel mx-3 mb-3 space-y-2 p-3">
-                  <p className="text-[12px] font-semibold uppercase tracking-wide text-[var(--ink-faint)]">
-                    Rechte
-                  </p>
-                  <p className="text-[12px] text-[var(--ink-soft)]">
-                    Preset oben wählen oder einzeln anpassen — wird dann „Angepasst“.
-                  </p>
-                  <div className="grid gap-2 sm:grid-cols-2">
-                    {(Object.keys(permissionLabels) as PermissionKey[]).map((key) => (
-                      <label
-                        key={key}
-                        className="flex items-center justify-between gap-3 rounded-[12px] bg-white/45 px-3 py-2.5 text-[13px] font-semibold"
-                      >
-                        <span>{permissionShortLabels[key]}</span>
-                        <input
-                          type="checkbox"
-                          className="h-4 w-4 accent-[var(--fjord)]"
-                          checked={Boolean(member[key])}
-                          disabled={busy}
-                          onChange={(event) =>
-                            void onTogglePermission(member, key, event.target.checked)
-                          }
-                          aria-label={permissionLabels[key]}
-                        />
-                      </label>
-                    ))}
-                  </div>
-                </div>
-              ) : null}
-            </div>
-          );
-        })}
+              </button>
+            );
+          })
+        )}
       </div>
 
-      {(message || error || inviteLink) && !showInvite ? (
+      {(message || error || inviteLink) && (
         <div className="mt-3 space-y-2">
           {inviteLink ? (
             <div className="glass-subpanel p-3">
@@ -443,104 +433,253 @@ export function TeamPanel({
           {message ? <p className="text-[13px] text-[var(--pine)]">{message}</p> : null}
           {error ? <p className="text-[13px] text-[var(--danger)]">{error}</p> : null}
         </div>
-      ) : null}
+      )}
 
       {canManageTeam ? (
-        <div className="mt-4">
-          {!showInvite ? (
+        <button
+          type="button"
+          className="cta mt-4 w-full"
+          onClick={() => {
+            setError(null);
+            setMessage(null);
+            setInviteLink(null);
+            setSheet({ kind: "invite" });
+          }}
+        >
+          Person einladen
+        </button>
+      ) : null}
+
+      <GlassSheet
+        open={sheet?.kind === "actions" && Boolean(sheetMember)}
+        title={sheetMember ? memberDisplayName(sheetMember, profiles) : "Mitglied"}
+        subtitle={sheetMember?.email}
+        onClose={closeSheet}
+      >
+        {sheetMember ? (
+          <div>
             <button
               type="button"
-              className="cta w-full"
-              onClick={() => {
-                setShowInvite(true);
-                setError(null);
-                setMessage(null);
-              }}
+              className="glass-sheet-action"
+              disabled={busyId === sheetMember.id}
+              onClick={() => setSheet({ kind: "rights", memberId: sheetMember.id })}
             >
-              Person einladen
+              Rechte anpassen
             </button>
-          ) : (
-            <form
-              onSubmit={onInvite}
-              className="ios-group p-4"
-              autoComplete="off"
-              data-lpignore="true"
-              data-1p-ignore="true"
-              data-bwignore="true"
-              data-form-type="other"
-            >
-              <div className="flex items-center justify-between gap-3">
-                <p className="text-[13px] font-semibold text-[var(--ink-soft)]">
-                  Person einladen
-                </p>
+            {sheetMember.status === "invited" ? (
+              <>
                 <button
                   type="button"
-                  className="glass-chip"
-                  onClick={() => {
-                    setShowInvite(false);
-                    setInviteEmail("");
-                    setInviteLink(null);
-                  }}
+                  className="glass-sheet-action"
+                  disabled={busyId === sheetMember.id}
+                  onClick={() => void onCopyInviteLink(sheetMember)}
                 >
-                  Schließen
+                  Link teilen
                 </button>
-              </div>
-              <label className="form-label mt-3">
-                E-Mail
+                <button
+                  type="button"
+                  className="glass-sheet-action"
+                  disabled={busyId === sheetMember.id}
+                  onClick={() => void onResendInvite(sheetMember)}
+                >
+                  E-Mail erneut senden
+                </button>
+              </>
+            ) : null}
+            <button
+              type="button"
+              className="glass-sheet-action glass-sheet-action-danger"
+              disabled={busyId === sheetMember.id}
+              onClick={() => setSheet({ kind: "confirm", memberId: sheetMember.id })}
+            >
+              {sheetMember.status === "invited" ? "Einladung zurückziehen" : "Aus Team entfernen"}
+            </button>
+            <button
+              type="button"
+              className="glass-sheet-action glass-sheet-action-muted"
+              onClick={closeSheet}
+            >
+              Abbrechen
+            </button>
+          </div>
+        ) : null}
+      </GlassSheet>
+
+      <GlassSheet
+        open={sheet?.kind === "rights" && Boolean(sheetMember)}
+        title="Rechte"
+        subtitle={sheetMember?.email}
+        onClose={closeSheet}
+        footer={
+          <button type="button" className="cta w-full" onClick={closeSheet}>
+            Fertig
+          </button>
+        }
+      >
+        {sheetMember ? (
+          <div>
+            <p className="mb-2 text-[12px] font-semibold uppercase tracking-wide text-[var(--ink-faint)]">
+              Rolle
+            </p>
+            <div className="segmented" role="group" aria-label="Rolle">
+              {inviteRoleOptions.map((option) => (
+                <button
+                  key={option.value}
+                  type="button"
+                  data-active={sheetMember.role === option.value ? "true" : undefined}
+                  disabled={busyId === sheetMember.id}
+                  onClick={() => void onUpdateRole(sheetMember.id, option.value)}
+                >
+                  {option.label}
+                </button>
+              ))}
+            </div>
+            {sheetMember.role === "custom" ? (
+              <p className="mt-2 text-[12px] text-[var(--ink-soft)]">
+                Aktuell angepasst — Preset wählen oder Rechte einzeln setzen.
+              </p>
+            ) : (
+              <p className="mt-2 text-[12px] text-[var(--ink-soft)]">
+                {inviteRoleOptions.find((option) => option.value === sheetMember.role)?.description}
+              </p>
+            )}
+
+            <p className="mb-2 mt-5 text-[12px] font-semibold uppercase tracking-wide text-[var(--ink-faint)]">
+              Einzelrechte
+            </p>
+            {(Object.keys(permissionLabels) as PermissionKey[]).map((key) => (
+              <label key={key} className="team-perm-row">
+                <span>
+                  <span className="block text-[14px] font-semibold">{permissionShortLabels[key]}</span>
+                  <span className="mt-0.5 block text-[12px] text-[var(--ink-soft)]">
+                    {permissionLabels[key]}
+                  </span>
+                </span>
                 <input
-                  name="vacation-invite-email"
-                  id="vacation-invite-email"
-                  type="email"
-                  inputMode="email"
-                  autoComplete="off"
-                  autoCapitalize="none"
-                  spellCheck={false}
-                  className="glass-field mt-1.5 px-3 py-3"
-                  value={inviteEmail}
-                  onChange={(event) => setInviteEmail(event.target.value)}
-                  placeholder="name@domain.de"
-                  required
+                  type="checkbox"
+                  checked={Boolean(sheetMember[key])}
+                  disabled={busyId === sheetMember.id}
+                  onChange={(event) =>
+                    void onTogglePermission(sheetMember, key, event.target.checked)
+                  }
+                  aria-label={permissionLabels[key]}
                 />
               </label>
-              <label className="form-label mt-3">
-                Rolle
-                <select
-                  className="glass-field mt-1.5 px-3 py-3"
-                  value={inviteRole}
-                  onChange={(event) =>
-                    setInviteRole(event.target.value as Exclude<MemberRole, "custom">)
-                  }
-                >
-                  {inviteRoleOptions.map((option) => (
-                    <option key={option.value} value={option.value}>
-                      {option.label} — {option.description}
-                    </option>
-                  ))}
-                </select>
-              </label>
+            ))}
+          </div>
+        ) : null}
+      </GlassSheet>
+
+      <GlassSheet
+        open={sheet?.kind === "invite"}
+        title="Person einladen"
+        subtitle="E-Mail und Rolle wählen — danach Link teilen oder Mail senden."
+        onClose={closeSheet}
+      >
+        <form
+          onSubmit={onInvite}
+          autoComplete="off"
+          data-lpignore="true"
+          data-1p-ignore="true"
+          data-bwignore="true"
+          data-form-type="other"
+        >
+          <label className="form-label">
+            E-Mail
+            <input
+              name="vacation-invite-email"
+              id="vacation-invite-email"
+              type="email"
+              inputMode="email"
+              autoComplete="off"
+              autoCapitalize="none"
+              spellCheck={false}
+              className="glass-field mt-1.5 px-3 py-3"
+              value={inviteEmail}
+              onChange={(event) => setInviteEmail(event.target.value)}
+              placeholder="name@domain.de"
+              required
+            />
+          </label>
+
+          <p className="mb-2 mt-4 text-[12px] font-semibold uppercase tracking-wide text-[var(--ink-faint)]">
+            Rolle
+          </p>
+          <div className="segmented" role="group" aria-label="Einladungsrolle">
+            {inviteRoleOptions.map((option) => (
               <button
-                type="submit"
-                className="cta mt-4 w-full"
-                disabled={inviting || !isCompleteEmail(inviteEmail)}
+                key={option.value}
+                type="button"
+                data-active={inviteRole === option.value ? "true" : undefined}
+                onClick={() => setInviteRole(option.value)}
               >
-                {inviting ? "…" : "Einladung senden"}
+                {option.label}
               </button>
-              {inviteLink ? (
-                <div className="mt-3">
-                  <input
-                    readOnly
-                    className="glass-field px-3 py-3 text-[13px]"
-                    value={inviteLink}
-                    onFocus={(event) => event.currentTarget.select()}
-                  />
-                </div>
-              ) : null}
-              {message ? <p className="mt-3 text-[13px] text-[var(--pine)]">{message}</p> : null}
-              {error ? <p className="mt-3 text-[13px] text-[var(--danger)]">{error}</p> : null}
-            </form>
-          )}
-        </div>
-      ) : null}
+            ))}
+          </div>
+          <p className="mt-2 text-[12px] text-[var(--ink-soft)]">
+            {inviteRoleOptions.find((option) => option.value === inviteRole)?.description}
+          </p>
+
+          {error && sheet?.kind === "invite" ? (
+            <p className="mt-3 text-[13px] text-[var(--danger)]">{error}</p>
+          ) : null}
+
+          <button
+            type="submit"
+            className="cta mt-5 w-full"
+            disabled={inviting || !isCompleteEmail(inviteEmail)}
+          >
+            {inviting ? "…" : "Einladung senden"}
+          </button>
+          <button
+            type="button"
+            className="glass-sheet-action glass-sheet-action-muted mt-2"
+            onClick={closeSheet}
+          >
+            Abbrechen
+          </button>
+        </form>
+      </GlassSheet>
+
+      <GlassSheet
+        open={sheet?.kind === "confirm" && Boolean(sheetMember)}
+        title={
+          sheetMember?.status === "invited" ? "Einladung zurückziehen?" : "Mitglied entfernen?"
+        }
+        subtitle={
+          sheetMember
+            ? sheetMember.status === "invited"
+              ? `${sheetMember.email} kann dem Team dann nicht mehr beitreten.`
+              : `${sheetMember.email} verliert den Zugriff auf diesen Urlaub.`
+            : undefined
+        }
+        onClose={closeSheet}
+      >
+        {sheetMember ? (
+          <div>
+            <button
+              type="button"
+              className="glass-sheet-action glass-sheet-action-danger"
+              disabled={busyId === sheetMember.id}
+              onClick={() => void onRemoveMember(sheetMember)}
+            >
+              {busyId === sheetMember.id
+                ? "…"
+                : sheetMember.status === "invited"
+                  ? "Zurückziehen"
+                  : "Entfernen"}
+            </button>
+            <button
+              type="button"
+              className="glass-sheet-action glass-sheet-action-muted"
+              onClick={closeSheet}
+            >
+              Abbrechen
+            </button>
+          </div>
+        ) : null}
+      </GlassSheet>
     </div>
   );
 }
