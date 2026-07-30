@@ -416,6 +416,7 @@ export default function VacationDetailPage() {
           <TeamPanel
             vacationId={vacationId}
             members={members}
+            profiles={profiles}
             currentUserId={currentUserId}
             canManageTeam={canManageTeam}
             onChanged={load}

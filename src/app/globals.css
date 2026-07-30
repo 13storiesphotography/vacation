@@ -1184,6 +1184,218 @@ textarea {
   }
 }
 
+/* Bottom liquid-glass sheet (team actions, rights, invite, confirm). */
+.glass-sheet-root {
+  position: fixed;
+  inset: 0;
+  z-index: 80;
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
+  padding: 12px;
+  padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px));
+  pointer-events: none;
+}
+
+.glass-sheet-backdrop {
+  position: absolute;
+  inset: 0;
+  border: 0;
+  padding: 0;
+  margin: 0;
+  cursor: pointer;
+  pointer-events: auto;
+  background: rgba(12, 24, 32, 0.32);
+  backdrop-filter: blur(10px) saturate(140%);
+  -webkit-backdrop-filter: blur(10px) saturate(140%);
+  animation: glass-sheet-fade 180ms ease;
+}
+
+.glass-sheet-panel {
+  position: relative;
+  z-index: 1;
+  width: min(100%, 28rem);
+  max-height: min(88vh, 40rem);
+  display: flex;
+  flex-direction: column;
+  pointer-events: auto;
+  border-radius: 28px !important;
+  padding: 10px 16px 16px;
+  animation: glass-sheet-up 220ms cubic-bezier(0.22, 1, 0.36, 1);
+  overflow: hidden;
+}
+
+.glass-sheet-handle {
+  width: 36px;
+  height: 4px;
+  margin: 2px auto 10px;
+  border-radius: 999px;
+  background: rgba(20, 36, 48, 0.18);
+  flex-shrink: 0;
+}
+
+.glass-sheet-header {
+  flex-shrink: 0;
+  padding: 0 2px 12px;
+}
+
+.glass-sheet-title {
+  margin: 0;
+  font-size: 18px;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: var(--ink);
+}
+
+.glass-sheet-subtitle {
+  margin: 4px 0 0;
+  font-size: 13px;
+  line-height: 1.4;
+  color: var(--ink-soft);
+  word-break: break-word;
+}
+
+.glass-sheet-body {
+  flex: 1 1 auto;
+  min-height: 0;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding-bottom: 4px;
+}
+
+.glass-sheet-footer {
+  flex-shrink: 0;
+  display: grid;
+  gap: 8px;
+  padding-top: 12px;
+}
+
+.glass-sheet-action {
+  display: block;
+  width: 100%;
+  border: 0;
+  border-radius: 16px;
+  padding: 14px 16px;
+  text-align: left;
+  font-size: 15px;
+  font-weight: 650;
+  color: var(--ink);
+  background: rgba(255, 255, 255, 0.42);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.65) inset;
+  transition: background 140ms ease, transform 120ms ease;
+}
+
+.glass-sheet-action + .glass-sheet-action {
+  margin-top: 8px;
+}
+
+.glass-sheet-action:active:not(:disabled) {
+  transform: scale(0.985);
+  background: rgba(255, 255, 255, 0.55);
+}
+
+.glass-sheet-action:disabled {
+  opacity: 0.45;
+}
+
+.glass-sheet-action-danger {
+  color: var(--danger);
+}
+
+.glass-sheet-action-muted {
+  text-align: center;
+  color: var(--ink-soft);
+  background: transparent;
+  box-shadow: none;
+}
+
+.team-avatar {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 40px;
+  height: 40px;
+  flex-shrink: 0;
+  border-radius: 999px;
+  background: var(--pine-soft);
+  color: var(--pine);
+  font-size: 15px;
+  font-weight: 750;
+  letter-spacing: -0.02em;
+}
+
+.team-avatar[data-pending="true"] {
+  background: rgba(20, 36, 48, 0.08);
+  color: var(--ink-soft);
+}
+
+.team-perm-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding: 12px 14px;
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.42);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.6) inset;
+  cursor: pointer;
+}
+
+.team-perm-row + .team-perm-row {
+  margin-top: 8px;
+}
+
+.team-perm-row input[type="checkbox"] {
+  width: 20px;
+  height: 20px;
+  accent-color: var(--fjord);
+  flex-shrink: 0;
+}
+
+.team-member-row {
+  width: 100%;
+  border: 0;
+  background: transparent;
+  text-align: left;
+  cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+}
+
+.team-member-row:disabled {
+  cursor: default;
+}
+
+.team-member-row:not(:disabled):active {
+  background: rgba(255, 255, 255, 0.28);
+}
+
+@keyframes glass-sheet-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+@keyframes glass-sheet-up {
+  from {
+    opacity: 0;
+    transform: translateY(18px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0) scale(1);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .glass-sheet-backdrop,
+  .glass-sheet-panel {
+    animation: none;
+  }
+}
+
 .glass-date-header {
   display: flex;
   align-items: center;
