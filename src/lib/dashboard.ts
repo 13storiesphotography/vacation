@@ -1,4 +1,8 @@
-import { formatDayLabel, type DayPlanWithStops } from "@/lib/day-plans";
+import {
+  formatDayLabel,
+  previousMorningOriginSpotId,
+  type DayPlanWithStops,
+} from "@/lib/day-plans";
 import {
   buildDayRoute,
   estimateRoadKmBetween,
@@ -187,9 +191,14 @@ function previousOvernightOrigin(
   spotsById: Map<string, SpotRow>,
 ): { name: string; coords: LatLng } | null {
   for (let i = focusIndex - 1; i >= 0; i -= 1) {
-    const overnightId = days[i]?.overnight_spot_id;
-    if (!overnightId) continue;
-    const spot = spotsById.get(overnightId);
+    const day = days[i];
+    const overnightId = day?.overnight_spot_id;
+    const ordered = day
+      ? [...day.stops].sort((a, b) => a.position - b.position)
+      : [];
+    const spotId = overnightId ?? ordered[ordered.length - 1]?.spot_id ?? null;
+    if (!spotId) continue;
+    const spot = spotsById.get(spotId);
     if (!spot) continue;
     const coords = resolveSpotCoords(spot);
     if (!coords) continue;
@@ -218,7 +227,11 @@ export function buildFeaturedDashboard(input: {
   const focusDay = focus?.day ?? null;
   const focusIndex = focus?.index ?? -1;
 
-  const route = focusDay ? buildDayRoute(focusDay, spotsById, focusIndex) : null;
+  const route = focusDay
+    ? buildDayRoute(focusDay, spotsById, focusIndex, {
+        originSpotId: previousMorningOriginSpotId(days, focusDay.id),
+      })
+    : null;
   const places: DashboardPlace[] = [];
   if (route) {
     for (const waypoint of route.waypoints) {
