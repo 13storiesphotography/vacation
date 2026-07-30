@@ -120,7 +120,7 @@ function SignupForm() {
           type="email"
           autoComplete="email"
           required
-          readOnly
+          readOnly={Boolean(invitedEmail)}
           value={email}
           onChange={(e) => setEmail(e.target.value)}
         />
