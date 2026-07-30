@@ -1,12 +1,14 @@
 "use client";
 
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useId, useLayoutEffect, useRef, useState } from "react";
+import { createPortal } from "react-dom";
 import { normalizeClockTime } from "@/lib/day-timeline";
 
 const HOURS = Array.from({ length: 24 }, (_, i) => String(i).padStart(2, "0"));
 const MINUTES = Array.from({ length: 12 }, (_, i) => String(i * 5).padStart(2, "0"));
 const ITEM_H = 40;
 const PAD_H = 80;
+const POPOVER_WIDTH = 280;
 
 function parseParts(
   value: string | null | undefined,
@@ -70,7 +72,7 @@ function WheelColumn({
         if (next && next !== value) onChange(next);
       }}
     >
-      <div className="glass-time-wheel-pad" aria-hidden />
+      <div className="glass-time-wheel-pad" aria-hidden style={{ height: PAD_H }} />
       {values.map((entry) => (
         <button
           key={entry}
@@ -122,7 +124,11 @@ export function GlassTimeField({
   const [draft, setDraft] = useState(() =>
     parseParts(selected || defaultValue || nowClock(), minuteStep),
   );
+  const [coords, setCoords] = useState<{ top: number; left: number } | null>(null);
+  const [mounted, setMounted] = useState(false);
   const rootRef = useRef<HTMLDivElement>(null);
+  const triggerRef = useRef<HTMLButtonElement>(null);
+  const popoverRef = useRef<HTMLDivElement>(null);
   const listId = useId();
   const minutes =
     minuteStep === 1
@@ -130,10 +136,49 @@ export function GlassTimeField({
       : MINUTES;
 
   useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  useLayoutEffect(() => {
+    if (!open) {
+      setCoords(null);
+      return;
+    }
+
+    function place() {
+      const trigger = triggerRef.current;
+      if (!trigger) return;
+      const rect = trigger.getBoundingClientRect();
+      const width = Math.min(window.innerWidth - 32, POPOVER_WIDTH);
+      const left = Math.min(
+        Math.max(16, rect.left),
+        Math.max(16, window.innerWidth - width - 16),
+      );
+      const estimatedHeight = 280;
+      const below = rect.bottom + 10;
+      const above = rect.top - 10 - estimatedHeight;
+      const top =
+        below + estimatedHeight > window.innerHeight - 12 && above > 12 ? above : below;
+      setCoords({ top, left });
+    }
+
+    place();
+    window.addEventListener("resize", place);
+    window.addEventListener("scroll", place, true);
+    return () => {
+      window.removeEventListener("resize", place);
+      window.removeEventListener("scroll", place, true);
+    };
+  }, [open]);
+
+  useEffect(() => {
     if (!open) return;
     setDraft(parseParts(selected || nowClock(), minuteStep));
     const onPointer = (event: MouseEvent) => {
-      if (!rootRef.current?.contains(event.target as Node)) setOpen(false);
+      const target = event.target as Node;
+      if (rootRef.current?.contains(target)) return;
+      if (popoverRef.current?.contains(target)) return;
+      setOpen(false);
     };
     const onKey = (event: KeyboardEvent) => {
       if (event.key === "Escape") setOpen(false);
@@ -155,12 +200,83 @@ export function GlassTimeField({
 
   const display = selected ? normalizeClockTime(selected) : "";
 
+  const popover =
+    open && mounted && coords
+      ? createPortal(
+          <div
+            ref={popoverRef}
+            id={listId}
+            className="glass-picker-surface glass-time-popover glass-time-popover-portal"
+            role="dialog"
+            aria-label="Uhrzeit wählen"
+            style={{
+              top: coords.top,
+              left: coords.left,
+              width: Math.min(window.innerWidth - 32, POPOVER_WIDTH),
+            }}
+          >
+            <div className="glass-time-wheels">
+              <WheelColumn
+                values={HOURS}
+                value={draft.hour}
+                ariaLabel="Stunde"
+                onChange={(hour) => setDraft((current) => ({ ...current, hour }))}
+              />
+              <span className="glass-time-colon" aria-hidden>
+                :
+              </span>
+              <WheelColumn
+                values={minutes}
+                value={
+                  minutes.includes(draft.minute) ? draft.minute : (minutes[0] ?? "00")
+                }
+                ariaLabel="Minute"
+                onChange={(minute) => setDraft((current) => ({ ...current, minute }))}
+              />
+            </div>
+
+            <div className="glass-time-footer">
+              <button
+                type="button"
+                className="glass-chip !py-1 !text-[11px]"
+                onClick={() => commit("")}
+              >
+                Löschen
+              </button>
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  className="glass-chip !py-1 !text-[11px]"
+                  onClick={() => {
+                    const clock = nowClock();
+                    setDraft(parseParts(clock, minuteStep));
+                    commit(clock);
+                  }}
+                >
+                  Jetzt
+                </button>
+                <button
+                  type="button"
+                  className="glass-chip !py-1 !text-[11px]"
+                  data-active="true"
+                  onClick={() => commit(`${draft.hour}:${draft.minute}`)}
+                >
+                  Fertig
+                </button>
+              </div>
+            </div>
+          </div>,
+          document.body,
+        )
+      : null;
+
   return (
     <div ref={rootRef} className={`glass-time ${className}`}>
       {name ? (
         <input type="hidden" name={name} value={selected} required={required} />
       ) : null}
       <button
+        ref={triggerRef}
         type="button"
         className="glass-field glass-time-trigger w-full px-3 py-2 text-left text-[14px]"
         disabled={disabled}
@@ -176,68 +292,7 @@ export function GlassTimeField({
           {display || "Uhrzeit wählen"}
         </span>
       </button>
-
-      {open ? (
-        <div
-          id={listId}
-          className="glass-picker-surface glass-time-popover"
-          role="dialog"
-          aria-label="Uhrzeit wählen"
-        >
-          <div className="glass-time-wheels">
-            <WheelColumn
-              values={HOURS}
-              value={draft.hour}
-              ariaLabel="Stunde"
-              onChange={(hour) => setDraft((current) => ({ ...current, hour }))}
-            />
-            <span className="glass-time-colon" aria-hidden>
-              :
-            </span>
-            <WheelColumn
-              values={minutes}
-              value={
-                minutes.includes(draft.minute)
-                  ? draft.minute
-                  : minutes[0] ?? "00"
-              }
-              ariaLabel="Minute"
-              onChange={(minute) => setDraft((current) => ({ ...current, minute }))}
-            />
-          </div>
-
-          <div className="glass-time-footer">
-            <button
-              type="button"
-              className="glass-chip !py-1 !text-[11px]"
-              onClick={() => commit("")}
-            >
-              Löschen
-            </button>
-            <div className="flex gap-2">
-              <button
-                type="button"
-                className="glass-chip !py-1 !text-[11px]"
-                onClick={() => {
-                  const clock = nowClock();
-                  setDraft(parseParts(clock, minuteStep));
-                  commit(clock);
-                }}
-              >
-                Jetzt
-              </button>
-              <button
-                type="button"
-                className="glass-chip !py-1 !text-[11px]"
-                data-active="true"
-                onClick={() => commit(`${draft.hour}:${draft.minute}`)}
-              >
-                Fertig
-              </button>
-            </div>
-          </div>
-        </div>
-      ) : null}
+      {popover}
     </div>
   );
 }
