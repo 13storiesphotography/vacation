@@ -88,6 +88,43 @@ export function EditVacationForm({
         />
       </label>
 
+      <p className="mt-5 text-[12px] font-semibold uppercase tracking-wide text-[var(--ink-faint)]">
+        Start / Zuhause
+      </p>
+      <p className="mt-1 text-[12px] text-[var(--ink-soft)]">
+        Für Anreise und Rückfahrt in Sprit- und Routenschätzung.
+      </p>
+      <label className="form-label mt-3">
+        Bezeichnung
+        <input
+          name="home_label"
+          defaultValue={vacation.home_label ?? "Zuhause"}
+          className="glass-field mt-1.5 px-3 py-3"
+          placeholder="Zuhause"
+        />
+      </label>
+      <label className="form-label mt-3">
+        Google-Maps-Link
+        <input
+          name="home_maps_url"
+          type="url"
+          inputMode="url"
+          autoComplete="off"
+          defaultValue={vacation.home_maps_url ?? ""}
+          className="glass-field mt-1.5 px-3 py-3"
+          placeholder="https://maps.google.com/… oder maps.app.goo.gl/…"
+        />
+      </label>
+      <label className="mt-3 flex items-center gap-3 text-[14px] font-semibold">
+        <input
+          type="checkbox"
+          name="include_home_in_route"
+          defaultChecked={vacation.include_home_in_route !== false}
+          className="h-4 w-4 accent-[var(--fjord)]"
+        />
+        Anreise & Rückfahrt einrechnen
+      </label>
+
       {state.error && <p className="mt-3 text-[13px] text-[var(--danger)]">{state.error}</p>}
 
       <div className="mt-4 flex gap-2">

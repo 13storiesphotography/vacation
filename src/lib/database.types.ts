@@ -36,6 +36,11 @@ export type Database = {
           budget_total: number | null;
           fuel_l_per_100km: number | null;
           fuel_price_per_liter: number | null;
+          home_label: string | null;
+          home_lat: number | null;
+          home_lng: number | null;
+          home_maps_url: string | null;
+          include_home_in_route: boolean;
         };
         Insert: {
           id?: string;
@@ -51,6 +56,11 @@ export type Database = {
           budget_total?: number | null;
           fuel_l_per_100km?: number | null;
           fuel_price_per_liter?: number | null;
+          home_label?: string | null;
+          home_lat?: number | null;
+          home_lng?: number | null;
+          home_maps_url?: string | null;
+          include_home_in_route?: boolean;
         };
         Update: {
           id?: string;
@@ -66,6 +76,11 @@ export type Database = {
           budget_total?: number | null;
           fuel_l_per_100km?: number | null;
           fuel_price_per_liter?: number | null;
+          home_label?: string | null;
+          home_lat?: number | null;
+          home_lng?: number | null;
+          home_maps_url?: string | null;
+          include_home_in_route?: boolean;
         };
         Relationships: [];
       };
