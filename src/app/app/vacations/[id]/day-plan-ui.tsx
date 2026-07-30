@@ -37,6 +37,7 @@ import { vacationHomeFromRow } from "@/lib/vacation-home";
 import { useEnrichedDayRoute } from "./use-enriched-day-route";
 import { TripRouteOverview } from "./trip-route-overview";
 import { EditSpotForm } from "./spot-ui";
+import { DayCalendarView } from "./day-calendar-view";
 
 type Spot = Database["public"]["Tables"]["spots"]["Row"];
 type Vacation = Database["public"]["Tables"]["vacations"]["Row"];
@@ -651,6 +652,14 @@ export function DayPlanPanel({
                   : ""}
               </p>
             </div>
+
+            <DayCalendarView
+              timeline={timeline}
+              hasDepartAt={Boolean(selected.depart_at)}
+              onSelectSpot={(spotId) =>
+                setEditingSpotId((current) => (current === spotId ? null : spotId))
+              }
+            />
 
             {originEntry && originEntry.driveMinutesBefore == null ? (
               <div className="px-4 pb-2">
