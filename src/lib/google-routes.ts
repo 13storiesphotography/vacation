@@ -3,6 +3,10 @@ import type { LatLng } from "@/lib/geo";
 export type GoogleRouteLeg = {
   km: number;
   minutes: number;
+  /** Traffic-unaware (static) drive time in minutes. Present when trafficAware=true. */
+  minutesStatic?: number;
+  /** Whether this leg used TRAFFIC_AWARE routing preference. */
+  trafficAware?: boolean;
 };
 
 export type GoogleRouteResult = {
@@ -39,6 +43,7 @@ type RoutesApiResponse = {
     legs?: Array<{
       distanceMeters?: number;
       duration?: string | number;
+      staticDuration?: string | number;
     }>;
   }>;
   error?: { message?: string; status?: string };
@@ -47,9 +52,14 @@ type RoutesApiResponse = {
 /**
  * Google Routes API (computeRoutes) — server-only.
  * Requires GOOGLE_MAPS_API_KEY with Routes API enabled.
+ *
+ * When departureTime is provided (ISO-8601 string), TRAFFIC_AWARE routing is
+ * used with a future-departure prediction. Without departureTime TRAFFIC_AWARE
+ * uses current live conditions. Both modes are shorter-cached (300 s).
  */
 export async function computeDrivingRoute(
   points: LatLng[],
+  departureTime?: string,
 ): Promise<GoogleRouteResult | null> {
   if (points.length < 2) return null;
   const apiKey = getServerMapsKey();
@@ -63,7 +73,7 @@ export async function computeDrivingRoute(
     },
   }));
 
-  const body = {
+  const body: Record<string, unknown> = {
     origin: {
       location: {
         latLng: { latitude: origin.lat, longitude: origin.lng },
@@ -76,10 +86,14 @@ export async function computeDrivingRoute(
     },
     intermediates: intermediates.length > 0 ? intermediates : undefined,
     travelMode: "DRIVE",
-    routingPreference: "TRAFFIC_UNAWARE",
+    routingPreference: "TRAFFIC_AWARE",
     languageCode: "de-DE",
     units: "METRIC",
   };
+
+  if (departureTime) {
+    body.departureTime = departureTime;
+  }
 
   try {
     const response = await fetch(
@@ -90,11 +104,11 @@ export async function computeDrivingRoute(
           "Content-Type": "application/json",
           "X-Goog-Api-Key": apiKey,
           "X-Goog-FieldMask":
-            "routes.distanceMeters,routes.duration,routes.polyline.encodedPolyline,routes.legs.distanceMeters,routes.legs.duration",
+            "routes.distanceMeters,routes.duration,routes.polyline.encodedPolyline,routes.legs.distanceMeters,routes.legs.duration,routes.legs.staticDuration",
         },
         body: JSON.stringify(body),
-        // Short TTL only — avoid long-lived caching of route metrics.
-        next: { revalidate: 900 },
+        // Traffic data is time-sensitive — keep TTL short.
+        next: { revalidate: 300 },
       },
     );
 
@@ -119,9 +133,12 @@ export async function computeDrivingRoute(
     const legs: GoogleRouteLeg[] = route.legs.map((leg) => {
       const meters = typeof leg.distanceMeters === "number" ? leg.distanceMeters : 0;
       const seconds = parseDurationSeconds(leg.duration) ?? 0;
+      const staticSeconds = parseDurationSeconds(leg.staticDuration);
       return {
         km: meters / 1000,
         minutes: Math.max(1, Math.round(seconds / 60)),
+        minutesStatic: staticSeconds != null ? Math.max(1, Math.round(staticSeconds / 60)) : undefined,
+        trafficAware: true,
       };
     });
 
@@ -157,10 +174,11 @@ const CHUNK_SIZE = 25; // origin + intermediates + destination
  */
 export async function computeDrivingRouteChunked(
   points: LatLng[],
+  departureTime?: string,
 ): Promise<GoogleRouteResult | null> {
   if (points.length < 2) return null;
   if (points.length <= CHUNK_SIZE) {
-    return computeDrivingRoute(points);
+    return computeDrivingRoute(points, departureTime);
   }
 
   const legs: GoogleRouteLeg[] = [];
@@ -169,7 +187,7 @@ export async function computeDrivingRouteChunked(
   while (cursor < points.length - 1) {
     const end = Math.min(cursor + CHUNK_SIZE - 1, points.length - 1);
     const chunk = points.slice(cursor, end + 1);
-    const result = await computeDrivingRoute(chunk);
+    const result = await computeDrivingRoute(chunk, departureTime);
     if (!result) return null;
     legs.push(...result.legs);
     if (result.encodedPolyline) polylines.push(result.encodedPolyline);

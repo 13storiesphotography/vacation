@@ -15,6 +15,8 @@ export function applyGoogleRouteToDayRoute(
     ...leg,
     km: google.legs[index].km,
     minutes: google.legs[index].minutes,
+    minutesStatic: google.legs[index].minutesStatic,
+    trafficAware: google.legs[index].trafficAware,
     source: "google" as RouteSource,
   }));
   return {
@@ -28,10 +30,13 @@ export function applyGoogleRouteToDayRoute(
   };
 }
 
-export async function enrichDayRoute(route: DayRoute): Promise<DayRoute> {
+export async function enrichDayRoute(
+  route: DayRoute,
+  departureTime?: string,
+): Promise<DayRoute> {
   if (route.waypoints.length < 2 || route.legs.length === 0) return route;
   const points = route.waypoints.map((point) => point.coords);
-  const google = await computeDrivingRouteChunked(points);
+  const google = await computeDrivingRouteChunked(points, departureTime);
   if (!google) return route;
   return applyGoogleRouteToDayRoute(route, google);
 }

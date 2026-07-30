@@ -27,6 +27,7 @@ import {
   normalizeClockTime,
   previousOvernightSpotId,
 } from "@/lib/day-timeline";
+import { computeDayHints, hasWarningHint } from "@/lib/plan-hints";
 import { syncAllSpotStays } from "@/lib/apply-stay";
 import { createClient } from "@/lib/supabase/client";
 import { CategoryIcon } from "@/components/category-icon";
@@ -253,10 +254,21 @@ export function DayPlanPanel({
         : null,
     [selected, spotsById, selectedIndex, morningOriginId],
   );
+
+  // Build an ISO departure datetime from the day's date + depart_at clock.
+  const departureDatetime = useMemo(() => {
+    if (!selected?.date || !selected.depart_at) return undefined;
+    const clock = selected.depart_at.replace(/^(\d{1,2}:\d{2}).*$/, "$1");
+    if (!/^\d{1,2}:\d{2}$/.test(clock)) return undefined;
+    const [h, m] = clock.split(":").map(Number);
+    if (h < 0 || h > 23 || m < 0 || m > 59) return undefined;
+    return `${selected.date}T${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:00`;
+  }, [selected?.date, selected?.depart_at]);
+
   const {
     route: selectedRoute,
     loading: routeEnriching,
-  } = useEnrichedDayRoute(selectedRouteEstimate);
+  } = useEnrichedDayRoute(selectedRouteEstimate, departureDatetime);
 
   const categoryBySpotId = useMemo(() => {
     const map = new Map<string, SpotCategory>();
@@ -289,6 +301,43 @@ export function DayPlanPanel({
   const originEntry = timeline.find((entry) => entry.role === "origin") ?? null;
   const overnightEntry =
     timeline.find((entry) => entry.role === "overnight") ?? null;
+
+  // Derived from vacation type — used both in render and in hints memos.
+  const needsOvernight =
+    vacation.type === "van" ||
+    vacation.type === "camping" ||
+    vacation.type === "hotel";
+
+  // Hints for the focused day (enriched route + full timeline).
+  const selectedHints = useMemo(
+    () =>
+      selected
+        ? computeDayHints({
+            day: selected,
+            route: selectedRoute,
+            timeline,
+            needsOvernight,
+          })
+        : [],
+    [selected, selectedRoute, timeline, needsOvernight],
+  );
+
+  // Per-day hint flags for chip badges (estimate routes, no timeline needed).
+  const dayHintWarnings = useMemo(() => {
+    const map = new Map<string, boolean>();
+    for (const dayRoute of tripRoutes.days) {
+      const day = days.find((d) => d.id === dayRoute.dayId);
+      if (!day) continue;
+      const hints = computeDayHints({
+        day,
+        route: dayRoute,
+        timeline: [],
+        needsOvernight,
+      });
+      map.set(day.id, hasWarningHint(hints));
+    }
+    return map;
+  }, [tripRoutes.days, days, needsOvernight]);
 
   function patchSelectedDay(
     updater: (day: DayPlanWithStops) => DayPlanWithStops,
@@ -390,10 +439,6 @@ export function DayPlanPanel({
   const overnight = selected?.overnight_spot_id
     ? spotsById.get(selected.overnight_spot_id)
     : null;
-  const needsOvernight =
-    vacation.type === "van" ||
-    vacation.type === "camping" ||
-    vacation.type === "hotel";
   return (
     <div className="mt-3 space-y-4">
       {error && (
@@ -435,6 +480,7 @@ export function DayPlanPanel({
           const active = day.id === selectedId;
           const hasStops = day.stops.length > 0;
           const hasNight = Boolean(day.overnight_spot_id);
+          const hasWarning = dayHintWarnings.get(day.id) ?? false;
           return (
             <button
               key={day.id}
@@ -444,7 +490,24 @@ export function DayPlanPanel({
               className="plan-day-chip"
               onClick={() => selectDay(day.id)}
             >
-              <span className="plan-day-chip-num">Tag {index + 1}</span>
+              <span className="plan-day-chip-num" style={{ position: "relative" }}>
+                Tag {index + 1}
+                {hasWarning && (
+                  <span
+                    aria-label="Warnung"
+                    style={{
+                      position: "absolute",
+                      top: -3,
+                      right: -6,
+                      width: 7,
+                      height: 7,
+                      borderRadius: "50%",
+                      background: "var(--danger)",
+                      display: "inline-block",
+                    }}
+                  />
+                )}
+              </span>
               <span className="plan-day-chip-date">{formatDayLabel(day.date)}</span>
               <span className="plan-day-chip-dots" aria-hidden>
                 <i data-on={hasStops} />
@@ -524,6 +587,33 @@ export function DayPlanPanel({
                 {pickerOpen ? "Schließen" : "+ Spot"}
               </button>
             </div>
+
+            {/* Plan hints banner */}
+            {selectedHints.length > 0 && (
+              <ul className="mx-3 mb-2 flex flex-col gap-1">
+                {selectedHints.map((hint) => (
+                  <li
+                    key={hint.id}
+                    className="flex items-start gap-2 rounded-[10px] px-3 py-2 text-[12px]"
+                    style={{
+                      background:
+                        hint.severity === "warning"
+                          ? "rgba(217,74,58,0.08)"
+                          : "var(--fjord-soft)",
+                      color:
+                        hint.severity === "warning"
+                          ? "var(--danger)"
+                          : "var(--fjord)",
+                    }}
+                  >
+                    <span aria-hidden style={{ flexShrink: 0 }}>
+                      {hint.severity === "warning" ? "⚠" : "ℹ"}
+                    </span>
+                    <span>{hint.message}</span>
+                  </li>
+                ))}
+              </ul>
+            )}
 
             <div className="mx-3 mb-3 flex flex-wrap items-end gap-3 rounded-[14px] bg-[var(--fjord-soft)]/35 px-3 py-2.5">
               <label className="form-label min-w-[7.5rem] flex-1">
@@ -676,6 +766,8 @@ export function DayPlanPanel({
                             km: entry.driveKmBefore ?? 0,
                             minutes: entry.driveMinutesBefore,
                             source: entry.driveSource ?? "estimate",
+                            minutesStatic: entry.driveMinutesStaticBefore ?? undefined,
+                            trafficAware: entry.driveTrafficAwareBefore ?? undefined,
                           })}
                           {entry.driveSource === "estimate" && routeEnriching
                             ? " · lädt…"
@@ -984,6 +1076,8 @@ export function DayPlanPanel({
                         km: overnightEntry.driveKmBefore ?? 0,
                         minutes: overnightEntry.driveMinutesBefore,
                         source: overnightEntry.driveSource ?? "estimate",
+                        minutesStatic: overnightEntry.driveMinutesStaticBefore ?? undefined,
+                        trafficAware: overnightEntry.driveTrafficAwareBefore ?? undefined,
                       })}
                     </p>
                   ) : null}
