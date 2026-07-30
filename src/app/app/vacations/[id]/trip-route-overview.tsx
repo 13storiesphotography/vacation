@@ -14,6 +14,7 @@ import {
   routeSourceHint,
   type DateRange,
 } from "@/lib/day-route";
+import type { VacationHome } from "@/lib/vacation-home";
 import DayRouteMap from "./day-route-map";
 import { useEnrichedDayRoute } from "./use-enriched-day-route";
 
@@ -45,12 +46,14 @@ export function TripRouteOverview({
   spotsById,
   vacationStart,
   vacationEnd,
+  home = null,
   onSelectDay,
 }: {
   days: DayPlanWithStops[];
   spotsById: Map<string, Spot>;
   vacationStart: string;
   vacationEnd: string;
+  home?: VacationHome | null;
   onSelectDay: (dayId: string) => void;
 }) {
   const today = todayIso();
@@ -81,8 +84,8 @@ export function TripRouteOverview({
   }, [preset, today, vacationStart, vacationEnd, customStart, customEnd]);
 
   const estimate = useMemo(
-    () => buildTripRoute(days, spotsById, range),
-    [days, spotsById, range],
+    () => buildTripRoute(days, spotsById, range, { home }),
+    [days, spotsById, range, home],
   );
   const { route, loading, source } = useEnrichedDayRoute(estimate);
   const directionsUrl = route ? googleMapsDirectionsUrl(route.waypoints) : null;

@@ -2,6 +2,7 @@ import type { Database } from "@/lib/database.types";
 import type { DayPlanWithStops } from "@/lib/day-plans";
 import { formatDayLabel } from "@/lib/day-plans";
 import { resolveSpotCoords, type LatLng } from "@/lib/geo";
+import { VACATION_HOME_ID, type VacationHome } from "@/lib/vacation-home";
 
 type Spot = Database["public"]["Tables"]["spots"]["Row"];
 
@@ -139,7 +140,7 @@ export function buildDayRoute(
   day: DayPlanWithStops,
   spotsById: Map<string, Spot>,
   dayIndex = 0,
-  options?: { originSpotId?: string | null },
+  options?: { originSpotId?: string | null; home?: VacationHome | null },
 ): DayRoute {
   const waypoints: RouteWaypoint[] = [];
   const skipped: DayRoute["skipped"] = [];
@@ -172,12 +173,30 @@ export function buildDayRoute(
     });
   }
 
+  function pushHome(role: RouteWaypoint["role"]) {
+    const home = options?.home;
+    if (!home?.includeInRoute) return;
+    if (seen.has(VACATION_HOME_ID)) return;
+    seen.add(VACATION_HOME_ID);
+    waypoints.push({
+      spotId: VACATION_HOME_ID,
+      name: home.label,
+      category: "ort",
+      coords: home.coords,
+      role,
+      order: waypoints.length + 1,
+    });
+  }
+
   const originId = options?.originSpotId ?? null;
   const orderedStops = [...day.stops].sort((a, b) => a.position - b.position);
   const firstStopId = orderedStops[0]?.spot_id ?? null;
 
   if (originId && originId !== firstStopId) {
     pushSpot(originId, "origin");
+  } else if (!originId) {
+    // Day 1 / no previous overnight → start from home when set.
+    pushHome("origin");
   }
 
   for (const stop of orderedStops) {
@@ -226,13 +245,21 @@ export function buildDayRoute(
 export function buildTripRoutes(
   days: DayPlanWithStops[],
   spotsById: Map<string, Spot>,
+  options?: { home?: VacationHome | null },
 ): {
   days: DayRoute[];
   totalKm: number;
   totalMinutes: number;
   daysWithRoute: number;
 } {
-  const routes = days.map((day, index) => buildDayRoute(day, spotsById, index));
+  const routes = days.map((day, index) => {
+    const originSpotId =
+      index > 0 ? days[index - 1]?.overnight_spot_id ?? null : null;
+    return buildDayRoute(day, spotsById, index, {
+      originSpotId,
+      home: index === 0 ? options?.home : null,
+    });
+  });
   const withLegs = routes.filter((route) => route.legs.length > 0);
   return {
     days: routes,
@@ -244,13 +271,14 @@ export function buildTripRoutes(
 
 /**
  * Continuous trip route across one or more days:
- * day stops → overnight → next day stops → …
+ * (optional home) → day stops → overnight → next day stops → … → (optional home)
  * Consecutive duplicates of the same spot are collapsed (e.g. overnight = next first stop).
  */
 export function buildTripRoute(
   days: DayPlanWithStops[],
   spotsById: Map<string, Spot>,
   range?: DateRange | null,
+  options?: { home?: VacationHome | null },
 ): DayRoute {
   const sorted = [...days].sort((a, b) => a.date.localeCompare(b.date));
   const selected = range
@@ -261,6 +289,32 @@ export function buildTripRoute(
 
   const waypoints: RouteWaypoint[] = [];
   const skipped: DayRoute["skipped"] = [];
+  const home = options?.home?.includeInRoute ? options.home : null;
+  const startsAtTripStart =
+    selected.length > 0 && sorted.length > 0 && selected[0].id === sorted[0].id;
+  const endsAtTripEnd =
+    selected.length > 0 &&
+    sorted.length > 0 &&
+    selected[selected.length - 1].id === sorted[sorted.length - 1].id;
+
+  function pushHome(role: RouteWaypoint["role"], day?: DayPlanWithStops) {
+    if (!home) return;
+    const last = waypoints[waypoints.length - 1];
+    if (last?.spotId === VACATION_HOME_ID) return;
+    const order = waypoints.length + 1;
+    waypoints.push({
+      spotId: VACATION_HOME_ID,
+      name: home.label,
+      category: "ort",
+      coords: home.coords,
+      role,
+      order,
+      dayId: day?.id,
+      dayDate: day?.date,
+      dayLabel: day ? formatDayLabel(day.date) : undefined,
+      occurrenceId: `${day?.id ?? "trip"}:${VACATION_HOME_ID}:${role}:${order}`,
+    });
+  }
 
   function pushSpot(
     day: DayPlanWithStops,
@@ -309,6 +363,10 @@ export function buildTripRoute(
     });
   }
 
+  if (home && startsAtTripStart) {
+    pushHome("origin", selected[0]);
+  }
+
   selected.forEach((day, index) => {
     const orderedStops = [...day.stops].sort((a, b) => a.position - b.position);
     for (const stop of orderedStops) {
@@ -318,6 +376,10 @@ export function buildTripRoute(
       pushSpot(day, index, day.overnight_spot_id, "overnight");
     }
   });
+
+  if (home && endsAtTripEnd && waypoints.length > 0) {
+    pushHome("origin", selected[selected.length - 1]);
+  }
 
   const legs: RouteLeg[] = [];
   for (let i = 0; i < waypoints.length - 1; i += 1) {

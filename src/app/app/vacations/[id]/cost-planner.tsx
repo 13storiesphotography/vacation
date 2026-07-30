@@ -8,6 +8,10 @@ import { buildTripRoute } from "@/lib/day-route";
 import { resolveStayNights, formatStaySummary } from "@/lib/stay";
 import { isOvernightCategory } from "@/lib/overnight";
 import {
+  resolveHomeCoordsFromMapsUrl,
+  vacationHomeFromRow,
+} from "@/lib/vacation-home";
+import {
   costCategoryLabels,
   costCategoryOptions,
   costItemTotal,
@@ -215,6 +219,30 @@ export function CostPlannerPanel({
   const [fuelPriceDraft, setFuelPriceDraft] = useState(() =>
     vacation.fuel_price_per_liter != null ? String(vacation.fuel_price_per_liter) : "1.75",
   );
+  const [homeLabelDraft, setHomeLabelDraft] = useState(
+    () => vacation.home_label ?? "Zuhause",
+  );
+  const [homeMapsDraft, setHomeMapsDraft] = useState(
+    () => vacation.home_maps_url ?? "",
+  );
+  const [includeHomeDraft, setIncludeHomeDraft] = useState(
+    () => vacation.include_home_in_route !== false,
+  );
+
+  useEffect(() => {
+    setHomeLabelDraft(vacation.home_label ?? "Zuhause");
+    setHomeMapsDraft(vacation.home_maps_url ?? "");
+    setIncludeHomeDraft(vacation.include_home_in_route !== false);
+    setBudgetDraft(vacation.budget_total != null ? String(vacation.budget_total) : "");
+    setFuelLDraft(
+      vacation.fuel_l_per_100km != null ? String(vacation.fuel_l_per_100km) : "9.5",
+    );
+    setFuelPriceDraft(
+      vacation.fuel_price_per_liter != null
+        ? String(vacation.fuel_price_per_liter)
+        : "1.75",
+    );
+  }, [vacation]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -260,11 +288,13 @@ export function CostPlannerPanel({
     [spots],
   );
 
+  const home = useMemo(() => vacationHomeFromRow(vacation), [vacation]);
+
   const tripKm = useMemo(() => {
     if (!days.length) return null;
-    const route = buildTripRoute(days, spotsById);
+    const route = buildTripRoute(days, spotsById, null, { home });
     return route.totalKm > 0 ? route.totalKm : null;
-  }, [days, spotsById]);
+  }, [days, spotsById, home]);
 
   const summary = useMemo(
     () =>
@@ -306,12 +336,26 @@ export function CostPlannerPanel({
     const budget = budgetDraft.trim() === "" ? null : Number(budgetDraft.replace(",", "."));
     const fuelL = Number(fuelLDraft.replace(",", "."));
     const fuelPrice = Number(fuelPriceDraft.replace(",", "."));
+    const mapsUrl = homeMapsDraft.trim();
+    const coords = mapsUrl ? resolveHomeCoordsFromMapsUrl(mapsUrl) : null;
+    if (mapsUrl && !coords) {
+      setSaving(false);
+      setError(
+        "Heimatadresse: Bitte einen Google-Maps-Link mit Koordinaten einfügen (teilen → Link kopieren).",
+      );
+      return;
+    }
     const patch = {
       budget_total:
         budget != null && Number.isFinite(budget) && budget >= 0 ? budget : null,
       fuel_l_per_100km: Number.isFinite(fuelL) && fuelL > 0 ? fuelL : 9.5,
       fuel_price_per_liter:
         Number.isFinite(fuelPrice) && fuelPrice > 0 ? fuelPrice : 1.75,
+      home_label: homeLabelDraft.trim() || (coords ? "Zuhause" : null),
+      home_maps_url: mapsUrl || null,
+      home_lat: coords?.lat ?? null,
+      home_lng: coords?.lng ?? null,
+      include_home_in_route: includeHomeDraft,
     };
     const { error: updateError } = await supabase
       .from("vacations")
@@ -323,7 +367,11 @@ export function CostPlannerPanel({
       return;
     }
     onVacationPatch(patch);
-    setMessage("Budget & Sprit gespeichert.");
+    setMessage(
+      coords
+        ? "Einstellungen gespeichert — Anreise/Rückfahrt fließen in die Sprit-Schätzung ein."
+        : "Budget & Sprit gespeichert.",
+    );
   }
 
   async function createItem(event: FormEvent) {
@@ -640,7 +688,9 @@ export function CostPlannerPanel({
                   </>
                 ) : (
                   <p className="mt-1 text-[13px] text-[var(--ink-soft)]">
-                    Noch keine Route mit Koordinaten im Plan.
+                    {home
+                      ? "Noch keine Route mit Koordinaten im Plan."
+                      : "Noch keine Route — Heimatadresse unten setzen und Spots im Plan verlinken."}
                   </p>
                 )}
               </div>
@@ -740,6 +790,56 @@ export function CostPlannerPanel({
                   />
                 </label>
               </div>
+
+              <p className="mt-5 text-[12px] font-semibold uppercase tracking-wide text-[var(--ink-faint)]">
+                Start / Zuhause
+              </p>
+              <p className="mt-1 text-[12px] text-[var(--ink-soft)]">
+                Für Anreise und Rückfahrt in Sprit- und Routenschätzung.
+              </p>
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                <label className="form-label">
+                  Bezeichnung
+                  <input
+                    className="glass-field mt-1.5 px-3 py-3"
+                    value={homeLabelDraft}
+                    onChange={(e) => setHomeLabelDraft(e.target.value)}
+                    placeholder="Zuhause"
+                  />
+                </label>
+                <label className="form-label sm:col-span-2">
+                  Google-Maps-Link
+                  <input
+                    className="glass-field mt-1.5 px-3 py-3"
+                    type="url"
+                    inputMode="url"
+                    autoComplete="off"
+                    value={homeMapsDraft}
+                    onChange={(e) => setHomeMapsDraft(e.target.value)}
+                    placeholder="https://maps.google.com/… oder maps.app.goo.gl/…"
+                  />
+                </label>
+              </div>
+              {home ? (
+                <p className="mt-2 text-[12px] text-[var(--pine)]">
+                  Gesetzt: {home.label} ({home.coords.lat.toFixed(4)},{" "}
+                  {home.coords.lng.toFixed(4)})
+                </p>
+              ) : homeMapsDraft.trim() ? (
+                <p className="mt-2 text-[12px] text-[var(--ink-faint)]">
+                  Link erkannt nach Speichern — Koordinaten müssen im Link stecken.
+                </p>
+              ) : null}
+              <label className="mt-3 flex items-center gap-3 text-[14px] font-semibold">
+                <input
+                  type="checkbox"
+                  className="h-4 w-4 accent-[var(--fjord)]"
+                  checked={includeHomeDraft}
+                  onChange={(e) => setIncludeHomeDraft(e.target.checked)}
+                />
+                Anreise & Rückfahrt einrechnen
+              </label>
+
               <button type="submit" className="cta mt-4 w-full sm:w-auto" disabled={saving}>
                 {saving ? "…" : "Speichern"}
               </button>

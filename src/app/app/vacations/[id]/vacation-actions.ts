@@ -2,6 +2,7 @@
 
 import { revalidatePath } from "next/cache";
 import { createClient } from "@/lib/supabase/server";
+import { extractCoordsFromMapsUrl, parseLatLngFromMapsUrl } from "@/lib/geo";
 
 export type VacationActionState = {
   error?: string;
@@ -43,12 +44,31 @@ export async function updateVacation(
   const description = String(formData.get("description") ?? "").trim();
   const startDate = String(formData.get("start_date") ?? "");
   const endDate = String(formData.get("end_date") ?? "");
+  const homeLabel = String(formData.get("home_label") ?? "").trim();
+  const homeMapsUrl = String(formData.get("home_maps_url") ?? "").trim();
+  const includeHome = formData.get("include_home_in_route") === "on";
 
   if (!title || !startDate || !endDate) {
     return { error: "Titel und Zeitraum sind Pflicht." };
   }
   if (endDate < startDate) {
     return { error: "Ende muss nach dem Start liegen." };
+  }
+
+  let homeLat: number | null = null;
+  let homeLng: number | null = null;
+  if (homeMapsUrl) {
+    const sync = parseLatLngFromMapsUrl(homeMapsUrl);
+    const extracted = sync ? null : await extractCoordsFromMapsUrl(homeMapsUrl);
+    const coords = sync ?? extracted?.coords ?? null;
+    if (!coords) {
+      return {
+        error:
+          "Heimatadresse: Keine Koordinaten im Maps-Link gefunden. Bitte „Link teilen“ aus Google Maps nutzen.",
+      };
+    }
+    homeLat = coords.lat;
+    homeLng = coords.lng;
   }
 
   const { error } = await supabase
@@ -60,6 +80,11 @@ export async function updateVacation(
       description: description || null,
       start_date: startDate,
       end_date: endDate,
+      home_label: homeLabel || (homeLat != null ? "Zuhause" : null),
+      home_maps_url: homeMapsUrl || null,
+      home_lat: homeLat,
+      home_lng: homeLng,
+      include_home_in_route: includeHome,
     })
     .eq("id", vacationId);
 

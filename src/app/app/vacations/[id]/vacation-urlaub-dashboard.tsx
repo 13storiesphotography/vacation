@@ -5,6 +5,7 @@ import type { Database } from "@/lib/database.types";
 import type { DayPlanWithStops } from "@/lib/day-plans";
 import type { FeaturedDashboard } from "@/lib/dashboard";
 import { VacationTripDashboard } from "@/components/dashboard/reise-dashboard";
+import { vacationHomeFromRow } from "@/lib/vacation-home";
 import { TripRouteOverview } from "./trip-route-overview";
 
 type Spot = Database["public"]["Tables"]["spots"]["Row"];
@@ -38,6 +39,7 @@ export function VacationUrlaubDashboard({
     () => new Map(spots.map((spot) => [spot.id, spot])),
     [spots],
   );
+  const home = useMemo(() => vacationHomeFromRow(vacation), [vacation]);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -122,6 +124,7 @@ export function VacationUrlaubDashboard({
           spotsById={spotsById}
           vacationStart={vacation.start_date}
           vacationEnd={vacation.end_date}
+          home={home}
           onSelectDay={() => onOpenTab("plan")}
         />
       ) : null}

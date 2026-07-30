@@ -33,6 +33,7 @@ import { createClient } from "@/lib/supabase/client";
 import { CategoryIcon } from "@/components/category-icon";
 import { GlassTimeField } from "@/components/ui/glass-time-field";
 import { formatStaySummary, stayStatusLabels } from "@/lib/stay";
+import { vacationHomeFromRow } from "@/lib/vacation-home";
 import { useEnrichedDayRoute } from "./use-enriched-day-route";
 import { TripRouteOverview } from "./trip-route-overview";
 import { EditSpotForm } from "./spot-ui";
@@ -96,6 +97,8 @@ export function DayPlanPanel({
     return map;
   }, [spots]);
 
+  const home = useMemo(() => vacationHomeFromRow(vacation), [vacation]);
+
   const assignedSpotIds = useMemo(() => {
     const ids = new Set<string>();
     for (const day of days) {
@@ -114,8 +117,8 @@ export function DayPlanPanel({
   );
 
   const tripRoutes = useMemo(
-    () => buildTripRoutes(days, spotsById),
-    [days, spotsById],
+    () => buildTripRoutes(days, spotsById, { home }),
+    [days, spotsById, home],
   );
 
   async function reload(preferId?: string | null) {
@@ -250,9 +253,10 @@ export function DayPlanPanel({
       selected
         ? buildDayRoute(selected, spotsById, selectedIndex, {
             originSpotId: morningOriginId,
+            home: morningOriginId ? null : home,
           })
         : null,
-    [selected, spotsById, selectedIndex, morningOriginId],
+    [selected, spotsById, selectedIndex, morningOriginId, home],
   );
 
   // Build an ISO departure datetime from the day's date + depart_at clock.
@@ -468,6 +472,7 @@ export function DayPlanPanel({
         spotsById={spotsById}
         vacationStart={vacation.start_date}
         vacationEnd={vacation.end_date}
+        home={home}
         onSelectDay={selectDay}
       />
 
