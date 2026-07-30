@@ -1554,6 +1554,16 @@ textarea {
   transform-origin: top center;
 }
 
+/* Portaled above clipped parents (e.g. .ios-group overflow:hidden). */
+.glass-time-popover-portal {
+  position: fixed;
+  z-index: 80;
+  top: auto;
+  left: auto;
+  width: min(100vw - 2rem, 17.5rem);
+  max-width: calc(100vw - 2rem);
+}
+
 .glass-time-wheels {
   position: relative;
   display: grid;
