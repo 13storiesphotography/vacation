@@ -4,20 +4,22 @@ import Link from "next/link";
 import { useParams, useRouter } from "next/navigation";
 import { useEffect, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
+import { roleLabel, type MemberRole } from "@/lib/permissions";
 
 type InvitePreview = {
   vacation_id: string;
   vacation_title: string;
   email: string;
-  role: "viewer" | "editor" | "admin";
+  role: MemberRole;
   status: "invited" | "active";
   invite_expires_at: string | null;
 };
 
-const ROLE_COPY: Record<InvitePreview["role"], string> = {
+const ROLE_COPY: Record<MemberRole, string> = {
   viewer: "Kann alles ansehen, aber nichts ändern.",
   editor: "Kann Spots und Planung bearbeiten.",
   admin: "Kann Team und Urlaub verwalten.",
+  custom: "Individuelle Rechte für diesen Urlaub.",
 };
 
 export default function InvitePage() {
@@ -35,7 +37,9 @@ export default function InvitePage() {
     const supabase = createClient();
 
     Promise.all([
-      fetch(`/api/invite/preview?token=${encodeURIComponent(token)}`).then((response) => response.json()),
+      fetch(`/api/invite/preview?token=${encodeURIComponent(token)}`).then((response) =>
+        response.json(),
+      ),
       supabase.auth.getUser(),
     ]).then(([previewPayload, { data: authPayload }]) => {
       if (cancelled) return;
@@ -56,10 +60,6 @@ export default function InvitePage() {
   }, [token]);
 
   const nextPath = `/invite/${token}`;
-  const loginParams = new URLSearchParams({ next: nextPath });
-  if (invite?.email) loginParams.set("email", invite.email);
-  const loginHref = `/login?${loginParams.toString()}`;
-
   const signupParams = new URLSearchParams({ next: nextPath });
   if (invite?.email) signupParams.set("email", invite.email);
   const signupHref = `/signup?${signupParams.toString()}`;
@@ -95,30 +95,31 @@ export default function InvitePage() {
         {invite ? (
           <>
             <p className="mt-3 text-[15px] leading-relaxed text-[var(--ink-soft)]">
-              Du wurdest für <span className="font-semibold text-[var(--ink)]">{invite.vacation_title}</span>{" "}
+              Du wurdest für{" "}
+              <span className="font-semibold text-[var(--ink)]">{invite.vacation_title}</span>{" "}
               eingeladen.
             </p>
             <div className="glass-subpanel mt-4 p-4">
               <p className="text-[14px] font-semibold">{invite.email}</p>
               <p className="mt-1 text-[13px] text-[var(--ink-soft)]">
-                Rolle: <span className="font-semibold capitalize text-[var(--ink)]">{invite.role}</span>
+                Rolle:{" "}
+                <span className="font-semibold text-[var(--ink)]">{roleLabel(invite.role)}</span>
               </p>
-              <p className="mt-1 text-[13px] text-[var(--ink-soft)]">{ROLE_COPY[invite.role]}</p>
+              <p className="mt-1 text-[13px] text-[var(--ink-soft)]">
+                {ROLE_COPY[invite.role] ?? ROLE_COPY.custom}
+              </p>
             </div>
 
             {!viewerEmail ? (
               <div className="mt-5 space-y-3">
                 <p className="text-[14px] text-[var(--ink-soft)]">
-                  Melde dich mit der eingeladenen E-Mail-Adresse an oder registriere dich neu.
+                  Erstelle ein Konto mit{" "}
+                  <span className="font-semibold text-[var(--ink)]">{invite.email}</span>, um
+                  beizutreten.
                 </p>
-                <div className="flex flex-col gap-3 sm:flex-row">
-                  <Link href={loginHref} className="cta flex-1 text-center">
-                    Anmelden
-                  </Link>
-                  <Link href={signupHref} className="cta cta-secondary flex-1 text-center">
-                    Registrieren
-                  </Link>
-                </div>
+                <Link href={signupHref} className="cta block w-full text-center">
+                  Registrieren
+                </Link>
               </div>
             ) : viewerEmail !== invite.email ? (
               <div className="mt-5 rounded-[16px] bg-[var(--danger)]/8 p-4 text-[14px] text-[var(--danger)]">
@@ -127,7 +128,12 @@ export default function InvitePage() {
               </div>
             ) : (
               <div className="mt-5">
-                <button type="button" className="cta w-full" disabled={accepting} onClick={acceptInvite}>
+                <button
+                  type="button"
+                  className="cta w-full"
+                  disabled={accepting}
+                  onClick={acceptInvite}
+                >
                   {accepting ? "…" : "Einladung annehmen"}
                 </button>
               </div>

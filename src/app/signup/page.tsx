@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { FormEvent, Suspense, useMemo, useState } from "react";
+import { FormEvent, Suspense, useState } from "react";
 import { createClient } from "@/lib/supabase/client";
 
 function SignupForm() {
@@ -15,11 +15,6 @@ function SignupForm() {
   const [password, setPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
-
-  const loginHref = useMemo(() => {
-    const params = new URLSearchParams(email ? { next, email } : { next });
-    return `/login?${params.toString()}`;
-  }, [email, next]);
 
   async function onSubmit(event: FormEvent) {
     event.preventDefault();
@@ -104,12 +99,6 @@ function SignupForm() {
       <button type="submit" className="cta mt-6 w-full" disabled={loading}>
         {loading ? "…" : "Registrieren"}
       </button>
-      <p className="mt-4 text-center text-[13px] text-[var(--ink-soft)]">
-        Schon registriert?{" "}
-        <Link href={loginHref} className="font-semibold text-[var(--fjord)]">
-          Anmelden
-        </Link>
-      </p>
     </form>
   );
 }
