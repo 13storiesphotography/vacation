@@ -221,7 +221,7 @@ export function SpotMap({
                   aria-label={
                     selected.maps_url
                       ? "Karte öffnen"
-                      : isAirbnbUrl(selected.info_url)
+                      : selected.info_url && isAirbnbUrl(selected.info_url)
                         ? "Airbnb öffnen"
                         : "Seite öffnen"
                   }
