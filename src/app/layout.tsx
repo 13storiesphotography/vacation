@@ -11,7 +11,7 @@ const sans = Plus_Jakarta_Sans({
 export const metadata: Metadata = {
   title: "Vacation Planer",
   description:
-    "Gemeinsam Urlaub planen: Spots sammeln, Karte, Tagesplan und Team — mit Login und MFA.",
+    "Gemeinsam Urlaub planen: Spots, Karte, Tagesplan, Kosten und Team — mit Einladung, Rollen und MFA.",
   applicationName: "Vacation Planer",
   appleWebApp: {
     capable: true,
