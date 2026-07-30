@@ -1,6 +1,6 @@
 "use client";
 
-import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import { FormEvent, Fragment, useCallback, useEffect, useMemo, useState, type Dispatch, type SetStateAction } from "react";
 import { createClient } from "@/lib/supabase/client";
 import type { Database } from "@/lib/database.types";
 import type { DayPlanWithStops } from "@/lib/day-plans";
@@ -45,6 +45,146 @@ const emptyDraft = (): DraftItem => ({
   notes: "",
 });
 
+function draftFromItem(item: CostItem): DraftItem {
+  return {
+    title: item.title,
+    category: item.category as CostCategory,
+    amount: String(item.amount),
+    quantity: String(item.quantity),
+    unit: item.unit ?? "",
+    status: item.status as CostStatus,
+    notes: item.notes ?? "",
+  };
+}
+
+function parseDraftAmounts(draft: DraftItem): {
+  title: string;
+  amount: number;
+  quantity: number;
+  error?: string;
+} {
+  const title = draft.title.trim();
+  if (!title) return { title: "", amount: 0, quantity: 0, error: "Bitte einen Titel eingeben." };
+  const amount = Number(draft.amount.replace(",", "."));
+  const quantity = Number(draft.quantity.replace(",", ".") || "1");
+  if (!Number.isFinite(amount) || amount < 0) {
+    return { title, amount: 0, quantity: 0, error: "Betrag ungültig." };
+  }
+  if (!Number.isFinite(quantity) || quantity <= 0) {
+    return { title, amount: 0, quantity: 0, error: "Menge ungültig." };
+  }
+  return { title, amount, quantity };
+}
+
+function CostDraftFields({
+  draft,
+  setDraft,
+}: {
+  draft: DraftItem;
+  setDraft: Dispatch<SetStateAction<DraftItem>>;
+}) {
+  return (
+    <>
+      <label className="form-label">
+        Titel
+        <input
+          className="glass-field mt-1.5 px-3 py-3"
+          required
+          value={draft.title}
+          onChange={(e) => setDraft((prev) => ({ ...prev, title: e.target.value }))}
+          placeholder="Campingstuhl, Öresundbrücke, Airbnb Stockholm…"
+        />
+      </label>
+      <div className="grid gap-3 sm:grid-cols-2">
+        <label className="form-label">
+          Kategorie
+          <select
+            className="glass-field mt-1.5 px-3 py-3"
+            value={draft.category}
+            onChange={(e) =>
+              setDraft((prev) => ({
+                ...prev,
+                category: e.target.value as CostCategory,
+                unit:
+                  e.target.value === "uebernachtung"
+                    ? "Nacht"
+                    : e.target.value === "anschaffung"
+                      ? "Stück"
+                      : prev.unit,
+              }))
+            }
+          >
+            {costCategoryOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
+        <label className="form-label">
+          Status
+          <select
+            className="glass-field mt-1.5 px-3 py-3"
+            value={draft.status}
+            onChange={(e) =>
+              setDraft((prev) => ({
+                ...prev,
+                status: e.target.value as CostStatus,
+              }))
+            }
+          >
+            {costStatusOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </label>
+      </div>
+      <div className="grid grid-cols-3 gap-3">
+        <label className="form-label">
+          Betrag
+          <input
+            className="glass-field mt-1.5 px-3 py-3"
+            inputMode="decimal"
+            required
+            value={draft.amount}
+            onChange={(e) => setDraft((prev) => ({ ...prev, amount: e.target.value }))}
+            placeholder="0"
+          />
+        </label>
+        <label className="form-label">
+          Menge
+          <input
+            className="glass-field mt-1.5 px-3 py-3"
+            inputMode="decimal"
+            value={draft.quantity}
+            onChange={(e) => setDraft((prev) => ({ ...prev, quantity: e.target.value }))}
+          />
+        </label>
+        <label className="form-label">
+          Einheit
+          <input
+            className="glass-field mt-1.5 px-3 py-3"
+            value={draft.unit}
+            onChange={(e) => setDraft((prev) => ({ ...prev, unit: e.target.value }))}
+            placeholder="Stück"
+          />
+        </label>
+      </div>
+      <label className="form-label">
+        Notiz
+        <input
+          className="glass-field mt-1.5 px-3 py-3"
+          value={draft.notes}
+          onChange={(e) => setDraft((prev) => ({ ...prev, notes: e.target.value }))}
+          placeholder="optional"
+        />
+      </label>
+    </>
+  );
+}
+
 export function CostPlannerPanel({
   vacation,
   spots,
@@ -63,6 +203,7 @@ export function CostPlannerPanel({
   const [error, setError] = useState<string | null>(null);
   const [message, setMessage] = useState<string | null>(null);
   const [showForm, setShowForm] = useState(false);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [draft, setDraft] = useState<DraftItem>(emptyDraft);
   const [filter, setFilter] = useState<"all" | CostCategory | "anschaffung">("all");
   const [budgetDraft, setBudgetDraft] = useState(() =>
@@ -188,19 +329,9 @@ export function CostPlannerPanel({
   async function createItem(event: FormEvent) {
     event.preventDefault();
     if (!canEdit) return;
-    const title = draft.title.trim();
-    if (!title) {
-      setError("Bitte einen Titel eingeben.");
-      return;
-    }
-    const amount = Number(draft.amount.replace(",", "."));
-    const quantity = Number(draft.quantity.replace(",", ".") || "1");
-    if (!Number.isFinite(amount) || amount < 0) {
-      setError("Betrag ungültig.");
-      return;
-    }
-    if (!Number.isFinite(quantity) || quantity <= 0) {
-      setError("Menge ungültig.");
+    const parsed = parseDraftAmounts(draft);
+    if (parsed.error) {
+      setError(parsed.error);
       return;
     }
 
@@ -213,10 +344,10 @@ export function CostPlannerPanel({
     } = await supabase.auth.getUser();
     const { error: insertError } = await supabase.from("cost_items").insert({
       vacation_id: vacation.id,
-      title,
+      title: parsed.title,
       category: draft.category,
-      amount,
-      quantity,
+      amount: parsed.amount,
+      quantity: parsed.quantity,
       unit: draft.unit.trim() || null,
       status: draft.status,
       notes: draft.notes.trim() || null,
@@ -231,6 +362,66 @@ export function CostPlannerPanel({
     setShowForm(false);
     setMessage("Position hinzugefügt.");
     await load();
+  }
+
+  async function saveEditedItem(event: FormEvent) {
+    event.preventDefault();
+    if (!canEdit || !editingId) return;
+    const parsed = parseDraftAmounts(draft);
+    if (parsed.error) {
+      setError(parsed.error);
+      return;
+    }
+
+    setSaving(true);
+    setError(null);
+    setMessage(null);
+    const supabase = createClient();
+    const patch = {
+      title: parsed.title,
+      category: draft.category,
+      amount: parsed.amount,
+      quantity: parsed.quantity,
+      unit: draft.unit.trim() || null,
+      status: draft.status,
+      notes: draft.notes.trim() || null,
+      updated_at: new Date().toISOString(),
+    };
+    const { error: updateError } = await supabase
+      .from("cost_items")
+      .update(patch)
+      .eq("id", editingId);
+    setSaving(false);
+    if (updateError) {
+      setError(updateError.message);
+      return;
+    }
+    setItems((prev) =>
+      prev.map((row) =>
+        row.id === editingId
+          ? {
+              ...row,
+              ...patch,
+            }
+          : row,
+      ),
+    );
+    setEditingId(null);
+    setDraft(emptyDraft());
+    setMessage("Position aktualisiert.");
+  }
+
+  function startEdit(item: CostItem) {
+    setShowForm(false);
+    setEditingId(item.id);
+    setDraft(draftFromItem(item));
+    setError(null);
+    setMessage(null);
+  }
+
+  function cancelEdit() {
+    setEditingId(null);
+    setDraft(emptyDraft());
   }
 
   async function updateItemStatus(item: CostItem, status: CostStatus) {
@@ -565,6 +756,7 @@ export function CostPlannerPanel({
                   type="button"
                   className="glass-chip"
                   onClick={() => {
+                    setEditingId(null);
                     setShowForm((open) => !open);
                     setDraft(emptyDraft());
                   }}
@@ -609,110 +801,7 @@ export function CostPlannerPanel({
 
             {showForm && canEdit ? (
               <form onSubmit={createItem} className="glass-subpanel mt-4 space-y-3 p-3">
-                <label className="form-label">
-                  Titel
-                  <input
-                    className="glass-field mt-1.5 px-3 py-3"
-                    required
-                    value={draft.title}
-                    onChange={(e) => setDraft((prev) => ({ ...prev, title: e.target.value }))}
-                    placeholder="Campingstuhl, Öresundbrücke, Airbnb Stockholm…"
-                  />
-                </label>
-                <div className="grid gap-3 sm:grid-cols-2">
-                  <label className="form-label">
-                    Kategorie
-                    <select
-                      className="glass-field mt-1.5 px-3 py-3"
-                      value={draft.category}
-                      onChange={(e) =>
-                        setDraft((prev) => ({
-                          ...prev,
-                          category: e.target.value as CostCategory,
-                          unit:
-                            e.target.value === "uebernachtung"
-                              ? "Nacht"
-                              : e.target.value === "anschaffung"
-                                ? "Stück"
-                                : prev.unit,
-                        }))
-                      }
-                    >
-                      {costCategoryOptions.map((option) => (
-                        <option key={option.value} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                  <label className="form-label">
-                    Status
-                    <select
-                      className="glass-field mt-1.5 px-3 py-3"
-                      value={draft.status}
-                      onChange={(e) =>
-                        setDraft((prev) => ({
-                          ...prev,
-                          status: e.target.value as CostStatus,
-                        }))
-                      }
-                    >
-                      {costStatusOptions.map((option) => (
-                        <option key={option.value} value={option.value}>
-                          {option.label}
-                        </option>
-                      ))}
-                    </select>
-                  </label>
-                </div>
-                <div className="grid grid-cols-3 gap-3">
-                  <label className="form-label">
-                    Betrag
-                    <input
-                      className="glass-field mt-1.5 px-3 py-3"
-                      inputMode="decimal"
-                      required
-                      value={draft.amount}
-                      onChange={(e) =>
-                        setDraft((prev) => ({ ...prev, amount: e.target.value }))
-                      }
-                      placeholder="0"
-                    />
-                  </label>
-                  <label className="form-label">
-                    Menge
-                    <input
-                      className="glass-field mt-1.5 px-3 py-3"
-                      inputMode="decimal"
-                      value={draft.quantity}
-                      onChange={(e) =>
-                        setDraft((prev) => ({ ...prev, quantity: e.target.value }))
-                      }
-                    />
-                  </label>
-                  <label className="form-label">
-                    Einheit
-                    <input
-                      className="glass-field mt-1.5 px-3 py-3"
-                      value={draft.unit}
-                      onChange={(e) =>
-                        setDraft((prev) => ({ ...prev, unit: e.target.value }))
-                      }
-                      placeholder="Stück"
-                    />
-                  </label>
-                </div>
-                <label className="form-label">
-                  Notiz
-                  <input
-                    className="glass-field mt-1.5 px-3 py-3"
-                    value={draft.notes}
-                    onChange={(e) =>
-                      setDraft((prev) => ({ ...prev, notes: e.target.value }))
-                    }
-                    placeholder="optional"
-                  />
-                </label>
+                <CostDraftFields draft={draft} setDraft={setDraft} />
                 <button type="submit" className="cta w-full" disabled={saving}>
                   {saving ? "…" : "Position speichern"}
                 </button>
@@ -741,58 +830,107 @@ export function CostPlannerPanel({
                       </td>
                     </tr>
                   ) : (
-                    visibleItems.map((item) => (
-                      <tr key={item.id} className="border-b border-black/5 align-top">
-                        <td className="py-3 pr-2">
-                          <p className="font-semibold">{item.title}</p>
-                          <p className="text-[12px] text-[var(--ink-soft)]">
-                            {formatMoneyExact(Number(item.amount), currency)}
-                            {Number(item.quantity) !== 1
-                              ? ` × ${item.quantity}${item.unit ? ` ${item.unit}` : ""}`
-                              : item.unit
-                                ? ` / ${item.unit}`
-                                : ""}
-                            {item.notes ? ` · ${item.notes}` : ""}
-                          </p>
-                        </td>
-                        <td className="py-3 pr-2 text-[var(--ink-soft)]">
-                          {costCategoryLabels[item.category as CostCategory] ?? item.category}
-                        </td>
-                        <td className="py-3 pr-2">
-                          {canEdit ? (
-                            <select
-                              className="glass-field px-2 py-1.5 text-[12px]"
-                              value={item.status}
-                              onChange={(e) =>
-                                void updateItemStatus(item, e.target.value as CostStatus)
-                              }
-                            >
-                              {costStatusOptions.map((option) => (
-                                <option key={option.value} value={option.value}>
-                                  {option.label}
-                                </option>
-                              ))}
-                            </select>
-                          ) : (
-                            costStatusLabels[item.status as CostStatus] ?? item.status
-                          )}
-                        </td>
-                        <td className="py-3 pr-2 text-right font-semibold tabular-nums">
-                          {formatMoney(costItemTotal(item), currency)}
-                        </td>
-                        {canEdit ? (
-                          <td className="py-3 text-right">
-                            <button
-                              type="button"
-                              className="glass-chip glass-chip-danger"
-                              onClick={() => void deleteItem(item)}
-                            >
-                              Löschen
-                            </button>
-                          </td>
-                        ) : null}
-                      </tr>
-                    ))
+                    visibleItems.map((item) => {
+                      const isEditing = editingId === item.id;
+                      return (
+                        <Fragment key={item.id}>
+                          <tr className="border-b border-black/5 align-middle">
+                            <td className="py-2.5 pr-2">
+                              <p className="font-semibold">{item.title}</p>
+                              <p className="text-[12px] text-[var(--ink-soft)]">
+                                {formatMoneyExact(Number(item.amount), currency)}
+                                {Number(item.quantity) !== 1
+                                  ? ` × ${item.quantity}${item.unit ? ` ${item.unit}` : ""}`
+                                  : item.unit
+                                    ? ` / ${item.unit}`
+                                    : ""}
+                                {item.notes ? ` · ${item.notes}` : ""}
+                              </p>
+                            </td>
+                            <td className="py-2.5 pr-2 text-[var(--ink-soft)]">
+                              {costCategoryLabels[item.category as CostCategory] ?? item.category}
+                            </td>
+                            <td className="py-2.5 pr-2">
+                              {canEdit && !isEditing ? (
+                                <select
+                                  className="cost-status-select"
+                                  value={item.status}
+                                  aria-label={`Status für ${item.title}`}
+                                  onChange={(e) =>
+                                    void updateItemStatus(item, e.target.value as CostStatus)
+                                  }
+                                >
+                                  {costStatusOptions.map((option) => (
+                                    <option key={option.value} value={option.value}>
+                                      {option.label}
+                                    </option>
+                                  ))}
+                                </select>
+                              ) : (
+                                costStatusLabels[item.status as CostStatus] ?? item.status
+                              )}
+                            </td>
+                            <td className="py-2.5 pr-2 text-right font-semibold tabular-nums">
+                              {formatMoney(costItemTotal(item), currency)}
+                            </td>
+                            {canEdit ? (
+                              <td className="py-2.5 text-right">
+                                <div className="flex flex-wrap items-center justify-end gap-1.5">
+                                  <button
+                                    type="button"
+                                    className="glass-chip !px-2.5 !py-1 !text-[12px]"
+                                    data-active={isEditing ? "true" : undefined}
+                                    onClick={() =>
+                                      isEditing ? cancelEdit() : startEdit(item)
+                                    }
+                                  >
+                                    {isEditing ? "Schließen" : "Bearbeiten"}
+                                  </button>
+                                  <button
+                                    type="button"
+                                    className="glass-chip glass-chip-danger !px-2.5 !py-1 !text-[12px]"
+                                    onClick={() => void deleteItem(item)}
+                                  >
+                                    Löschen
+                                  </button>
+                                </div>
+                              </td>
+                            ) : null}
+                          </tr>
+                          {isEditing ? (
+                            <tr className="border-b border-black/5">
+                              <td colSpan={canEdit ? 5 : 4} className="pb-3 pt-1">
+                                <form
+                                  onSubmit={saveEditedItem}
+                                  className="glass-subpanel space-y-3 p-3"
+                                >
+                                  <p className="text-[12px] font-semibold uppercase tracking-wide text-[var(--ink-faint)]">
+                                    Position bearbeiten
+                                  </p>
+                                  <CostDraftFields draft={draft} setDraft={setDraft} />
+                                  <div className="flex gap-2">
+                                    <button
+                                      type="button"
+                                      className="cta cta-secondary flex-1"
+                                      onClick={cancelEdit}
+                                    >
+                                      Abbrechen
+                                    </button>
+                                    <button
+                                      type="submit"
+                                      className="cta flex-1"
+                                      disabled={saving}
+                                    >
+                                      {saving ? "…" : "Speichern"}
+                                    </button>
+                                  </div>
+                                </form>
+                              </td>
+                            </tr>
+                          ) : null}
+                        </Fragment>
+                      );
+                    })
                   )}
                 </tbody>
               </table>
