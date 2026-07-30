@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { FormEvent, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import type { Database } from "@/lib/database.types";
@@ -20,26 +20,13 @@ import { VacationTabPanel } from "@/components/app/vacation-tab-panel";
 import { DayPlanPanel } from "./day-plan-ui";
 import { VacationUrlaubDashboard } from "./vacation-urlaub-dashboard";
 import { CostPlannerPanel } from "./cost-planner";
-import { isCompleteEmail } from "@/lib/email";
+import { TeamPanel } from "./team-panel";
 import { isStaleServerActionError } from "@/lib/stale-action";
-import { copyTextToClipboard, friendlyClipboardError } from "@/lib/clipboard";
 
 type Vacation = Database["public"]["Tables"]["vacations"]["Row"];
 type Member = Database["public"]["Tables"]["vacation_members"]["Row"];
 type Spot = Database["public"]["Tables"]["spots"]["Row"];
 type Profile = Database["public"]["Tables"]["profiles"]["Row"];
-type MemberRole = Member["role"];
-
-const ROLE_OPTIONS: Array<{
-  value: MemberRole;
-  label: string;
-  description: string;
-}> = [
-  { value: "viewer", label: "Viewer", description: "Nur ansehen" },
-  { value: "editor", label: "Editor", description: "Plan & Spots bearbeiten" },
-  { value: "admin", label: "Admin", description: "Team & Urlaub verwalten" },
-];
-
 function readInitialTab(): VacationTabId {
   if (typeof window === "undefined") return "spots";
   const value = new URLSearchParams(window.location.search).get("tab");
@@ -66,19 +53,11 @@ export default function VacationDetailPage() {
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
   const [currentUserEmail, setCurrentUserEmail] = useState<string | null>(null);
-  const [inviteEmail, setInviteEmail] = useState("");
-  const [inviteRole, setInviteRole] = useState<MemberRole>("editor");
-  const [inviteLink, setInviteLink] = useState<string | null>(null);
-  const inviteLinkInputRef = useRef<HTMLInputElement | null>(null);
-  const [message, setMessage] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
-  const [inviting, setInviting] = useState(false);
-  const [memberBusyId, setMemberBusyId] = useState<string | null>(null);
   const [showSpotForm, setShowSpotForm] = useState(false);
   const [spotFormKey, setSpotFormKey] = useState(0);
   const [editingVacation, setEditingVacation] = useState(false);
-  const [showInvite, setShowInvite] = useState(false);
   const [tab, setTab] = useState<VacationTabId>(() => readInitialTab());
   const [visitedTabs, setVisitedTabs] = useState<ReadonlySet<VacationTabId>>(
     () => {
@@ -169,19 +148,6 @@ export default function VacationDetailPage() {
   useEffect(() => {
     void Promise.resolve().then(load);
   }, [load]);
-
-  const origin = useSyncExternalStore(
-    () => () => {},
-    () => window.location.origin,
-    () => "",
-  );
-
-  useEffect(() => {
-    if (!inviteLink || !inviteLinkInputRef.current) return;
-    const input = inviteLinkInputRef.current;
-    input.focus({ preventScroll: true });
-    input.select();
-  }, [inviteLink]);
 
   useEffect(() => {
     let cancelled = false;
@@ -279,16 +245,6 @@ export default function VacationDetailPage() {
       });
   }, [members, profiles]);
 
-  const canEditVacation = useMemo(() => {
-    if (!currentUserId) return false;
-    return members.some(
-      (member) =>
-        member.user_id === currentUserId &&
-        member.status === "active" &&
-        member.role === "admin",
-    );
-  }, [currentUserId, members]);
-
   const currentMember = useMemo(
     () =>
       members.find((member) => member.user_id && member.user_id === currentUserId) ??
@@ -297,200 +253,16 @@ export default function VacationDetailPage() {
     [currentUserEmail, currentUserId, members],
   );
 
-  const canEditTrip = Boolean(
-    currentMember &&
-      currentMember.status === "active" &&
-      (currentMember.role === "admin" || currentMember.role === "editor"),
+  const activeMember = Boolean(currentMember && currentMember.status === "active");
+  const canManageTeam = Boolean(activeMember && currentMember?.can_manage_team);
+  const canEditVacation = Boolean(activeMember && currentMember?.can_edit_vacation);
+  const canEditSpots = Boolean(activeMember && currentMember?.can_edit_spots);
+  const canEditCosts = Boolean(
+    activeMember &&
+      (currentMember?.can_edit_vacation ||
+        currentMember?.can_edit_spots ||
+        currentMember?.can_edit_plan),
   );
-
-  async function onInvite(event: FormEvent) {
-    event.preventDefault();
-    setError(null);
-    setMessage(null);
-    setInviteLink(null);
-
-    if (!isCompleteEmail(inviteEmail)) {
-      setError("Bitte gib eine vollständige E-Mail-Adresse ein (z. B. name@domain.de).");
-      return;
-    }
-
-    setInviting(true);
-    try {
-      const response = await fetch("/api/invite", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          vacationId,
-          email: inviteEmail.trim().toLowerCase(),
-          role: inviteRole,
-        }),
-      });
-      const payload = (await response.json()) as {
-        error?: string;
-        note?: string;
-        inviteLink?: string;
-      };
-      if (!response.ok) {
-        setError(payload.error ?? "Einladung fehlgeschlagen");
-        return;
-      }
-      setMessage(payload.note ?? "Einladung gesendet.");
-      setInviteLink(payload.inviteLink ?? null);
-
-      setInviteEmail("");
-      await load();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Einladung fehlgeschlagen");
-    } finally {
-      setInviting(false);
-    }
-  }
-
-  function memberInviteLink(member: Member): string | null {
-    const token = member.invite_token?.trim();
-    if (!token || member.status !== "invited" || !origin) return null;
-    return `${origin}/invite/${token}`;
-  }
-
-  async function finishInviteLinkCopy(link: string, note?: string) {
-    setInviteLink(link);
-    setError(null);
-    try {
-      const result = await copyTextToClipboard(link);
-      if (result === "copied") {
-        setMessage(note ? `${note} Link wurde kopiert.` : "Einladungslink kopiert.");
-        return;
-      }
-      if (result === "shared") {
-        setMessage(note ? `${note} Link wurde geteilt.` : "Einladungslink geteilt.");
-        return;
-      }
-      if (result === "prompted") {
-        setMessage("Link zum Kopieren angezeigt.");
-        return;
-      }
-    } catch (err) {
-      // Never show the raw iOS NotAllowedError string.
-      setMessage(friendlyClipboardError(err));
-      return;
-    }
-    setMessage("Link bereit — Feld antippen, markieren und kopieren.");
-  }
-
-  async function onCopyInviteLink(member: Member) {
-    setError(null);
-    setMessage(null);
-
-    const existing = memberInviteLink(member);
-    const expiresAt = member.invite_expires_at
-      ? new Date(member.invite_expires_at).getTime()
-      : null;
-    const stillValid =
-      Boolean(existing) &&
-      (expiresAt == null ||
-        !Number.isFinite(expiresAt) ||
-        expiresAt > Date.now());
-
-    // Show the link immediately so the user can long-press even if share fails.
-    if (existing && stillValid) {
-      setInviteLink(existing);
-      await finishInviteLinkCopy(existing);
-      return;
-    }
-
-    setMemberBusyId(member.id);
-    try {
-      const response = await fetch("/api/invite", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          vacationId,
-          memberId: member.id,
-          role: member.role,
-          linkOnly: true,
-        }),
-      });
-      const payload = (await response.json()) as {
-        error?: string;
-        note?: string;
-        inviteLink?: string;
-      };
-      if (!response.ok || !payload.inviteLink) {
-        setError(payload.error ?? "Link konnte nicht erzeugt werden.");
-        return;
-      }
-      await finishInviteLinkCopy(payload.inviteLink, payload.note);
-      await load();
-    } catch (err) {
-      setError(friendlyClipboardError(err));
-    } finally {
-      setMemberBusyId(null);
-    }
-  }
-
-  async function onCopyVisibleInviteLink() {
-    if (!inviteLink) return;
-    await finishInviteLinkCopy(inviteLink);
-  }
-
-  async function onUpdateRole(memberId: string, role: MemberRole) {
-    setError(null);
-    setMessage(null);
-    setMemberBusyId(memberId);
-    try {
-      const response = await fetch("/api/team-members", {
-        method: "PATCH",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ vacationId, memberId, role }),
-      });
-      const payload = (await response.json()) as { error?: string };
-      if (!response.ok) {
-        setError(payload.error ?? "Rolle konnte nicht geändert werden.");
-        return;
-      }
-      setMessage("Rolle aktualisiert.");
-      await load();
-    } catch (err) {
-      setError(err instanceof Error ? err.message : "Rolle konnte nicht geändert werden.");
-    } finally {
-      setMemberBusyId(null);
-    }
-  }
-
-  async function onRemoveMember(member: Member) {
-    const isInvite = member.status === "invited";
-    const confirmed = window.confirm(
-      isInvite
-        ? `Einladung an ${member.email} zurückziehen?`
-        : `${member.email} aus dem Team entfernen?`,
-    );
-    if (!confirmed) return;
-
-    setError(null);
-    setMessage(null);
-    setMemberBusyId(member.id);
-    const response = await fetch("/api/members", {
-      method: "DELETE",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ vacationId, memberId: member.id }),
-    });
-    const payload = (await response.json()) as { error?: string; note?: string };
-    setMemberBusyId(null);
-    if (!response.ok) {
-      setError(payload.error ?? "Entfernen fehlgeschlagen");
-      return;
-    }
-    setMessage(payload.note ?? (isInvite ? "Einladung zurückgezogen." : "Mitglied entfernt."));
-    await load();
-  }
-
-  function memberRoleLabel(role: Member["role"]) {
-    return ROLE_OPTIONS.find((option) => option.value === role)?.label ?? role;
-  }
-
-  function memberStatusLabel(status: Member["status"]) {
-    return status === "invited" ? "Eingeladen" : "Aktiv";
-  }
 
   if (loading) {
     return (
@@ -529,6 +301,9 @@ export default function VacationDetailPage() {
       </header>
 
       <main className="shell app-with-chrome mx-auto min-h-screen w-full max-w-6xl px-5 pb-6 pt-3 md:px-8 md:pb-8 md:pt-4">
+      {error ? (
+        <p className="mb-3 text-[13px] text-[var(--danger)]">{error}</p>
+      ) : null}
       {visitedTabs.has("urlaub") && (
         <VacationTabPanel id="urlaub" active={tab === "urlaub"}>
           {!editingVacation ? (
@@ -563,7 +338,7 @@ export default function VacationDetailPage() {
                   : ""}
               </p>
             </div>
-            {canEditTrip ? (
+            {canEditSpots ? (
               <button
                 type="button"
                 className="cta !px-3 !py-2 text-[13px]"
@@ -628,7 +403,7 @@ export default function VacationDetailPage() {
           <CostPlannerPanel
             vacation={vacation}
             spots={spots}
-            canEdit={canEditTrip}
+            canEdit={canEditCosts}
             onVacationPatch={(patch) =>
               setVacation((prev) => (prev ? { ...prev, ...patch } : prev))
             }
@@ -638,239 +413,13 @@ export default function VacationDetailPage() {
 
       {visitedTabs.has("team") && (
         <VacationTabPanel id="team" active={tab === "team"}>
-          <h1 className="display text-2xl">Team</h1>
-          <p className="tab-subtitle">
-            {members.length} Mitglied{members.length === 1 ? "" : "er"}
-          </p>
-
-          <div className="ios-group mt-4 p-4">
-            <p className="text-[13px] font-semibold text-[var(--ink-soft)]">Rollen</p>
-            <div className="mt-3 grid gap-3 sm:grid-cols-3">
-              {ROLE_OPTIONS.map((role) => (
-                <div key={role.value} className="glass-subpanel p-3">
-                  <p className="text-[14px] font-semibold">{role.label}</p>
-                  <p className="mt-1 text-[12px] text-[var(--ink-soft)]">{role.description}</p>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="ios-group mt-4">
-            {members.map((member) => {
-              const isSelf = Boolean(
-                currentUserId && member.user_id && member.user_id === currentUserId,
-              );
-              const busy = memberBusyId === member.id;
-              const canManage = canEditVacation && !isSelf;
-
-              return (
-                <div key={member.id} className="ios-row !items-start">
-                  <div className="min-w-0 flex-1">
-                    <p className="truncate text-[15px] font-semibold">{member.email}</p>
-                    <p className="text-[12px] font-semibold uppercase tracking-wide text-[var(--ink-faint)]">
-                      {memberRoleLabel(member.role)} · {memberStatusLabel(member.status)}
-                      {isSelf ? " · Du" : ""}
-                    </p>
-                    {member.invite_expires_at && member.status === "invited" ? (
-                      <p className="mt-1 text-[12px] text-[var(--ink-soft)]">
-                        Link gültig bis {new Date(member.invite_expires_at).toLocaleDateString("de-DE")}
-                      </p>
-                    ) : null}
-                  </div>
-                  {canManage ? (
-                    <div className="flex shrink-0 flex-col items-end gap-2">
-                      <select
-                        className="glass-field min-w-[9rem] px-3 py-2 text-[14px]"
-                        value={member.role}
-                        disabled={busy}
-                        onChange={(event) => void onUpdateRole(member.id, event.target.value as MemberRole)}
-                      >
-                        {ROLE_OPTIONS.map((role) => (
-                          <option key={role.value} value={role.value}>
-                            {role.label}
-                          </option>
-                        ))}
-                      </select>
-                      <div className="flex flex-wrap items-center justify-end gap-2">
-                      {member.status === "invited" ? (
-                        <button
-                          type="button"
-                          className="glass-chip"
-                          disabled={busy}
-                          onClick={() => void onCopyInviteLink(member)}
-                        >
-                          {busy ? "…" : "Link teilen"}
-                        </button>
-                      ) : null}
-                      <button
-                        type="button"
-                        className="glass-chip glass-chip-danger"
-                        disabled={busy}
-                        onClick={() => void onRemoveMember(member)}
-                      >
-                        {busy
-                          ? "…"
-                          : member.status === "invited"
-                            ? "Zurückziehen"
-                            : "Entfernen"}
-                      </button>
-                      </div>
-                      {member.status === "invited" && memberInviteLink(member) ? (
-                        <input
-                          readOnly
-                          className="glass-field mt-1 w-full max-w-[16rem] px-2 py-1.5 text-[11px]"
-                          value={memberInviteLink(member) ?? ""}
-                          onFocus={(event) => event.currentTarget.select()}
-                          aria-label="Einladungslink"
-                        />
-                      ) : null}
-                    </div>
-                  ) : null}
-                </div>
-              );
-            })}
-          </div>
-
-          {(message || error || inviteLink) && tab === "team" && !showInvite && (
-            <div className="mt-3 space-y-2">
-              {inviteLink ? (
-                <div className="glass-subpanel p-3">
-                  <p className="text-[12px] font-semibold uppercase tracking-wide text-[var(--ink-faint)]">
-                    Einladungslink
-                  </p>
-                  <div className="mt-2 flex flex-col gap-2 sm:flex-row">
-                    <input
-                      ref={inviteLinkInputRef}
-                      readOnly
-                      className="glass-field px-3 py-3 text-[13px]"
-                      value={inviteLink}
-                      onFocus={(event) => event.currentTarget.select()}
-                    />
-                    <button
-                      type="button"
-                      className="glass-chip shrink-0"
-                      onClick={() => void onCopyVisibleInviteLink()}
-                    >
-                      Link teilen
-                    </button>
-                  </div>
-                </div>
-              ) : null}
-              {message && <p className="text-[13px] text-[var(--pine)]">{message}</p>}
-              {error && <p className="text-[13px] text-[var(--danger)]">{error}</p>}
-            </div>
-          )}
-
-          {canEditVacation && (
-            <div className="mt-4">
-              {!showInvite ? (
-                <button
-                  type="button"
-                  className="cta w-full"
-                  onClick={() => setShowInvite(true)}
-                >
-                  Person einladen
-                </button>
-              ) : (
-                <form
-                  onSubmit={onInvite}
-                  className="ios-group p-4"
-                  autoComplete="off"
-                  data-lpignore="true"
-                  data-1p-ignore="true"
-                  data-bwignore="true"
-                  data-form-type="other"
-                >
-                  <div className="flex items-center justify-between gap-3">
-                    <p className="text-[13px] font-semibold text-[var(--ink-soft)]">
-                      Person einladen
-                    </p>
-                    <button
-                      type="button"
-                      className="glass-chip"
-                      onClick={() => {
-                        setShowInvite(false);
-                        setInviteEmail("");
-                        setMessage(null);
-                        setError(null);
-                      }}
-                    >
-                      Schließen
-                    </button>
-                  </div>
-                  <div className="mt-3 flex flex-col gap-3 sm:flex-row">
-                    <input
-                      className="glass-field px-3 py-3"
-                      type="text"
-                      inputMode="email"
-                      enterKeyHint="send"
-                      name="vacation-invite-email"
-                      id="vacation-invite-email"
-                      autoComplete="off"
-                      autoCorrect="off"
-                      autoCapitalize="off"
-                      spellCheck={false}
-                      data-lpignore="true"
-                      data-1p-ignore="true"
-                      data-bwignore="true"
-                      data-form-type="other"
-                      required
-                      placeholder="email@example.com"
-                      value={inviteEmail}
-                      onChange={(e) => {
-                        setInviteEmail(e.target.value);
-                        setInviteLink(null);
-                        if (message) setMessage(null);
-                        if (error) setError(null);
-                      }}
-                    />
-                    <select
-                      className="glass-field px-3 py-3"
-                      value={inviteRole}
-                      onChange={(event) => setInviteRole(event.target.value as MemberRole)}
-                    >
-                      {ROLE_OPTIONS.map((role) => (
-                        <option key={role.value} value={role.value}>
-                          {role.label}
-                        </option>
-                      ))}
-                    </select>
-                    <button
-                      type="submit"
-                      className="cta shrink-0"
-                      disabled={inviting || !isCompleteEmail(inviteEmail)}
-                    >
-                      {inviting ? "…" : "Einladen"}
-                    </button>
-                  </div>
-                  {inviteLink ? (
-                    <div className="glass-subpanel mt-3 p-3">
-                      <p className="text-[12px] font-semibold uppercase tracking-wide text-[var(--ink-faint)]">
-                        Teilbarer Link
-                      </p>
-                      <div className="mt-2 flex flex-col gap-3 sm:flex-row">
-                        <input
-                          readOnly
-                          className="glass-field px-3 py-3 text-[13px]"
-                          value={inviteLink}
-                          onFocus={(event) => event.currentTarget.select()}
-                        />
-                        <button
-                          type="button"
-                          className="glass-chip shrink-0"
-                          onClick={() => void onCopyVisibleInviteLink()}
-                        >
-                          Link teilen
-                        </button>
-                      </div>
-                    </div>
-                  ) : null}
-                  {message && <p className="mt-3 text-[13px] text-[var(--pine)]">{message}</p>}
-                  {error && <p className="mt-3 text-[13px] text-[var(--danger)]">{error}</p>}
-                </form>
-              )}
-            </div>
-          )}
+          <TeamPanel
+            vacationId={vacationId}
+            members={members}
+            currentUserId={currentUserId}
+            canManageTeam={canManageTeam}
+            onChanged={load}
+          />
         </VacationTabPanel>
       )}
 

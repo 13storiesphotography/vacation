@@ -23,7 +23,7 @@ export type SpotActionState = {
   ok?: boolean;
 };
 
-async function requireMember(vacationId: string) {
+async function requireSpotEditor(vacationId: string) {
   const supabase = await createClient();
   const {
     data: { user },
@@ -32,11 +32,15 @@ async function requireMember(vacationId: string) {
     return { supabase, user: null, error: "Nicht angemeldet." as const };
   }
 
-  const { data: isMember } = await supabase.rpc("is_vacation_member", {
+  const { data: canEditSpots } = await supabase.rpc("is_vacation_spots_editor", {
     p_vacation_id: vacationId,
   });
-  if (!isMember) {
-    return { supabase, user, error: "Kein Zugriff auf diesen Urlaub." as const };
+  if (!canEditSpots) {
+    return {
+      supabase,
+      user,
+      error: "Du darfst Spots in diesem Urlaub nicht bearbeiten." as const,
+    };
   }
 
   return { supabase, user, error: null };
@@ -253,7 +257,7 @@ export async function createSpot(
   formData: FormData,
 ): Promise<SpotActionState> {
   const vacationId = String(formData.get("vacation_id") ?? "");
-  const { supabase, user, error } = await requireMember(vacationId);
+  const { supabase, user, error } = await requireSpotEditor(vacationId);
   if (error || !user) return { error: error ?? "Nicht angemeldet." };
 
   const parsed = await readSpotFields(formData);
@@ -295,7 +299,7 @@ export async function updateSpot(
 ): Promise<SpotActionState> {
   const vacationId = String(formData.get("vacation_id") ?? "");
   const spotId = String(formData.get("spot_id") ?? "");
-  const { supabase, error } = await requireMember(vacationId);
+  const { supabase, error } = await requireSpotEditor(vacationId);
   if (error) return { error };
 
   const parsed = await readSpotFields(formData);
@@ -322,7 +326,7 @@ export async function updateSpot(
 }
 
 export async function deleteSpot(vacationId: string, spotId: string): Promise<SpotActionState> {
-  const { supabase, error } = await requireMember(vacationId);
+  const { supabase, error } = await requireSpotEditor(vacationId);
   if (error) return { error };
 
   // Clear overnight refs first (FK may restrict), then delete.

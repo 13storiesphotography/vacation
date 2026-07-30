@@ -26,11 +26,11 @@ export async function updateVacation(
     return { error: "Urlaub fehlt." };
   }
 
-  const { data: isAdmin } = await supabase.rpc("is_vacation_admin", {
+  const { data: canEditVacation } = await supabase.rpc("is_vacation_settings_editor", {
     p_vacation_id: vacationId,
   });
-  if (!isAdmin) {
-    return { error: "Nur Admins können den Urlaub bearbeiten." };
+  if (!canEditVacation) {
+    return { error: "Du darfst die Urlaubsdaten nicht bearbeiten." };
   }
 
   const title = String(formData.get("title") ?? "").trim();

@@ -34,6 +34,29 @@ async function requireMember(vacationId: string) {
   return { supabase, user, error: null };
 }
 
+async function requirePlanEditor(vacationId: string) {
+  const supabase = await createClient();
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+  if (!user) {
+    return { supabase, user: null, error: "Nicht angemeldet." as const };
+  }
+
+  const { data: canEditPlan } = await supabase.rpc("is_vacation_plan_editor", {
+    p_vacation_id: vacationId,
+  });
+  if (!canEditPlan) {
+    return {
+      supabase,
+      user,
+      error: "Du darfst den Plan dieses Urlaubs nicht bearbeiten." as const,
+    };
+  }
+
+  return { supabase, user, error: null };
+}
+
 function revalidateVacation(vacationId: string) {
   revalidatePath(`/app/vacations/${vacationId}`);
 }
@@ -153,7 +176,7 @@ export async function updateDayPlanMeta(
   dayPlanId: string,
   patch: { title?: string | null; notes?: string | null },
 ): Promise<PlanActionState> {
-  const { supabase, error } = await requireMember(vacationId);
+  const { supabase, error } = await requirePlanEditor(vacationId);
   if (error) return { error };
 
   const { error: updateError } = await supabase
@@ -175,7 +198,7 @@ export async function setDayOvernight(
   dayPlanId: string,
   overnightSpotId: string | null,
 ): Promise<PlanActionState> {
-  const { supabase, error } = await requireMember(vacationId);
+  const { supabase, error } = await requirePlanEditor(vacationId);
   if (error) return { error };
 
   if (overnightSpotId) {
@@ -204,7 +227,7 @@ export async function addSpotToDay(
   dayPlanId: string,
   spotId: string,
 ): Promise<PlanActionState> {
-  const { supabase, error } = await requireMember(vacationId);
+  const { supabase, error } = await requirePlanEditor(vacationId);
   if (error) return { error };
 
   const [{ data: day }, { data: spot }] = await Promise.all([
@@ -256,7 +279,7 @@ export async function removeSpotFromDay(
   dayPlanId: string,
   spotId: string,
 ): Promise<PlanActionState> {
-  const { supabase, error } = await requireMember(vacationId);
+  const { supabase, error } = await requirePlanEditor(vacationId);
   if (error) return { error };
 
   const { error: deleteError } = await supabase
@@ -278,7 +301,7 @@ export async function moveSpotOnDay(
   spotId: string,
   direction: "up" | "down",
 ): Promise<PlanActionState> {
-  const { supabase, error } = await requireMember(vacationId);
+  const { supabase, error } = await requirePlanEditor(vacationId);
   if (error) return { error };
 
   const { data: stops, error: stopsError } = await supabase
