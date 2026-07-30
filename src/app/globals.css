@@ -909,6 +909,184 @@ textarea {
   background: #f0d56a;
 }
 
+/* Plan day calendar — Fahrten & Aufenthalte as timed blocks */
+.day-cal {
+  border-radius: 16px;
+  background: rgba(255, 255, 255, 0.42);
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.65) inset;
+  overflow: hidden;
+}
+
+.day-cal-empty {
+  padding: 14px 14px 16px;
+}
+
+.day-cal-legend {
+  display: flex;
+  gap: 10px;
+  padding: 10px 12px 6px;
+}
+
+.day-cal-legend span {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.day-cal-legend span::before {
+  content: "";
+  width: 10px;
+  height: 10px;
+  border-radius: 4px;
+}
+
+.day-cal-legend span[data-kind="fahrt"]::before {
+  background: rgba(15, 110, 140, 0.55);
+}
+
+.day-cal-legend span[data-kind="aufenthalt"]::before {
+  background: rgba(31, 77, 61, 0.55);
+}
+
+.day-cal-scroll {
+  max-height: min(52vh, 420px);
+  overflow-y: auto;
+  overscroll-behavior: contain;
+  -webkit-overflow-scrolling: touch;
+  padding: 0 8px 12px 0;
+}
+
+.day-cal-canvas {
+  position: relative;
+  margin-left: 48px;
+}
+
+.day-cal-hours {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+}
+
+.day-cal-hour {
+  position: relative;
+}
+
+.day-cal-hour-label {
+  position: absolute;
+  left: -48px;
+  top: -7px;
+  width: 40px;
+  text-align: right;
+  font-size: 11px;
+  font-weight: 650;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-faint);
+}
+
+.day-cal-hour-line {
+  position: absolute;
+  left: 0;
+  right: 4px;
+  top: 0;
+  border-top: 1px solid rgba(20, 36, 48, 0.08);
+}
+
+.day-cal-blocks {
+  position: relative;
+  z-index: 1;
+  height: 100%;
+  margin-right: 4px;
+}
+
+.day-cal-block {
+  position: absolute;
+  left: 0;
+  right: 0;
+  display: flex;
+  align-items: stretch;
+  gap: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 12px;
+  overflow: hidden;
+  text-align: left;
+  cursor: default;
+  box-shadow: 0 1px 0 rgba(255, 255, 255, 0.45) inset;
+}
+
+.day-cal-block:not(:disabled) {
+  cursor: pointer;
+}
+
+.day-cal-block:not(:disabled):active {
+  transform: scale(0.99);
+}
+
+.day-cal-block[data-kind="fahrt"] {
+  background: rgba(15, 110, 140, 0.14);
+  color: var(--fjord);
+}
+
+.day-cal-block[data-kind="aufenthalt"] {
+  background: rgba(31, 77, 61, 0.14);
+  color: var(--pine);
+}
+
+.day-cal-block[data-role="overnight"] {
+  background: rgba(196, 123, 45, 0.16);
+  color: #8a5a1c;
+}
+
+.day-cal-block-accent {
+  width: 4px;
+  flex-shrink: 0;
+  background: currentColor;
+  opacity: 0.75;
+}
+
+.day-cal-block-body {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  justify-content: center;
+  gap: 1px;
+  padding: 6px 10px;
+}
+
+.day-cal-block-time {
+  font-size: 11px;
+  font-weight: 700;
+  font-variant-numeric: tabular-nums;
+  opacity: 0.8;
+}
+
+.day-cal-block-label {
+  font-size: 13px;
+  font-weight: 700;
+  line-height: 1.2;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink);
+}
+
+.day-cal-block-detail {
+  font-size: 11px;
+  font-weight: 600;
+  opacity: 0.72;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
 .plan-nav-btn {
   width: 36px;
   height: 36px;
