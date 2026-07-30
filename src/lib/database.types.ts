@@ -32,6 +32,10 @@ export type Database = {
           end_date: string;
           created_by: string;
           created_at: string;
+          currency: string;
+          budget_total: number | null;
+          fuel_l_per_100km: number | null;
+          fuel_price_per_liter: number | null;
         };
         Insert: {
           id?: string;
@@ -41,8 +45,12 @@ export type Database = {
           description?: string | null;
           start_date: string;
           end_date: string;
-          created_by: string;
+          created_by?: string;
           created_at?: string;
+          currency?: string;
+          budget_total?: number | null;
+          fuel_l_per_100km?: number | null;
+          fuel_price_per_liter?: number | null;
         };
         Update: {
           id?: string;
@@ -54,6 +62,10 @@ export type Database = {
           end_date?: string;
           created_by?: string;
           created_at?: string;
+          currency?: string;
+          budget_total?: number | null;
+          fuel_l_per_100km?: number | null;
+          fuel_price_per_liter?: number | null;
         };
         Relationships: [];
       };
@@ -123,6 +135,7 @@ export type Database = {
           stay_status: "interessiert" | "gebucht" | null;
           tags: string[];
           is_relevant: boolean;
+          price_per_night: number | null;
           created_by: string | null;
           created_at: string;
         };
@@ -152,6 +165,7 @@ export type Database = {
           stay_status?: "interessiert" | "gebucht" | null;
           tags?: string[];
           is_relevant?: boolean;
+          price_per_night?: number | null;
           created_by?: string | null;
           created_at?: string;
         };
@@ -181,6 +195,7 @@ export type Database = {
           stay_status?: "interessiert" | "gebucht" | null;
           tags?: string[];
           is_relevant?: boolean;
+          price_per_night?: number | null;
           created_by?: string | null;
           created_at?: string;
         };
@@ -275,6 +290,75 @@ export type Database = {
         };
         Relationships: [];
       };
+      cost_items: {
+        Row: {
+          id: string;
+          vacation_id: string;
+          category:
+            | "uebernachtung"
+            | "anschaffung"
+            | "sprit"
+            | "maut"
+            | "verpflegung"
+            | "aktivitaet"
+            | "sonstiges";
+          title: string;
+          amount: number;
+          quantity: number;
+          unit: string | null;
+          status: "geplant" | "gebucht" | "bezahlt";
+          notes: string | null;
+          spot_id: string | null;
+          created_by: string | null;
+          created_at: string;
+          updated_at: string;
+        };
+        Insert: {
+          id?: string;
+          vacation_id: string;
+          category?:
+            | "uebernachtung"
+            | "anschaffung"
+            | "sprit"
+            | "maut"
+            | "verpflegung"
+            | "aktivitaet"
+            | "sonstiges";
+          title: string;
+          amount?: number;
+          quantity?: number;
+          unit?: string | null;
+          status?: "geplant" | "gebucht" | "bezahlt";
+          notes?: string | null;
+          spot_id?: string | null;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Update: {
+          id?: string;
+          vacation_id?: string;
+          category?:
+            | "uebernachtung"
+            | "anschaffung"
+            | "sprit"
+            | "maut"
+            | "verpflegung"
+            | "aktivitaet"
+            | "sonstiges";
+          title?: string;
+          amount?: number;
+          quantity?: number;
+          unit?: string | null;
+          status?: "geplant" | "gebucht" | "bezahlt";
+          notes?: string | null;
+          spot_id?: string | null;
+          created_by?: string | null;
+          created_at?: string;
+          updated_at?: string;
+        };
+        Relationships: [];
+      };
     };
     Views: Record<string, never>;
     Functions: {
@@ -314,6 +398,15 @@ export type Database = {
       overnight_cost: "frei" | "kostenpflichtig";
       stay_status: "interessiert" | "gebucht";
       vacation_type: "van" | "hotel" | "camping" | "other";
+      cost_category:
+        | "uebernachtung"
+        | "anschaffung"
+        | "sprit"
+        | "maut"
+        | "verpflegung"
+        | "aktivitaet"
+        | "sonstiges";
+      cost_status: "geplant" | "gebucht" | "bezahlt";
     };
     CompositeTypes: Record<string, never>;
   };

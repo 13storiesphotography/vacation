@@ -19,6 +19,7 @@ import {
 import { VacationTabPanel } from "@/components/app/vacation-tab-panel";
 import { DayPlanPanel } from "./day-plan-ui";
 import { VacationUrlaubDashboard } from "./vacation-urlaub-dashboard";
+import { CostPlannerPanel } from "./cost-planner";
 import { isCompleteEmail } from "@/lib/email";
 import { isStaleServerActionError } from "@/lib/stale-action";
 import { copyTextToClipboard, friendlyClipboardError } from "@/lib/clipboard";
@@ -47,6 +48,7 @@ function readInitialTab(): VacationTabId {
     value === "spots" ||
     value === "karte" ||
     value === "plan" ||
+    value === "kosten" ||
     value === "team"
   ) {
     return value;
@@ -617,6 +619,19 @@ export default function VacationDetailPage() {
             spots={spots}
             onSpotsChanged={load}
             onSpotPatch={applySpotPatch}
+          />
+        </VacationTabPanel>
+      )}
+
+      {visitedTabs.has("kosten") && vacation && (
+        <VacationTabPanel id="kosten" active={tab === "kosten"}>
+          <CostPlannerPanel
+            vacation={vacation}
+            spots={spots}
+            canEdit={canEditTrip}
+            onVacationPatch={(patch) =>
+              setVacation((prev) => (prev ? { ...prev, ...patch } : prev))
+            }
           />
         </VacationTabPanel>
       )}

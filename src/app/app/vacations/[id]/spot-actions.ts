@@ -51,6 +51,12 @@ async function readSpotFields(formData: FormData) {
   const overnightRaw = String(formData.get("overnight_cost") ?? "").trim();
   const overnightCost = (overnightRaw || null) as OvernightCost | null;
   const priceHint = String(formData.get("price_hint") ?? "").trim();
+  const pricePerNightRaw = String(formData.get("price_per_night") ?? "").trim().replace(",", ".");
+  const pricePerNightParsed = Number(pricePerNightRaw);
+  const pricePerNight =
+    pricePerNightRaw && Number.isFinite(pricePerNightParsed) && pricePerNightParsed >= 0
+      ? pricePerNightParsed
+      : null;
   const stayCheckIn = String(formData.get("stay_check_in") ?? "").trim() || null;
   const stayCheckOut = String(formData.get("stay_check_out") ?? "").trim() || null;
   // Empty nights field must stay empty — do not re-derive from dates on save.
@@ -211,6 +217,7 @@ async function readSpotFields(formData: FormData) {
       info_url: infoUrl || null,
       overnight_cost: overnight ? overnightCost : null,
       price_hint: overnight ? priceHint || null : null,
+      price_per_night: overnight ? pricePerNight : null,
       stay_check_in: overnight ? stayCheckIn : null,
       stay_check_out: overnight ? stayCheckOut : null,
       stay_nights: overnight ? stayNights : null,

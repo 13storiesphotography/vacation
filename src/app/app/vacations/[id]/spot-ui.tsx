@@ -962,6 +962,21 @@ function SpotFormFields({
                   placeholder="ab 280 SEK / Nacht"
                 />
               </label>
+              <label className="form-label mt-3">
+                Preis / Nacht (Zahl)
+                <input
+                  name="price_per_night"
+                  type="number"
+                  min="0"
+                  step="0.01"
+                  inputMode="decimal"
+                  defaultValue={
+                    spot?.price_per_night != null ? String(spot.price_per_night) : ""
+                  }
+                  className="glass-field mt-1.5 px-3 py-3"
+                  placeholder="z. B. 35"
+                />
+              </label>
             </>
           )}
         </div>
@@ -977,6 +992,13 @@ function SpotFormFields({
           ) : null}
           {showOvernight ? (
             <input type="hidden" name="price_hint" value={spot?.price_hint ?? ""} />
+          ) : null}
+          {showOvernight ? (
+            <input
+              type="hidden"
+              name="price_per_night"
+              value={spot?.price_per_night != null ? String(spot.price_per_night) : ""}
+            />
           ) : null}
           {!showOvernight ? (
             <>

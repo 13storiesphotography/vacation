@@ -5,6 +5,7 @@ export const vacationTabs = [
   { id: "spots", label: "Spots", short: "Spots" },
   { id: "karte", label: "Karte", short: "Karte" },
   { id: "plan", label: "Plan", short: "Plan" },
+  { id: "kosten", label: "Kosten", short: "Kosten" },
   { id: "team", label: "Team", short: "Team" },
 ] as const;
 
@@ -51,6 +52,14 @@ function TabGlyph({ id }: { id: VacationTabId }) {
           <rect x="4.2" y="3.8" width="13.6" height="14.4" rx="2.2" />
           <path d="M7.2 2.8v2.4M14.8 2.8v2.4M4.2 8.4h13.6" />
           <path d="M7.5 12h3.2M7.5 15h7" />
+        </svg>
+      );
+    case "kosten":
+      return (
+        <svg {...common}>
+          <rect x="3.8" y="5.2" width="14.4" height="11.6" rx="2" />
+          <path d="M7 9.2h8M7 12.4h5.5" />
+          <circle cx="15.2" cy="12.4" r="1.2" />
         </svg>
       );
     case "team":
