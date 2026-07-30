@@ -379,7 +379,15 @@ export default function VacationDetailPage() {
         <VacationTabPanel id="karte" active={tab === "karte"}>
           <h1 className="display text-2xl">Karte</h1>
           <p className="tab-subtitle">Spots mit Position</p>
-          <SpotMap spots={spots} summaries={summaries} active={tab === "karte"} />
+          <SpotMap
+            vacationId={vacationId}
+            spots={spots}
+            summaries={summaries}
+            canEdit={canEditSpots}
+            active={tab === "karte"}
+            onChanged={load}
+            onSpotPatch={applySpotPatch}
+          />
         </VacationTabPanel>
       )}
 

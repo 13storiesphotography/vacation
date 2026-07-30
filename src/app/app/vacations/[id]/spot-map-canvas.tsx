@@ -29,6 +29,7 @@ export default function SpotMapCanvas({
   summaries,
   selectedId,
   onSelect,
+  onEditRequest,
   expanded = false,
   active = true,
 }: {
@@ -36,6 +37,7 @@ export default function SpotMapCanvas({
   summaries: Record<string, SpotRatingSummary>;
   selectedId: string | null;
   onSelect: (id: string | null) => void;
+  onEditRequest?: (id: string) => void;
   expanded?: boolean;
   active?: boolean;
 }) {
@@ -58,6 +60,7 @@ export default function SpotMapCanvas({
       summaries={summaries}
       selectedId={selectedId}
       onSelect={onSelect}
+      onEditRequest={onEditRequest}
       expanded={expanded}
       active={active}
     />
