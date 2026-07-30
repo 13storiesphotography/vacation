@@ -78,7 +78,7 @@ export default function EnrollMfaPage() {
     const verify = await supabase.auth.mfa.verify({
       factorId,
       challengeId: challenge.data.id,
-      code,
+      code: code.replace(/\D/g, "").slice(0, 6),
     });
     setLoading(false);
     if (verify.error) {
@@ -91,7 +91,12 @@ export default function EnrollMfaPage() {
 
   return (
     <main className="shell flex min-h-screen items-center px-5 py-12">
-      <form onSubmit={onSubmit} className="ios-group mx-auto w-full max-w-md p-6">
+      <form
+        onSubmit={onSubmit}
+        method="post"
+        autoComplete="on"
+        className="ios-group mx-auto w-full max-w-md p-6"
+      >
         <h1 className="display text-2xl">MFA einrichten</h1>
         <p className="mt-2 text-[14px] text-[var(--ink-soft)]">
           Scanne den QR-Code mit einer Authenticator-App (1Password, Authy, Google
@@ -119,16 +124,25 @@ export default function EnrollMfaPage() {
             Secret: {secret}
           </p>
         )}
-        <label className="form-label mt-6">
-          6-stelliger Code
+        <label className="form-label mt-6" htmlFor="totp">
+          Einmalcode
           <input
+            id="totp"
+            name="totp"
+            type="text"
             className="glass-field mt-1.5 px-3 py-3 text-center text-[20px] tracking-[0.3em]"
             inputMode="numeric"
-            pattern="[0-9]*"
+            pattern="[0-9]{6}"
             maxLength={6}
+            minLength={6}
+            autoComplete="one-time-code"
+            autoCorrect="off"
+            autoCapitalize="off"
+            spellCheck={false}
             required
             value={code}
-            onChange={(e) => setCode(e.target.value.trim())}
+            onChange={(e) => setCode(e.target.value.replace(/\D/g, "").slice(0, 6))}
+            placeholder="000000"
           />
         </label>
         {error && <p className="mt-4 text-[14px] text-[var(--danger)]">{error}</p>}

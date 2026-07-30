@@ -59,21 +59,25 @@ function LoginForm() {
         Mit E-Mail und Passwort. Danach MFA, falls eingerichtet.
       </p>
 
-      <form onSubmit={onSubmit} className="mt-6">
-        <label className="form-label">
+      <form onSubmit={onSubmit} method="post" autoComplete="on" className="mt-6">
+        <label className="form-label" htmlFor="email">
           E-Mail
           <input
+            id="email"
+            name="username"
             className="glass-field mt-1.5 px-3 py-3"
             type="email"
-            autoComplete="email"
+            autoComplete="username"
             required
             value={email}
             onChange={(e) => setEmail(e.target.value)}
           />
         </label>
-        <label className="form-label mt-4">
+        <label className="form-label mt-4" htmlFor="password">
           Passwort
           <input
+            id="password"
+            name="password"
             className="glass-field mt-1.5 px-3 py-3"
             type="password"
             autoComplete="current-password"
