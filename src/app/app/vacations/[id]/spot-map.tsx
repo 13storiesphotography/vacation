@@ -15,6 +15,7 @@ import type { MappableSpot } from "@/lib/google-maps";
 import { CategoryIcon } from "@/components/category-icon";
 import { isAirbnbUrl } from "@/lib/airbnb";
 import { hasFinePointer } from "./map-gestures";
+import { EditSpotForm } from "./spot-ui";
 
 type Spot = Database["public"]["Tables"]["spots"]["Row"];
 
@@ -31,19 +32,29 @@ type MapFilter = "alle" | SpotCategory;
 type FocusMode = "all" | "favorites" | "rated" | "include_shelved";
 
 export function SpotMap({
+  vacationId,
   spots,
   summaries,
+  canEdit = false,
   active = true,
+  onChanged,
+  onSpotPatch,
 }: {
+  vacationId: string;
   spots: Spot[];
   summaries: Record<string, SpotRatingSummary>;
+  canEdit?: boolean;
   /** False while another vacation tab is shown — collapse overlay and resize on return. */
   active?: boolean;
+  onChanged?: () => void | Promise<void>;
+  onSpotPatch?: (spotId: string, patch: Partial<Spot>) => void;
 }) {
   const [filter, setFilter] = useState<MapFilter>("alle");
   const [focus, setFocus] = useState<FocusMode>("all");
   const [minAvg, setMinAvg] = useState(0);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [editing, setEditing] = useState(false);
+  const [deleting, setDeleting] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [desktopPointer, setDesktopPointer] = useState(true);
 
@@ -97,7 +108,43 @@ export function SpotMap({
     });
   }, [filter, focus, mappable, minAvg, summaries]);
 
-  const selected = visible.find((spot) => spot.id === selectedId) ?? null;
+  const selected =
+    spots.find((spot) => spot.id === selectedId) ??
+    visible.find((spot) => spot.id === selectedId) ??
+    null;
+
+  function selectSpot(id: string | null, openEditor = false) {
+    setSelectedId(id);
+    setEditing(Boolean(id && openEditor && canEdit));
+  }
+
+  async function handleDelete(spotId: string) {
+    setDeleting(true);
+    const { deleteSpot } = await import("./spot-actions");
+    const result = await deleteSpot(vacationId, spotId);
+    setDeleting(false);
+    if (result.error) return;
+    setEditing(false);
+    setSelectedId(null);
+    await onChanged?.();
+  }
+
+  function toggleRelevant(spot: Spot) {
+    if (!onSpotPatch) return;
+    const next = !isSpotRelevant(spot);
+    const previous = spot.is_relevant;
+    onSpotPatch(spot.id, { is_relevant: next });
+    void (async () => {
+      const { createClient } = await import("@/lib/supabase/client");
+      const supabase = createClient();
+      const { error } = await supabase
+        .from("spots")
+        .update({ is_relevant: next })
+        .eq("id", spot.id)
+        .eq("vacation_id", vacationId);
+      if (error) onSpotPatch(spot.id, { is_relevant: previous });
+    })();
+  }
 
   return (
     <div className="mt-3">
@@ -193,7 +240,8 @@ export function SpotMap({
           spots={visible}
           summaries={summaries}
           selectedId={selectedId}
-          onSelect={setSelectedId}
+          onSelect={(id) => selectSpot(id, false)}
+          onEditRequest={canEdit ? (id) => selectSpot(id, true) : undefined}
           expanded={expanded}
           active={active}
         />
@@ -273,6 +321,63 @@ export function SpotMap({
               )}
             </div>
           </div>
+
+          <div className="flex flex-wrap gap-1.5 border-t border-black/5 px-4 py-2.5">
+            {canEdit ? (
+              <button
+                type="button"
+                className="glass-chip !py-1.5 !text-[12px]"
+                data-active={editing ? "true" : undefined}
+                onClick={() => setEditing((open) => !open)}
+              >
+                {editing ? "Formular schließen" : "Bearbeiten"}
+              </button>
+            ) : null}
+            {selected.maps_url ? (
+              <a
+                href={selected.maps_url}
+                target="_blank"
+                rel="noreferrer"
+                className="glass-chip !py-1.5 !text-[12px]"
+              >
+                Karte öffnen
+              </a>
+            ) : null}
+            {selected.info_url ? (
+              <a
+                href={selected.info_url}
+                target="_blank"
+                rel="noreferrer"
+                className="glass-chip !py-1.5 !text-[12px]"
+              >
+                {isAirbnbUrl(selected.info_url) ? "Airbnb öffnen" : "Seite öffnen"}
+              </a>
+            ) : null}
+            {canEdit && onSpotPatch ? (
+              <button
+                type="button"
+                className="glass-chip !py-1.5 !text-[12px]"
+                data-active={!isSpotRelevant(selected) ? "true" : undefined}
+                onClick={() => toggleRelevant(selected)}
+              >
+                {isSpotRelevant(selected) ? "Archivieren" : "Wiederherstellen"}
+              </button>
+            ) : null}
+          </div>
+
+          {editing && canEdit ? (
+            <EditSpotForm
+              vacationId={vacationId}
+              spot={selected}
+              deleting={deleting}
+              onDelete={() => void handleDelete(selected.id)}
+              onToggleRelevant={() => toggleRelevant(selected)}
+              onDone={async () => {
+                setEditing(false);
+                await onChanged?.();
+              }}
+            />
+          ) : null}
         </div>
       )}
 
@@ -286,14 +391,22 @@ export function SpotMap({
           </p>
           <ul className="ios-group mt-2">
             {withoutCoords.map((spot) => (
-              <li key={spot.id} className="ios-row">
-                <CategoryIcon category={spot.category} size={16} />
-                <div>
-                  <p className="text-[14px] font-semibold">{spot.name}</p>
-                  <p className="text-[12px] text-[var(--ink-soft)]">
-                    {categoryLabels[spot.category]}
-                  </p>
-                </div>
+              <li key={spot.id}>
+                <button
+                  type="button"
+                  className="ios-row w-full"
+                  onClick={() => selectSpot(spot.id, canEdit)}
+                >
+                  <CategoryIcon category={spot.category} size={16} />
+                  <div className="min-w-0 flex-1 text-left">
+                    <p className="text-[14px] font-semibold">{spot.name}</p>
+                    <p className="text-[12px] text-[var(--ink-soft)]">
+                      {categoryLabels[spot.category]}
+                      {canEdit ? " · tippen zum Bearbeiten" : ""}
+                    </p>
+                  </div>
+                  {canEdit ? <span className="ios-chevron" aria-hidden /> : null}
+                </button>
               </li>
             ))}
           </ul>

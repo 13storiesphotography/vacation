@@ -83,6 +83,7 @@ export default function SpotMapLeaflet({
   summaries,
   selectedId,
   onSelect,
+  onEditRequest,
   expanded = false,
   active = true,
 }: {
@@ -90,6 +91,7 @@ export default function SpotMapLeaflet({
   summaries: Record<string, SpotRatingSummary>;
   selectedId: string | null;
   onSelect: (id: string | null) => void;
+  onEditRequest?: (id: string) => void;
   expanded?: boolean;
   active?: boolean;
 }) {
@@ -170,6 +172,15 @@ export default function SpotMapLeaflet({
                 {ratingLabel(summary)}
                 {summary?.myFavorite ? " · dein Favorit" : ""}
               </p>
+              {onEditRequest ? (
+                <button
+                  type="button"
+                  className="mt-2 w-full rounded-[10px] bg-[rgba(20,36,48,0.88)] px-3 py-2 text-[12px] font-semibold text-white"
+                  onClick={() => onEditRequest(spot.id)}
+                >
+                  Bearbeiten
+                </button>
+              ) : null}
             </div>
           </Popup>
         </Marker>
