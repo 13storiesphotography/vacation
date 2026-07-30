@@ -107,17 +107,42 @@ export async function POST(request: Request) {
   }
 
   const origin = new URL(request.url).origin;
-  const mail = await sendInviteEmail(
-    member.email,
-    `${origin}/auth/callback?next=/auth/set-password`,
-    { supabase: auth.supabase, vacationId },
-  );
-
-  if (!mail.ok) {
-    return NextResponse.json({ error: mail.note }, { status: 502 });
+  const token = member.invite_token?.trim();
+  if (!token) {
+    return NextResponse.json(
+      { error: "Für diese Einladung fehlt ein gültiger Link." },
+      { status: 400 },
+    );
   }
 
-  return NextResponse.json({ ok: true, note: mail.note });
+  const inviteLink = `${origin}/invite/${token}`;
+  const redirectTo = `${origin}/auth/callback?next=${encodeURIComponent(`/invite/${token}`)}`;
+
+  let vacationTitle: string | undefined;
+  const { data: vacationRow } = await auth.supabase
+    .from("vacations")
+    .select("title")
+    .eq("id", vacationId)
+    .maybeSingle();
+  vacationTitle = vacationRow?.title ?? undefined;
+
+  const mail = await sendInviteEmail({
+    email: member.email,
+    inviteLink,
+    redirectTo,
+    vacationTitle,
+    supabase: auth.supabase,
+    vacationId,
+  });
+
+  if (!mail.ok) {
+    return NextResponse.json(
+      { error: mail.note, inviteLink, emailSent: false },
+      { status: 502 },
+    );
+  }
+
+  return NextResponse.json({ ok: true, note: mail.note, inviteLink, emailSent: true });
 }
 
 /** Withdraw an invite or remove a member from the vacation. */
