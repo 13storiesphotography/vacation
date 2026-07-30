@@ -12,6 +12,7 @@ import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import { DEFAULT_MAP_CENTER } from "@/lib/geo";
 import type { RouteWaypoint } from "@/lib/day-route";
+import { LeafletGestureMode } from "./map-gestures";
 
 function numberIcon(order: number, overnight: boolean) {
   const fill = overnight ? "#8b4d6b" : "#0f6e8c";
@@ -71,6 +72,7 @@ export default function DayRouteMapLeaflet({
         className="h-full w-full"
         scrollWheelZoom
       >
+        <LeafletGestureMode mode="cooperative" />
         <TileLayer
           attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OSM</a>'
           url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}.png"

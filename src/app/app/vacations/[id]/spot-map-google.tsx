@@ -7,6 +7,7 @@ import { categoryLabels, categoryTone, type SpotCategory } from "@/lib/spots";
 import { DEFAULT_MAP_CENTER, DEFAULT_MAP_ZOOM } from "@/lib/geo";
 import { getBrowserGoogleMapsKey, type MappableSpot } from "@/lib/google-maps";
 import type { SpotRatingSummary } from "@/lib/ratings";
+import { googleGestureHandling } from "./map-gestures";
 
 function ratingLabel(summary: SpotRatingSummary | undefined): string {
   if (!summary || summary.average == null) return "noch keine Bewertung";
@@ -105,8 +106,8 @@ export default function SpotMapGoogle({
           streetViewControl: false,
           fullscreenControl: true,
           clickableIcons: false,
-          // auto: greedy on desktop (mouse pan), cooperative on touch devices.
-          gestureHandling: "auto",
+          // Explicit cooperative on touch — "auto" often becomes greedy on iOS.
+          gestureHandling: googleGestureHandling(),
         });
         map.addListener("click", () => onSelectRef.current(null));
         fullscreenListener = map.addListener("fullscreen_changed", () => {
@@ -134,9 +135,12 @@ export default function SpotMapGoogle({
   useEffect(() => {
     const map = mapRef.current;
     if (!ready || !map) return;
-    // Expanded/fullscreen: always greedy. Otherwise auto = desktop pan, mobile two-finger.
+    // Expanded/fullscreen or desktop: greedy. Touch embedded: cooperative (two-finger).
     map.setOptions({
-      gestureHandling: expanded || nativeFullscreen ? "greedy" : "auto",
+      gestureHandling: googleGestureHandling({
+        expanded,
+        fullscreen: nativeFullscreen,
+      }),
     });
     // Recalculate layout after expand/collapse or returning to the map tab.
     if (!active) return;
