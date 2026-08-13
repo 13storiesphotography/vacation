@@ -27,6 +27,9 @@
   --glass-blur: blur(40px) saturate(200%) brightness(1.06);
   --glass-border: 1px solid rgba(255, 255, 255, 0.55);
   --glass-inset: 0 1px 0 rgba(255, 255, 255, 0.7) inset;
+  /* Tab dock: frostier than generic surfaces (Instagram / iOS-style). */
+  --tabbar-glass-fill: rgba(246, 249, 250, 0.62);
+  --tabbar-glass-blur: blur(64px) saturate(220%) brightness(1.08);
   --thumb: rgba(18, 28, 36, 0.88);
   --thumb-text: #ffffff;
 }
@@ -515,9 +518,10 @@ textarea {
 }
 
 /*
- * Liquid Glass tab bar (Instagram / iOS 26-inspired web approximation).
+ * Liquid Glass tab bar (Instagram / iOS-inspired web approximation).
  * Fixed bottom pill on all breakpoints — slightly wider on desktop.
- * Clearer glass: low-opacity fill + strong blur. Snappy index-based thumb.
+ * Important: do NOT put transform/filter on .app-tabbar — that creates a
+ * containing block and kills backdrop-filter frost over page content.
  */
 .app-tabbar {
   position: fixed;
@@ -527,12 +531,18 @@ textarea {
   z-index: 50;
   display: flex;
   justify-content: center;
+  align-items: flex-end;
   pointer-events: none;
   padding: 0 12px calc(8px + env(safe-area-inset-bottom, 0px));
-  background: transparent;
+  /* Soft fade so content dissolves into the dock before the pill. */
+  background: linear-gradient(
+    to top,
+    rgba(230, 236, 238, 0.72) 0%,
+    rgba(230, 236, 238, 0.28) 42%,
+    rgba(230, 236, 238, 0) 100%
+  );
+  padding-top: 28px;
   box-shadow: none;
-  /* Keep pinned even if an ancestor uses overflow/transform quirks on iOS. */
-  transform: translateZ(0);
 }
 
 .liquid-tabbar-shell {
@@ -544,11 +554,16 @@ textarea {
   padding: 5px;
   pointer-events: auto;
   border-radius: 30px;
-  background: var(--surface);
-  backdrop-filter: var(--glass-blur);
-  -webkit-backdrop-filter: var(--glass-blur);
-  border: var(--glass-border);
-  box-shadow: var(--glass-inset), var(--shadow);
+  overflow: hidden;
+  isolation: isolate;
+  background: var(--tabbar-glass-fill);
+  backdrop-filter: var(--tabbar-glass-blur);
+  -webkit-backdrop-filter: var(--tabbar-glass-blur);
+  border: 1px solid rgba(255, 255, 255, 0.72);
+  box-shadow:
+    var(--glass-inset),
+    0 10px 28px rgba(12, 24, 32, 0.16),
+    0 1px 0 rgba(255, 255, 255, 0.55) inset;
 }
 
 .liquid-tabbar-track {
@@ -703,15 +718,18 @@ textarea {
 
 @media (min-width: 768px) {
   .app-tabbar {
-    /* Same floating bottom dock as mobile — centered, transparent chrome. */
+    /* Same floating bottom dock as mobile — centered, with soft fade. */
     top: auto;
     bottom: 0;
     z-index: 50;
-    padding: 0 20px calc(12px + env(safe-area-inset-bottom, 0px));
+    padding: 28px 20px calc(12px + env(safe-area-inset-bottom, 0px));
     pointer-events: none;
-    background: transparent;
-    backdrop-filter: none;
-    -webkit-backdrop-filter: none;
+    background: linear-gradient(
+      to top,
+      rgba(230, 236, 238, 0.72) 0%,
+      rgba(230, 236, 238, 0.28) 42%,
+      rgba(230, 236, 238, 0) 100%
+    );
     border: 0;
     box-shadow: none;
   }
@@ -721,11 +739,14 @@ textarea {
     width: min(100%, 480px);
     border-radius: 30px;
     padding: 5px;
-    background: var(--surface);
-    backdrop-filter: var(--glass-blur);
-    -webkit-backdrop-filter: var(--glass-blur);
-    border: var(--glass-border);
-    box-shadow: var(--glass-inset), var(--shadow);
+    background: var(--tabbar-glass-fill);
+    backdrop-filter: var(--tabbar-glass-blur);
+    -webkit-backdrop-filter: var(--tabbar-glass-blur);
+    border: 1px solid rgba(255, 255, 255, 0.72);
+    box-shadow:
+      var(--glass-inset),
+      0 10px 28px rgba(12, 24, 32, 0.16),
+      0 1px 0 rgba(255, 255, 255, 0.55) inset;
   }
 
   .liquid-tabbar-track {
