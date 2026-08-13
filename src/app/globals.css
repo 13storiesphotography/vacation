@@ -517,7 +517,7 @@ textarea {
 /*
  * Liquid Glass tab bar (Instagram / iOS 26-inspired web approximation).
  * Fixed bottom pill on all breakpoints — slightly wider on desktop.
- * Clearer glass: low-opacity fill + strong blur. Snappy index-based thumb.
+ * Dense frost + bottom scrim so scrolling labels don’t bleed through.
  */
 .app-tabbar {
   position: fixed;
@@ -527,9 +527,16 @@ textarea {
   z-index: 50;
   display: flex;
   justify-content: center;
+  align-items: flex-end;
   pointer-events: none;
-  padding: 0 12px calc(8px + env(safe-area-inset-bottom, 0px));
-  background: transparent;
+  padding: 28px 12px calc(8px + env(safe-area-inset-bottom, 0px));
+  background: linear-gradient(
+    to top,
+    rgba(230, 236, 238, 0.96) 0%,
+    rgba(230, 236, 238, 0.78) 42%,
+    rgba(230, 236, 238, 0.28) 72%,
+    transparent 100%
+  );
   box-shadow: none;
   /* Keep pinned even if an ancestor uses overflow/transform quirks on iOS. */
   transform: translateZ(0);
@@ -544,11 +551,35 @@ textarea {
   padding: 5px;
   pointer-events: auto;
   border-radius: 30px;
-  background: var(--surface);
-  backdrop-filter: var(--glass-blur);
-  -webkit-backdrop-filter: var(--glass-blur);
-  border: var(--glass-border);
-  box-shadow: var(--glass-inset), var(--shadow);
+  isolation: isolate;
+  overflow: hidden;
+  background:
+    linear-gradient(
+      165deg,
+      rgba(255, 255, 255, 0.94) 0%,
+      rgba(246, 249, 250, 0.9) 48%,
+      rgba(228, 236, 240, 0.92) 100%
+    );
+  backdrop-filter: blur(48px) saturate(210%) brightness(1.04);
+  -webkit-backdrop-filter: blur(48px) saturate(210%) brightness(1.04);
+  border: 1px solid rgba(255, 255, 255, 0.78);
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.9) inset,
+    0 0 0 0.5px rgba(20, 36, 48, 0.06) inset,
+    0 14px 40px rgba(20, 36, 48, 0.2),
+    0 2px 10px rgba(20, 36, 48, 0.08);
+}
+
+.liquid-tabbar-shell::before {
+  content: "";
+  position: absolute;
+  inset: 0;
+  z-index: 0;
+  pointer-events: none;
+  border-radius: inherit;
+  background:
+    radial-gradient(120% 90% at 12% 0%, rgba(255, 255, 255, 0.55), transparent 55%),
+    radial-gradient(90% 70% at 88% 110%, rgba(15, 110, 140, 0.06), transparent 52%);
 }
 
 .liquid-tabbar-track {
@@ -635,13 +666,19 @@ textarea {
 
 @media (min-width: 768px) {
   .app-tabbar {
-    /* Same floating bottom dock as mobile — centered, transparent chrome. */
+    /* Same floating bottom dock as mobile — centered, with scrim. */
     top: auto;
     bottom: 0;
     z-index: 50;
-    padding: 0 20px calc(12px + env(safe-area-inset-bottom, 0px));
+    padding: 32px 20px calc(12px + env(safe-area-inset-bottom, 0px));
     pointer-events: none;
-    background: transparent;
+    background: linear-gradient(
+      to top,
+      rgba(230, 236, 238, 0.96) 0%,
+      rgba(230, 236, 238, 0.78) 42%,
+      rgba(230, 236, 238, 0.28) 72%,
+      transparent 100%
+    );
     backdrop-filter: none;
     -webkit-backdrop-filter: none;
     border: 0;
@@ -653,11 +690,6 @@ textarea {
     width: min(100%, 560px);
     border-radius: 30px;
     padding: 5px;
-    background: var(--surface);
-    backdrop-filter: var(--glass-blur);
-    -webkit-backdrop-filter: var(--glass-blur);
-    border: var(--glass-border);
-    box-shadow: var(--glass-inset), var(--shadow);
   }
 
   .liquid-tabbar-track {
@@ -676,7 +708,7 @@ textarea {
 }
 
 .app-with-tabbar {
-  padding-bottom: calc(6.25rem + env(safe-area-inset-bottom, 0px));
+  padding-bottom: calc(7.25rem + env(safe-area-inset-bottom, 0px));
 }
 
 .app-topbar {
@@ -710,18 +742,18 @@ textarea {
 
 .app-with-chrome {
   padding-top: calc(3.35rem + env(safe-area-inset-top, 0px));
-  padding-bottom: calc(6.25rem + env(safe-area-inset-bottom, 0px));
+  padding-bottom: calc(7.25rem + env(safe-area-inset-bottom, 0px));
 }
 
 @media (min-width: 768px) {
   .app-with-tabbar {
-    padding-bottom: calc(6.5rem + env(safe-area-inset-bottom, 0px));
+    padding-bottom: calc(7.5rem + env(safe-area-inset-bottom, 0px));
   }
 
   .app-with-chrome {
     /* Topbar only on top — tab pill floats at the bottom like on iPhone. */
     padding-top: calc(3.5rem + env(safe-area-inset-top, 0px));
-    padding-bottom: calc(6.5rem + env(safe-area-inset-bottom, 0px));
+    padding-bottom: calc(7.5rem + env(safe-area-inset-bottom, 0px));
   }
 }
 
