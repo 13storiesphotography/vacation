@@ -1847,39 +1847,41 @@ export function SpotSammelnFilters({
   const categoryChoices = activeCategoryOptions(categories);
   return (
     <div className="mt-3">
-      <div className="mb-3 flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        <button
-          type="button"
-          onClick={() => onChange({ ...filters, category: "alle" })}
-          className="glass-chip shrink-0"
-          data-active={filters.category === "alle"}
-        >
-          Alle
-        </button>
-        {categoryChoices.map((option) => (
+      <div className="mb-3 flex items-center gap-2">
+        <div className="flex min-w-0 flex-1 gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
           <button
-            key={option.key}
             type="button"
-            onClick={() => onChange({ ...filters, category: option.key })}
+            onClick={() => onChange({ ...filters, category: "alle" })}
             className="glass-chip shrink-0"
-            data-active={filters.category === option.key}
-            title={option.label}
+            data-active={filters.category === "alle"}
           >
-            <CategoryIcon
-              icon={option.icon}
-              size={14}
-              tone={filters.category === option.key ? "#ffffff" : undefined}
-            />
-            <span>{option.label}</span>
+            Alle
           </button>
-        ))}
+          {categoryChoices.map((option) => (
+            <button
+              key={option.key}
+              type="button"
+              onClick={() => onChange({ ...filters, category: option.key })}
+              className="glass-chip shrink-0"
+              data-active={filters.category === option.key}
+              title={option.label}
+            >
+              <CategoryIcon
+                icon={option.icon}
+                size={14}
+                tone={filters.category === option.key ? "#ffffff" : undefined}
+              />
+              <span>{option.label}</span>
+            </button>
+          ))}
+        </div>
         {canManage && onManage ? (
           <button
             type="button"
-            className="glass-chip shrink-0 !text-[12px]"
+            className="shrink-0 text-[12px] font-semibold text-[var(--fjord)]"
             onClick={onManage}
           >
-            Verwalten
+            Kategorien
           </button>
         ) : null}
       </div>
