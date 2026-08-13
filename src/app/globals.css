@@ -1380,7 +1380,7 @@ textarea {
 .spot-place-card {
   position: relative;
   z-index: 1;
-  width: min(100%, 26rem);
+  width: min(100%, 34rem);
   max-height: min(68vh, 34rem);
   display: flex;
   flex-direction: column;
