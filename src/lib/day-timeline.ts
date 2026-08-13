@@ -154,3 +154,183 @@ export function previousOvernightSpotId(
   }
   return null;
 }
+
+export type DayCalendarBlock = {
+  id: string;
+  kind: "fahrt" | "aufenthalt";
+  label: string;
+  detail?: string;
+  /** Minutes from midnight; may exceed 24h for late arrivals. */
+  startMin: number;
+  endMin: number;
+  spotId?: string;
+  role?: DayTimelineEntry["role"];
+};
+
+function blockDetailDrive(entry: DayTimelineEntry): string | undefined {
+  const parts: string[] = [];
+  if (entry.driveMinutesBefore != null) {
+    const h = Math.floor(entry.driveMinutesBefore / 60);
+    const m = entry.driveMinutesBefore % 60;
+    parts.push(h > 0 ? `${h} Std ${m} Min` : `${m} Min`);
+  }
+  if (entry.driveKmBefore != null && entry.driveKmBefore > 0) {
+    parts.push(`${Math.round(entry.driveKmBefore)} km`);
+  }
+  return parts.length > 0 ? parts.join(" · ") : undefined;
+}
+
+/**
+ * Map timeline entries to calendar blocks (Fahrten + Aufenthalte).
+ * Requires clock times (depart_at set). Returns [] if clocks are missing.
+ */
+export function timelineToCalendarBlocks(
+  entries: DayTimelineEntry[],
+): DayCalendarBlock[] {
+  if (entries.length === 0) return [];
+  const hasClocks = entries.some(
+    (entry) => entry.arriveAt != null || entry.departAt != null,
+  );
+  if (!hasClocks) return [];
+
+  const blocks: DayCalendarBlock[] = [];
+  let prevDepartMin: number | null = null;
+
+  for (let index = 0; index < entries.length; index += 1) {
+    const entry = entries[index];
+    let arriveMin = minutesFromMidnight(entry.arriveAt);
+    let departMin = minutesFromMidnight(entry.departAt);
+
+    // Keep a monotonic day if we wrapped past midnight.
+    if (
+      arriveMin != null &&
+      prevDepartMin != null &&
+      arriveMin < prevDepartMin
+    ) {
+      arriveMin += 24 * 60;
+    }
+    if (
+      departMin != null &&
+      arriveMin != null &&
+      departMin < arriveMin
+    ) {
+      departMin += 24 * 60;
+    }
+    if (
+      departMin != null &&
+      prevDepartMin != null &&
+      departMin < prevDepartMin
+    ) {
+      departMin += 24 * 60;
+    }
+    if (
+      entry.driveMinutesBefore != null &&
+      entry.driveMinutesBefore > 0 &&
+      prevDepartMin != null
+    ) {
+      const driveStart: number = prevDepartMin;
+      const driveEnd: number = prevDepartMin + entry.driveMinutesBefore;
+      if (arriveMin == null) arriveMin = driveEnd;
+      else if (arriveMin < driveStart) arriveMin += 24 * 60;
+      blocks.push({
+        id: `fahrt-${index}-${entry.spotId}`,
+        kind: "fahrt",
+        label: `Fahrt → ${entry.name}`,
+        detail: blockDetailDrive(entry),
+        startMin: driveStart,
+        endMin: driveEnd,
+        spotId: entry.spotId,
+      });
+    } else if (
+      entry.driveMinutesBefore != null &&
+      entry.driveMinutesBefore > 0 &&
+      arriveMin != null
+    ) {
+      const driveEnd: number = arriveMin;
+      const driveStart: number = arriveMin - entry.driveMinutesBefore;
+      blocks.push({
+        id: `fahrt-${index}-${entry.spotId}`,
+        kind: "fahrt",
+        label: `Fahrt → ${entry.name}`,
+        detail: blockDetailDrive(entry),
+        startMin: driveStart,
+        endMin: driveEnd,
+        spotId: entry.spotId,
+      });
+    }
+
+    if (entry.role === "origin" && departMin != null) {
+      prevDepartMin = departMin;
+      continue;
+    }
+
+    if (entry.role === "stop" && arriveMin != null) {
+      if (departMin != null && departMin < arriveMin) departMin += 24 * 60;
+      const dwellEnd: number =
+        departMin ??
+        arriveMin + Math.max(0, entry.dwellMinutes ?? defaultDwellMinutes(null));
+      const visualEnd: number = Math.max(dwellEnd, arriveMin + 20);
+      blocks.push({
+        id: `aufenthalt-${index}-${entry.spotId}`,
+        kind: "aufenthalt",
+        label: entry.name,
+        detail:
+          entry.dwellMinutes != null
+            ? entry.dwellIsDefault
+              ? `${entry.dwellMinutes} Min (Standard)`
+              : `${entry.dwellMinutes} Min`
+            : undefined,
+        startMin: arriveMin,
+        endMin: visualEnd,
+        spotId: entry.spotId,
+        role: "stop",
+      });
+      prevDepartMin = dwellEnd;
+      continue;
+    }
+
+    if (entry.role === "overnight" && arriveMin != null) {
+      const midnight = Math.ceil((arriveMin + 1) / (24 * 60)) * (24 * 60);
+      const overnightEnd = Math.max(
+        arriveMin + 90,
+        Math.min(midnight, arriveMin + 12 * 60),
+      );
+      blocks.push({
+        id: `overnight-${index}-${entry.spotId}`,
+        kind: "aufenthalt",
+        label: `Übernachtung · ${entry.name}`,
+        detail: `Ankunft ${clockFromMinutes(arriveMin)}`,
+        startMin: arriveMin,
+        endMin: overnightEnd,
+        spotId: entry.spotId,
+        role: "overnight",
+      });
+      prevDepartMin = overnightEnd;
+      continue;
+    }
+
+    if (departMin != null) prevDepartMin = departMin;
+    else if (arriveMin != null) prevDepartMin = arriveMin;
+  }
+
+  return blocks.filter((block) => block.endMin > block.startMin);
+}
+
+/** Hour range covering blocks, snapped to full hours with padding. */
+export function calendarHourRange(
+  blocks: DayCalendarBlock[],
+  fallbackStart = 6,
+  fallbackEnd = 22,
+): { startHour: number; endHour: number } {
+  if (blocks.length === 0) {
+    return { startHour: fallbackStart, endHour: fallbackEnd };
+  }
+  const min = Math.min(...blocks.map((block) => block.startMin));
+  const max = Math.max(...blocks.map((block) => block.endMin));
+  const startHour = Math.max(0, Math.floor(min / 60) - 1);
+  const endHour = Math.min(36, Math.ceil(max / 60) + 1); // allow past midnight visually
+  return {
+    startHour,
+    endHour: Math.max(startHour + 4, endHour),
+  };
+}
