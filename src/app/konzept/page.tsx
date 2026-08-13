@@ -6,9 +6,11 @@ import {
   categoryLabels,
   categoryTone,
   collaborators,
+  costPreview,
   dataModel,
   days,
   productPillars,
+  roleLabels,
   spots,
   vacation,
   type Spot,
@@ -20,6 +22,7 @@ const prototypeTabs = [
   { id: "spots", label: "Spots", short: "Spots" },
   { id: "karte", label: "Karte", short: "Karte" },
   { id: "plan", label: "Plan", short: "Plan" },
+  { id: "kosten", label: "Kosten", short: "Kosten" },
   { id: "team", label: "Team", short: "Team" },
 ] as const;
 
@@ -28,6 +31,7 @@ type TabId = (typeof prototypeTabs)[number]["id"];
 const filterOptions: Array<"alle" | SpotCategory> = [
   "alle",
   "stellplatz",
+  "unterkunft",
   "sehenswuerdigkeit",
   "ort",
   "freizeit",
@@ -147,6 +151,8 @@ export default function ConceptPage() {
   const [selectedDay, setSelectedDay] = useState(0);
   const [mounted, setMounted] = useState(false);
 
+  const [expandedSpotId, setExpandedSpotId] = useState<string | null>(null);
+
   useEffect(() => {
     setMounted(true);
   }, []);
@@ -161,19 +167,19 @@ export default function ConceptPage() {
   const inviteSteps = [
     {
       title: "Einladung senden",
-      text: "Als Admin teilst du den Urlaub per E-Mail. Der Link gilt nur für diesen Trip.",
+      text: "Admin lädt per E-Mail ein — der Link führt zur Registrierung für genau diesen Trip.",
     },
     {
-      title: "Passwort setzen",
-      text: "Die eingeladene Person aktiviert das Konto per E-Mail-Link und Passwort.",
+      title: "Registrieren",
+      text: "Mit der eingeladenen E-Mail ein Konto anlegen. Der Invite-Link zeigt nur Registrieren.",
     },
     {
-      title: "MFA einrichten",
-      text: "TOTP mit Authenticator-App ist Pflicht, bevor der gemeinsame Plan sichtbar wird.",
+      title: "Einladung annehmen",
+      text: "Danach den Invite öffnen und beitreten — Rolle und Rechte sind schon gesetzt.",
     },
     {
-      title: "Gemeinsam planen",
-      text: "Beide sehen Spots, Karte und Tagesplan live. Admin bleibt Owner.",
+      title: "MFA (mit Grace)",
+      text: "TOTP-MFA absichern. Es gibt eine Grace-Zeit — der Plan ist nicht hart gesperrt.",
     },
   ];
 
@@ -217,8 +223,8 @@ export default function ConceptPage() {
             Planer
           </h1>
           <p className="mt-5 max-w-md text-[17px] leading-relaxed text-[var(--ink-soft)]">
-            Spots sammeln, auf der Karte ordnen und Tag für Tag die Route bauen — klar,
-            ruhig und gemeinsam abgesichert mit MFA.
+            Spots sammeln, Route und Kosten planen, Team einladen — Liquid-Glass-Navigation,
+            klare Rechte und MFA mit Grace-Zeit.
           </p>
           <div className="mt-8 flex flex-wrap gap-3">
             <Link href="/login" className="cta">
@@ -248,15 +254,15 @@ export default function ConceptPage() {
                   </div>
                   <div className="ios-row">
                     <div>
-                      <p className="text-[15px] font-semibold">8 Spots gesammelt</p>
-                      <p className="text-[13px] text-[var(--ink-soft)]">Süd → Höga Kusten</p>
+                      <p className="text-[15px] font-semibold">9 Spots · Sterne & Archiv</p>
+                      <p className="text-[13px] text-[var(--ink-soft)]">Karte · direkt bearbeiten</p>
                     </div>
                     <span className="ios-chevron" />
                   </div>
                   <div className="ios-row">
                     <div>
-                      <p className="text-[15px] font-semibold">2 Personen</p>
-                      <p className="text-[13px] text-[var(--ink-soft)]">1 Einladung offen</p>
+                      <p className="text-[15px] font-semibold">Kosten & Startadresse</p>
+                      <p className="text-[13px] text-[var(--ink-soft)]">Sprit inkl. Heimweg</p>
                     </div>
                     <span className="ios-chevron" />
                   </div>
@@ -299,17 +305,18 @@ export default function ConceptPage() {
             <p className="section-label">Live-Demo</p>
             <h2 className="display mt-2 text-3xl md:text-4xl">So soll sich die App anfühlen</h2>
             <p className="mt-3 max-w-xl text-[15px] leading-relaxed text-[var(--ink-soft)]">
-              iOS-nahe Navigation, gruppierte Listen und klare Aktionen — mit euren Farben und dem
-              Schweden-Van-Beispiel.
+              Liquid-Glass-Tabbar, gruppierte Listen und Sheets — mit euren Farben und dem
+              Schweden-Van-Beispiel. Sechs Tabs wie in der echten App.
             </p>
           </div>
-          <div className="segmented w-full max-w-md">
+          <div className="segmented w-full max-w-xl overflow-x-auto">
             {prototypeTabs.map((item) => (
               <button
                 key={item.id}
                 type="button"
                 data-active={tab === item.id}
                 onClick={() => setTab(item.id)}
+                className="!text-[11px] !px-2"
               >
                 {item.short}
               </button>
@@ -331,6 +338,7 @@ export default function ConceptPage() {
                           ["Zeitraum", "10.07. – 24.07.2026"],
                           ["Art", vacation.type],
                           ["Region", vacation.region],
+                          ["Start / Zuhause", vacation.homeLabel],
                         ].map(([label, value]) => (
                           <div key={label} className="ios-row !items-start">
                             <div className="w-full">
@@ -340,7 +348,14 @@ export default function ConceptPage() {
                           </div>
                         ))}
                       </div>
-                      <div className="ios-group mt-4 p-4">
+                      <div className="ios-group mt-3 p-4">
+                        <p className="text-[13px] font-semibold text-[var(--ink-soft)]">Route</p>
+                        <p className="mt-1 text-[14px] leading-relaxed text-[var(--ink)]">
+                          {vacation.homeHint}
+                        </p>
+                        <p className="mt-2 text-[13px] text-[var(--ink-soft)]">{vacation.budgetHint}</p>
+                      </div>
+                      <div className="ios-group mt-3 p-4">
                         <p className="text-[13px] font-semibold text-[var(--ink-soft)]">Notiz</p>
                         <p className="mt-1 text-[15px] leading-relaxed">{vacation.description}</p>
                       </div>
@@ -358,8 +373,10 @@ export default function ConceptPage() {
                               setFilter(option);
                               const next =
                                 option === "alle"
-                                  ? spots[0]
-                                  : spots.find((spot) => spot.category === option);
+                                  ? spots.find((spot) => !spot.archived) ?? spots[0]
+                                  : spots.find(
+                                      (spot) => spot.category === option && !spot.archived,
+                                    );
                               if (next) setActiveSpotId(next.id);
                             }}
                             className={`shrink-0 rounded-full px-3 py-1.5 text-[12px] font-semibold ${
@@ -372,27 +389,50 @@ export default function ConceptPage() {
                           </button>
                         ))}
                       </div>
-                      <div className="ios-group">
-                        {filteredSpots.map((spot) => (
-                          <button
-                            key={spot.id}
-                            type="button"
-                            className="ios-row ios-chevron"
-                            data-active={activeSpot?.id === spot.id}
-                            onClick={() => setActiveSpotId(spot.id)}
-                          >
-                            <span
-                              className="h-2.5 w-2.5 rounded-full"
-                              style={{ background: categoryTone[spot.category] }}
-                            />
-                            <div>
-                              <p className="text-[15px] font-semibold">{spot.name}</p>
-                              <p className="text-[12px] text-[var(--ink-soft)]">
-                                {categoryLabels[spot.category]}
-                              </p>
+                      <div className="ios-group overflow-hidden">
+                        {filteredSpots.map((spot) => {
+                          const open = expandedSpotId === spot.id;
+                          return (
+                            <div key={spot.id} className={spot.archived ? "opacity-55" : ""}>
+                              <button
+                                type="button"
+                                className="ios-row ios-chevron"
+                                data-active={activeSpot?.id === spot.id}
+                                onClick={() => {
+                                  setActiveSpotId(spot.id);
+                                  setExpandedSpotId(open ? null : spot.id);
+                                }}
+                              >
+                                <span
+                                  className="h-2.5 w-2.5 rounded-full"
+                                  style={{ background: categoryTone[spot.category] }}
+                                />
+                                <div className="min-w-0 flex-1 text-left">
+                                  <p className="text-[15px] font-semibold">{spot.name}</p>
+                                  <p className="text-[12px] text-[var(--ink-soft)]">
+                                    {categoryLabels[spot.category]}
+                                    {spot.rating != null ? ` · ${spot.rating}★` : ""}
+                                    {spot.archived ? " · archiviert" : ""}
+                                  </p>
+                                </div>
+                              </button>
+                              {open ? (
+                                <div className="flex flex-wrap gap-1.5 border-t border-black/5 bg-white/30 px-4 py-2.5">
+                                  <span className="glass-chip !py-1 !text-[11px]" data-active="true">
+                                    Bearbeiten
+                                  </span>
+                                  <span className="glass-chip !py-1 !text-[11px]">Karte öffnen</span>
+                                  {spot.infoUrl ? (
+                                    <span className="glass-chip !py-1 !text-[11px]">Seite öffnen</span>
+                                  ) : null}
+                                  <span className="glass-chip !py-1 !text-[11px]">
+                                    {spot.archived ? "Wiederherstellen" : "Archivieren"}
+                                  </span>
+                                </div>
+                              ) : null}
                             </div>
-                          </button>
-                        ))}
+                          );
+                        })}
                       </div>
                     </AppChrome>
                   )}
@@ -401,21 +441,32 @@ export default function ConceptPage() {
                     <AppChrome title="Karte" subtitle="Übersicht">
                       <SwedenMap
                         activeId={activeSpot?.id ?? null}
-                        filtered={filteredSpots}
-                        onSelect={setActiveSpotId}
+                        filtered={filteredSpots.filter((spot) => !spot.archived)}
+                        onSelect={(id) => {
+                          setActiveSpotId(id);
+                          setExpandedSpotId(id);
+                        }}
                       />
                       {activeSpot && (
-                        <div className="ios-group mt-3 p-4">
-                          <p
-                            className="text-[12px] font-semibold uppercase tracking-wide"
-                            style={{ color: categoryTone[activeSpot.category] }}
-                          >
-                            {categoryLabels[activeSpot.category]}
-                          </p>
-                          <p className="mt-1 text-[16px] font-semibold">{activeSpot.name}</p>
-                          <p className="mt-1 text-[13px] text-[var(--ink-soft)]">
-                            {activeSpot.description}
-                          </p>
+                        <div className="ios-group mt-3 overflow-hidden">
+                          <div className="p-4">
+                            <p
+                              className="text-[12px] font-semibold uppercase tracking-wide"
+                              style={{ color: categoryTone[activeSpot.category] }}
+                            >
+                              {categoryLabels[activeSpot.category]}
+                            </p>
+                            <p className="mt-1 text-[16px] font-semibold">{activeSpot.name}</p>
+                            <p className="mt-1 text-[13px] text-[var(--ink-soft)]">
+                              {activeSpot.description}
+                            </p>
+                          </div>
+                          <div className="flex flex-wrap gap-1.5 border-t border-black/5 px-4 py-2.5">
+                            <span className="glass-chip !py-1 !text-[11px]" data-active="true">
+                              Bearbeiten
+                            </span>
+                            <span className="glass-chip !py-1 !text-[11px]">Karte öffnen</span>
+                          </div>
                         </div>
                       )}
                     </AppChrome>
@@ -442,7 +493,13 @@ export default function ConceptPage() {
                         ))}
                       </div>
                       <div className="ios-group p-4">
-                        <p className="text-[12px] font-semibold uppercase tracking-wide text-[var(--fjord)]">
+                        {day.departAt ? (
+                          <p className="text-[12px] font-semibold text-[var(--ink-soft)]">
+                            Abfahrt {day.departAt}
+                            {day.etaHint ? ` · ${day.etaHint}` : ""}
+                          </p>
+                        ) : null}
+                        <p className="mt-3 text-[12px] font-semibold uppercase tracking-wide text-[var(--fjord)]">
                           Übernachtung
                         </p>
                         {overnight ? (
@@ -478,8 +535,40 @@ export default function ConceptPage() {
                     </AppChrome>
                   )}
 
+                  {tab === "kosten" && (
+                    <AppChrome title="Kosten" subtitle="Budget & Sprit">
+                      <div className="ios-group p-4">
+                        <p className="text-[12px] font-semibold uppercase tracking-wide text-[var(--ink-faint)]">
+                          Reise & Übernachtung
+                        </p>
+                        <p className="mt-2 text-[15px] font-semibold">{costPreview.fuelEstimate}</p>
+                        <p className="mt-1 text-[13px] text-[var(--ink-soft)]">
+                          {costPreview.overnight}
+                        </p>
+                      </div>
+                      <div className="ios-group mt-3 p-4">
+                        <p className="text-[12px] font-semibold uppercase tracking-wide text-[var(--ink-faint)]">
+                          Einstellungen
+                        </p>
+                        <p className="mt-2 text-[14px] font-semibold">Start / Zuhause</p>
+                        <p className="mt-1 text-[13px] text-[var(--ink-soft)]">
+                          {vacation.homeLabel} · Anreise & Rückfahrt einrechnen
+                        </p>
+                        <p className="mt-3 text-[13px] text-[var(--ink-soft)]">
+                          Verbrauch 9,5 L/100km · Spritpreis 1,75 €
+                        </p>
+                      </div>
+                      <div className="ios-group mt-3 p-4">
+                        <p className="text-[12px] font-semibold uppercase tracking-wide text-[var(--ink-faint)]">
+                          Positionen
+                        </p>
+                        <p className="mt-2 text-[14px] font-semibold">{costPreview.openItems}</p>
+                      </div>
+                    </AppChrome>
+                  )}
+
                   {tab === "team" && (
-                    <AppChrome title="Team & MFA" subtitle="Zugang">
+                    <AppChrome title="Team" subtitle="Rechte & Einladen">
                       <div className="ios-group">
                         {collaborators.map((person) => (
                           <div key={person.id} className="ios-row !items-start">
@@ -492,10 +581,17 @@ export default function ConceptPage() {
                                 {person.email}
                               </p>
                               <p className="mt-1 text-[11px] font-semibold uppercase tracking-wide text-[var(--ink-faint)]">
-                                {person.role} · {person.status === "active" ? "aktiv" : "eingeladen"} ·
-                                MFA {person.mfa ? "an" : "offen"}
+                                {roleLabels[person.role]} ·{" "}
+                                {person.status === "active" ? "aktiv" : "eingeladen"}
                               </p>
                             </div>
+                            {person.status === "invited" ? (
+                              <span className="glass-chip !py-1 !text-[11px]">Link teilen</span>
+                            ) : (
+                              <span className="text-[18px] text-[var(--ink-faint)]" aria-hidden>
+                                ›
+                              </span>
+                            )}
                           </div>
                         ))}
                       </div>
@@ -544,18 +640,19 @@ export default function ConceptPage() {
                   )}
                 </div>
 
-                <div className="tabbar">
-                  {prototypeTabs.map((item) => (
-                    <button
-                      key={item.id}
-                      type="button"
-                      data-active={tab === item.id}
-                      onClick={() => setTab(item.id)}
-                    >
-                      <span className="tab-icon" />
-                      {item.short}
-                    </button>
-                  ))}
+                <div className="concept-dock">
+                  <div className="concept-dock-shell">
+                    {prototypeTabs.map((item) => (
+                      <button
+                        key={item.id}
+                        type="button"
+                        data-active={tab === item.id}
+                        onClick={() => setTab(item.id)}
+                      >
+                        {item.short}
+                      </button>
+                    ))}
+                  </div>
                 </div>
               </div>
             </div>
@@ -567,8 +664,8 @@ export default function ConceptPage() {
                 <p className="section-label">Urlaub</p>
                 <h3 className="display mt-2 text-2xl md:text-3xl">Der gemeinsame Container</h3>
                 <p className="mt-3 text-[15px] leading-relaxed text-[var(--ink-soft)]">
-                  Zeitraum, Typ und Notizen hängen am Urlaub. Van-Profile schalten Extras frei —
-                  etwa Übernachtung pro Tag.
+                  Zeitraum, Typ, Notizen und Startadresse hängen am Urlaub. Van-Profile schalten
+                  Übernachtungen frei — Heimat fließt in Sprit und Route ein.
                 </p>
               </>
             )}
@@ -580,6 +677,9 @@ export default function ConceptPage() {
                   {activeSpot.description}
                 </p>
                 <SpotMeta spot={activeSpot} />
+                <p className="mt-4 text-[14px] text-[var(--ink-soft)]">
+                  Tippen öffnet Aktionen: Bearbeiten, Karte/Seite, Archivieren — ohne „Mehr Details“.
+                </p>
                 <div className="mt-6 flex flex-wrap gap-3">
                   <a href={activeSpot.mapsUrl} target="_blank" rel="noreferrer" className="cta">
                     Google Maps
@@ -600,10 +700,10 @@ export default function ConceptPage() {
             {tab === "karte" && (
               <>
                 <p className="section-label">Karte</p>
-                <h3 className="display mt-2 text-2xl md:text-3xl">Alle Spots auf einen Blick</h3>
+                <h3 className="display mt-2 text-2xl md:text-3xl">Spots tippen & bearbeiten</h3>
                 <p className="mt-3 text-[15px] leading-relaxed text-[var(--ink-soft)]">
-                  Später echte Karte (Mapbox/Google). Im Konzept zeigt die Schweden-Silhouette Filter
-                  und Auswahl.
+                  In der App: Google Maps oder OpenStreetMap. Spot antippen öffnet die Detailkarte
+                  mit Bearbeiten. Diese Demo zeigt die Idee als Schweden-Silhouette.
                 </p>
               </>
             )}
@@ -613,18 +713,28 @@ export default function ConceptPage() {
                 <h3 className="display mt-2 text-2xl md:text-3xl">{day.title}</h3>
                 <p className="mt-3 text-[15px] leading-relaxed text-[var(--ink-soft)]">{day.notes}</p>
                 <p className="mt-4 text-[14px] text-[var(--ink-soft)]">
-                  Spots werden referenziert, nicht kopiert — Änderungen in der Sammlung bleiben
-                  überall aktuell.
+                  Abfahrt, Fahrzeiten (Google/Schätzung) und Routenübersicht — inklusive Anreise von
+                  Zuhause. Spots bleiben Referenzen, keine Kopien.
+                </p>
+              </>
+            )}
+            {tab === "kosten" && (
+              <>
+                <p className="section-label">Kosten</p>
+                <h3 className="display mt-2 text-2xl md:text-3xl">Budget, Sprit, Positionen</h3>
+                <p className="mt-3 text-[15px] leading-relaxed text-[var(--ink-soft)]">
+                  Sprit-Schätzung aus der Route inkl. Heimatadresse, Übernachtungen und offene
+                  Anschaffungen. Einstellungen und Startadresse sitzen hier.
                 </p>
               </>
             )}
             {tab === "team" && (
               <>
                 <p className="section-label">Zusammenarbeit</p>
-                <h3 className="display mt-2 text-2xl md:text-3xl">Einladen, absichern, teilen</h3>
+                <h3 className="display mt-2 text-2xl md:text-3xl">Einladen & Rechte</h3>
                 <p className="mt-3 text-[15px] leading-relaxed text-[var(--ink-soft)]">
-                  Klare Schritte: Invite → Passwort → MFA. Danach derselbe Urlaub für alle
-                  Mitglieder.
+                  Invite-Link → Registrieren → Annehmen. Rollen: Betrachter, Bearbeiter, Admin
+                  (oder angepasst). MFA mit Grace — nicht als harte Sperre vor dem Plan.
                 </p>
               </>
             )}
@@ -661,15 +771,16 @@ export default function ConceptPage() {
         <div className="ios-group mt-6 p-6">
           <h3 className="display text-xl">Auth-Flow</h3>
           <p className="mt-2 max-w-3xl text-[15px] leading-relaxed text-[var(--ink-soft)]">
-            Supabase Auth mit E-Mail, Invite-Link und TOTP-MFA. RLS stellt sicher, dass nur
-            Mitglieder des jeweiligen Urlaubs Daten sehen und ändern.
+            Invite-only: E-Mail-Einladung → Registrieren → Einladung annehmen. TOTP-MFA mit
+            Grace-Zeit. RLS stellt sicher, dass nur Mitglieder des jeweiligen Urlaubs Daten sehen
+            und ändern.
           </p>
         </div>
       </section>
 
       <footer className="mx-auto w-full max-w-6xl px-5 pb-12 pt-2 md:px-8">
         <div className="flex flex-wrap items-center justify-between gap-3 border-t border-[var(--separator)] pt-6 text-[13px] text-[var(--ink-soft)]">
-          <p>Vacation Planer · privat, eingeladen, mit MFA</p>
+          <p>Vacation Planer · invite-only, Rollen, MFA mit Grace</p>
           <Link href="/login" className="font-semibold text-[var(--fjord)] underline">
             Anmelden
           </Link>

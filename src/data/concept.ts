@@ -1,5 +1,6 @@
 export type SpotCategory =
   | "stellplatz"
+  | "unterkunft"
   | "sehenswuerdigkeit"
   | "ort"
   | "freizeit"
@@ -19,6 +20,8 @@ export type Spot = {
   overnightCost?: OvernightCost;
   priceHint?: string;
   tags: string[];
+  rating?: number;
+  archived?: boolean;
 };
 
 export type DayPlan = {
@@ -27,19 +30,23 @@ export type DayPlan = {
   overnightSpotId?: string;
   spotIds: string[];
   notes?: string;
+  departAt?: string;
+  etaHint?: string;
 };
+
+export type CollaboratorRole = "admin" | "editor" | "viewer";
 
 export type Collaborator = {
   id: string;
   name: string;
   email: string;
-  role: "admin" | "member";
+  role: CollaboratorRole;
   status: "active" | "invited";
-  mfa: boolean;
 };
 
 export const categoryLabels: Record<SpotCategory, string> = {
   stellplatz: "Stellplatz",
+  unterkunft: "Unterkunft",
   sehenswuerdigkeit: "Sehenswürdigkeit",
   ort: "Ort",
   freizeit: "Freizeit",
@@ -48,10 +55,17 @@ export const categoryLabels: Record<SpotCategory, string> = {
 
 export const categoryTone: Record<SpotCategory, string> = {
   stellplatz: "#2f6f5e",
+  unterkunft: "#3d5a80",
   sehenswuerdigkeit: "#b56a3c",
   ort: "#1f5f78",
   freizeit: "#6a7a2f",
   versorgung: "#6b5a3c",
+};
+
+export const roleLabels: Record<CollaboratorRole, string> = {
+  admin: "Admin",
+  editor: "Bearbeiter",
+  viewer: "Betrachter",
 };
 
 export const vacation = {
@@ -61,6 +75,9 @@ export const vacation = {
   region: "Schweden · Süd nach Nord",
   startDate: "2026-07-10",
   endDate: "2026-07-24",
+  homeLabel: "Zuhause",
+  homeHint: "Anreise & Rückfahrt in Sprit und Route",
+  budgetHint: "Budget 2.500 € · ca. 1.420 km inkl. Heimweg",
   description:
     "Zwei Wochen mit dem Van von Skåne bis zur Höga Kusten: Stellplätze sammeln, Tage planen, gemeinsam entscheiden.",
 };
@@ -72,15 +89,13 @@ export const collaborators: Collaborator[] = [
     email: "florian@tutzinger-knolls.de",
     role: "admin",
     status: "active",
-    mfa: true,
   },
   {
     id: "u2",
     name: "Partner:in",
     email: "partner@example.com",
-    role: "member",
+    role: "editor",
     status: "invited",
-    mfa: false,
   },
 ];
 
@@ -96,6 +111,7 @@ export const spots: Spot[] = [
     infoUrl: "https://park4night.com/en/place/example-soderasen",
     overnightCost: "frei",
     tags: ["Wald", "Nacht", "ruhig"],
+    rating: 4.5,
   },
   {
     id: "s2",
@@ -106,6 +122,7 @@ export const spots: Spot[] = [
     lng: 14.23,
     mapsUrl: "https://maps.google.com/?q=55.68,14.23",
     tags: ["Küste", "Stadt"],
+    rating: 4,
   },
   {
     id: "s3",
@@ -119,6 +136,7 @@ export const spots: Spot[] = [
     overnightCost: "kostenpflichtig",
     priceHint: "ab 280 SEK",
     tags: ["Strom", "Dusche"],
+    rating: 3.5,
   },
   {
     id: "s4",
@@ -130,6 +148,7 @@ export const spots: Spot[] = [
     mapsUrl: "https://maps.google.com/?q=56.66,16.35",
     infoUrl: "https://kalmarslott.se",
     tags: ["Kultur", "Foto"],
+    rating: 5,
   },
   {
     id: "s5",
@@ -153,6 +172,7 @@ export const spots: Spot[] = [
     infoUrl: "https://park4night.com/en/place/example-tiveden",
     overnightCost: "frei",
     tags: ["Natur", "Nacht"],
+    rating: 4,
   },
   {
     id: "s7",
@@ -163,6 +183,7 @@ export const spots: Spot[] = [
     lng: 18.32,
     mapsUrl: "https://maps.google.com/?q=62.98,18.32",
     tags: ["Aussicht", "Highlight"],
+    rating: 5,
   },
   {
     id: "s8",
@@ -174,6 +195,20 @@ export const spots: Spot[] = [
     mapsUrl: "https://maps.google.com/?q=59.27,15.21",
     tags: ["Einkauf"],
   },
+  {
+    id: "s9",
+    name: "AirBnB Malmö Hafen",
+    category: "unterkunft",
+    description: "Optionale Soft-Night vor dem Van-Start — Archiv-Beispiel.",
+    lat: 55.61,
+    lng: 12.99,
+    mapsUrl: "https://maps.google.com/?q=55.61,12.99",
+    infoUrl: "https://www.airbnb.com/example",
+    overnightCost: "kostenpflichtig",
+    priceHint: "ab 95 €",
+    tags: ["Stadt", "Anreise"],
+    archived: true,
+  },
 ];
 
 export const days: DayPlan[] = [
@@ -183,6 +218,8 @@ export const days: DayPlan[] = [
     overnightSpotId: "s1",
     spotIds: ["s2"],
     notes: "Fähre / Ankunft, entspannt einrollen.",
+    departAt: "08:30",
+    etaHint: "ca. 2,1 Std · inkl. Anreise von Zuhause",
   },
   {
     date: "2026-07-11",
@@ -190,6 +227,8 @@ export const days: DayPlan[] = [
     overnightSpotId: "s3",
     spotIds: ["s4", "s8"],
     notes: "Schloss + Einkauf, dann Stellplatz mit Strom.",
+    departAt: "09:00",
+    etaHint: "ca. 3,4 Std · Google-Routenzeit",
   },
   {
     date: "2026-07-12",
@@ -197,6 +236,8 @@ export const days: DayPlan[] = [
     overnightSpotId: "s6",
     spotIds: ["s5"],
     notes: "Kayak am Morgen, danach Waldnacht in Tiveden.",
+    departAt: "10:15",
+    etaHint: "ca. 4,0 Std",
   },
   {
     date: "2026-07-13",
@@ -204,54 +245,64 @@ export const days: DayPlan[] = [
     overnightSpotId: undefined,
     spotIds: ["s7"],
     notes: "Übernachtung noch offen — Spot aus der Sammlung wählen.",
+    departAt: "08:00",
+    etaHint: "lange Etappe · Stauhinweis möglich",
   },
 ];
+
+export const costPreview = {
+  fuelEstimate: "Sprit ca. 248 € · 1.420 km",
+  overnight: "Übernachtungen 4 Nächte · 2 ohne Preis",
+  openItems: "ECOFLOW Delta 3 Plus · offen",
+};
 
 export const productPillars = [
   {
     title: "Urlaub anlegen",
-    text: "Zeitraum, Typ (z. B. Van) und gemeinsame Infos festlegen. Ein Urlaub ist der Container für Spots, Tage und Team.",
+    text: "Zeitraum, Typ und Startadresse festlegen. Der Urlaub ist der Container für Spots, Plan, Kosten und Team.",
   },
   {
     title: "Spots sammeln",
-    text: "Stellplätze, Orte, Aktivitäten und Versorgungspunkte sammeln — mit Karte, Maps-Link und Buchungs-/Info-Link.",
+    text: "Links rein, Details ergänzen, bewerten und archivieren. Auf der Karte antippen und direkt bearbeiten.",
   },
   {
-    title: "Tage planen",
-    text: "Jeden Reisetag mit Stops befüllen. Bei Van-Urlauben gehört zu jedem Tag optional ein Übernachtungsplatz (frei oder kostenpflichtig).",
+    title: "Tage & Route planen",
+    text: "Stops und Übernachtungen setzen — mit Abfahrt, Fahrzeiten und Routenübersicht inkl. Anreise von Zuhause.",
   },
   {
-    title: "Zusammenarbeiten",
-    text: "Admin lädt mit, Gäste setzen Passwort und MFA. Danach planen beide im selben Urlaub.",
+    title: "Kosten im Blick",
+    text: "Budget, Sprit-Schätzung und Positionen. Anreise/Rückfahrt fließen über die Heimatadresse ein.",
+  },
+  {
+    title: "Team & Rechte",
+    text: "Per Link einladen, Rolle wählen (Betrachter / Bearbeiter / Admin). MFA mit Grace-Zeit, nicht als harte Sperre vor dem Plan.",
   },
 ];
 
 export const dataModel = [
   {
     entity: "Vacation",
-    fields: ["title", "dates", "type", "notes", "cover"],
-    note: "Root-Objekt. Alles andere hängt daran.",
+    fields: ["title", "dates", "type", "home_*", "budget", "fuel"],
+    note: "Root-Objekt inkl. Startadresse für Sprit und Route.",
   },
   {
     entity: "Membership",
-    fields: ["user", "role: admin|member", "invite status"],
-    note: "Steuert Zugriff und Einladungen.",
+    fields: ["role: viewer|editor|admin|custom", "permissions", "invite"],
+    note: "Feingranulare Rechte und Einladungen.",
   },
   {
     entity: "Spot",
-    fields: [
-      "category",
-      "geo",
-      "maps_url",
-      "info_url",
-      "overnight_cost",
-      "tags",
-    ],
-    note: "Sammlung unabhängig vom Tagesplan.",
+    fields: ["category", "geo", "maps/info_url", "ratings", "is_relevant", "stay"],
+    note: "Sammlung unabhängig vom Tagesplan; Archiv möglich.",
   },
   {
     entity: "DayPlan",
-    fields: ["date", "ordered spots", "overnight_spot", "notes"],
-    note: "Plant Spots auf konkrete Tage.",
+    fields: ["date", "stops", "overnight", "depart_at", "dwell"],
+    note: "Plant Spots auf Tage — Basis für ETAs und Route.",
+  },
+  {
+    entity: "CostItem",
+    fields: ["category", "amount", "status", "notes"],
+    note: "Budget, Anschaffungen, Sprit-Übernahme.",
   },
 ];

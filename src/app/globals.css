@@ -499,6 +499,45 @@ textarea {
   background: var(--fjord);
 }
 
+/* Liquid-glass dock mock inside the Konzept phone (6 tabs). */
+.concept-dock {
+  display: flex;
+  justify-content: center;
+  padding: 6px 10px calc(10px + env(safe-area-inset-bottom, 0px));
+  background: transparent;
+}
+
+.concept-dock-shell {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(0, 1fr));
+  width: 100%;
+  gap: 0;
+  padding: 4px;
+  border-radius: 22px;
+  background: var(--surface);
+  backdrop-filter: var(--glass-blur);
+  -webkit-backdrop-filter: var(--glass-blur);
+  border: var(--glass-border);
+  box-shadow: var(--glass-inset), var(--shadow-soft);
+}
+
+.concept-dock-shell button {
+  border: 0;
+  border-radius: 18px;
+  background: transparent;
+  color: var(--ink-soft);
+  font-size: 9px;
+  font-weight: 650;
+  padding: 8px 2px;
+  letter-spacing: -0.01em;
+}
+
+.concept-dock-shell button[data-active="true"] {
+  background: var(--thumb);
+  color: var(--thumb-text);
+  box-shadow: 0 4px 12px rgba(12, 24, 32, 0.22);
+}
+
 .tab-glyph {
   display: inline-flex;
   width: 22px;
