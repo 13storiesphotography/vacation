@@ -2,11 +2,13 @@
 
 import { useActionState, useEffect, useMemo, useRef, useState, useTransition, type PointerEvent as ReactPointerEvent } from "react";
 import {
-  categoryLabels,
-  categoryOptions,
   isSpotRelevant,
   suggestedSpotTags,
+  activeCategoryOptions,
+  resolveCategoryIcon,
+  resolveCategoryLabel,
   type SpotCategory,
+  type VacationSpotCategory,
 } from "@/lib/spots";
 import type { Database } from "@/lib/database.types";
 import { createClient } from "@/lib/supabase/client";
@@ -433,12 +435,12 @@ function SpotThumb({
           />
         ) : (
           <div className="flex h-full w-full items-center justify-center bg-black/5">
-            <CategoryIcon category={spot.category} size={Math.round(size * 0.36)} tone="#ffffff" />
+            <CategoryIcon icon={resolveCategoryIcon(undefined, spot.category)} size={Math.round(size * 0.36)} tone="#ffffff" />
           </div>
         )}
       </button>
       <span className="pointer-events-none absolute bottom-0.5 left-0.5 z-[1] inline-flex rounded-full bg-[var(--surface-strong)] p-0.5 shadow-sm">
-        <CategoryIcon category={spot.category} size={11} />
+        <CategoryIcon icon={resolveCategoryIcon(undefined, spot.category)} size={11} />
       </span>
       {link && showImage ? (
         <ImageLinkOverlay
@@ -719,6 +721,7 @@ function SpotFormFields({
   showOvernight,
   category,
   onCategoryChange,
+  categories,
   name,
   onNameChange,
   description,
@@ -753,6 +756,7 @@ function SpotFormFields({
   showOvernight: boolean;
   category: SpotCategory;
   onCategoryChange: (value: SpotCategory) => void;
+  categories?: VacationSpotCategory[];
   name: string;
   onNameChange: (value: string) => void;
   description: string;
@@ -782,6 +786,7 @@ function SpotFormFields({
   onTagsChange: (tags: string[]) => void;
   smartLinkResolveMode?: "always" | "onChange";
 }) {
+  const categoryChoices = activeCategoryOptions(categories);
   const derivedNights = stayNightCountFromDates(stayCheckIn || null, stayCheckOut || null);
   // Controlled only by stayNights — never ghost-fill from dates (that blocked clearing).
   const nightsValue = stayNights;
@@ -869,9 +874,9 @@ function SpotFormFields({
           onChange={(e) => onCategoryChange(e.target.value as SpotCategory)}
           className="glass-field mt-1.5 px-3 py-3"
         >
-          {categoryOptions.map((option) => (
-            <option key={option} value={option}>
-              {categoryLabels[option]}
+          {categoryChoices.map((option) => (
+            <option key={option.key} value={option.key}>
+              {option.label}
             </option>
           ))}
         </select>
@@ -1241,6 +1246,7 @@ function applySmartLinkResult(
 export function CreateSpotForm({
   vacationId,
   onCreated,
+  categories,
   variant = "inline",
   formId = "create-spot-form",
   hideSubmit = false,
@@ -1248,14 +1254,18 @@ export function CreateSpotForm({
 }: {
   vacationId: string;
   onCreated: () => void;
+  categories?: VacationSpotCategory[];
   /** `sheet` = content inside GlassSheet (no card chrome). */
   variant?: "inline" | "sheet";
   formId?: string;
   hideSubmit?: boolean;
   onPendingChange?: (pending: boolean) => void;
 }) {
+  const categoryChoices = activeCategoryOptions(categories);
   const [state, action, pending] = useActionState(createSpot, initialState);
-  const [category, setCategory] = useState<SpotCategory>("stellplatz");
+  const [category, setCategory] = useState<SpotCategory>(
+    categoryChoices[0]?.key ?? "stellplatz",
+  );
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [imageUrl, setImageUrl] = useState("");
@@ -1301,7 +1311,8 @@ export function CreateSpotForm({
         vacationId={vacationId}
         category={category}
         onCategoryChange={setCategory}
-        showOvernight={isOvernightCategory(category)}
+        categories={categories}
+        showOvernight={isOvernightCategory(category, categories)}
         name={name}
         onNameChange={setName}
         description={description}
@@ -1362,6 +1373,7 @@ export function EditSpotForm({
   formId = "edit-spot-form",
   hideActions = false,
   onPendingChange,
+  categories,
 }: {
   vacationId: string;
   spot: Spot;
@@ -1375,6 +1387,7 @@ export function EditSpotForm({
   /** Hide Abbrechen/Speichern — use place-card footer with form=formId instead. */
   hideActions?: boolean;
   onPendingChange?: (pending: boolean) => void;
+  categories?: VacationSpotCategory[];
 }) {
   const [state, action, pending] = useActionState(updateSpot, initialState);
   const [category, setCategory] = useState<SpotCategory>(spot.category);
@@ -1503,7 +1516,8 @@ export function EditSpotForm({
           spot={spot}
           category={category}
           onCategoryChange={setCategory}
-          showOvernight={isOvernightCategory(category)}
+          categories={categories}
+          showOvernight={isOvernightCategory(category, categories)}
           name={name}
           onNameChange={setName}
           description={description}
@@ -1573,6 +1587,7 @@ export function SpotDetailView({
   ratings = [],
   raters = [],
   currentUserId = null,
+  categories,
   onRate,
   onFavorite,
 }: {
@@ -1581,6 +1596,7 @@ export function SpotDetailView({
   ratings?: SpotRating[];
   raters?: RaterOption[];
   currentUserId?: string | null;
+  categories?: VacationSpotCategory[];
   onRate: (value: number | null) => void;
   onFavorite: () => void;
 }) {
@@ -1595,6 +1611,8 @@ export function SpotDetailView({
   const tags = spot.tags ?? [];
   const description = spot.description?.trim() ?? "";
   const longDescription = description.length > 140;
+  const categoryIcon = resolveCategoryIcon(categories, spot.category);
+  const categoryLabel = resolveCategoryLabel(categories, spot.category);
 
   const teamRows = useMemo(() => {
     const labelFor = (userId: string) =>
@@ -1632,11 +1650,11 @@ export function SpotDetailView({
           />
         ) : (
           <div className="flex h-full w-full items-center justify-center">
-            <CategoryIcon category={spot.category} size={36} tone="#ffffff" />
+            <CategoryIcon icon={categoryIcon} size={36} tone="#ffffff" />
           </div>
         )}
         <span className="pointer-events-none absolute bottom-2 left-2 inline-flex rounded-full bg-[var(--surface-strong)] p-1 shadow-sm">
-          <CategoryIcon category={spot.category} size={12} />
+          <CategoryIcon icon={categoryIcon} size={12} />
         </span>
         {kind === "map" ? (
           <span className="pointer-events-none absolute top-2 left-2 rounded-full bg-[rgba(12,24,32,0.55)] px-2 py-0.5 text-[11px] font-semibold text-white">
@@ -1648,7 +1666,7 @@ export function SpotDetailView({
       <div className="spot-place-content">
         <h2 className="spot-place-title">{spot.name}</h2>
         <p className="spot-place-meta">
-          {categoryLabels[spot.category]}
+          {categoryLabel}
           {spot.overnight_cost ? ` · ${spot.overnight_cost}` : ""}
           {formatStaySummary(spot) ? ` · ${formatStaySummary(spot)}` : ""}
           {!relevant ? " · Archiv" : ""}
@@ -1815,11 +1833,18 @@ export function SpotSammelnFilters({
   filters,
   onChange,
   shelvedCount,
+  categories,
+  canManage = false,
+  onManage,
 }: {
   filters: SpotCollectionFilterState;
   onChange: (next: SpotCollectionFilterState) => void;
   shelvedCount: number;
+  categories?: VacationSpotCategory[];
+  canManage?: boolean;
+  onManage?: () => void;
 }) {
+  const categoryChoices = activeCategoryOptions(categories);
   return (
     <div className="mt-3">
       <div className="mb-3 flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
@@ -1831,23 +1856,32 @@ export function SpotSammelnFilters({
         >
           Alle
         </button>
-        {categoryOptions.map((option) => (
+        {categoryChoices.map((option) => (
           <button
-            key={option}
+            key={option.key}
             type="button"
-            onClick={() => onChange({ ...filters, category: option })}
-            className="glass-chip shrink-0 !px-2.5"
-            data-active={filters.category === option}
-            aria-label={categoryLabels[option]}
-            title={categoryLabels[option]}
+            onClick={() => onChange({ ...filters, category: option.key })}
+            className="glass-chip shrink-0"
+            data-active={filters.category === option.key}
+            title={option.label}
           >
             <CategoryIcon
-              category={option}
-              size={16}
-              tone={filters.category === option ? "#ffffff" : undefined}
+              icon={option.icon}
+              size={14}
+              tone={filters.category === option.key ? "#ffffff" : undefined}
             />
+            <span>{option.label}</span>
           </button>
         ))}
+        {canManage && onManage ? (
+          <button
+            type="button"
+            className="glass-chip shrink-0 !text-[12px]"
+            onClick={onManage}
+          >
+            Verwalten
+          </button>
+        ) : null}
       </div>
 
       <div className="mb-1 flex flex-wrap items-center gap-1.5">
@@ -1924,6 +1958,7 @@ export function SpotPlaceSession({
   ratings,
   raters,
   currentUserId,
+  categories,
   onMyRatingPatch,
   onChanged,
   onSpotPatch,
@@ -1938,6 +1973,7 @@ export function SpotPlaceSession({
   ratings: SpotRating[];
   raters: RaterOption[];
   currentUserId: string | null;
+  categories?: VacationSpotCategory[];
   onMyRatingPatch: (
     spotId: string,
     patch: { rating?: number | null; isFavorite?: boolean },
@@ -2073,6 +2109,7 @@ export function SpotPlaceSession({
             spot={spot}
             variant="page"
             hideActions
+            categories={categories}
             deleting={deleting}
             onDelete={() => void onDelete()}
             onDone={() => {
@@ -2090,6 +2127,7 @@ export function SpotPlaceSession({
           ratings={ratings}
           raters={raters}
           currentUserId={currentUserId}
+          categories={categories}
           onRate={(value) => saveRating({ rating: value })}
           onFavorite={() => saveRating({ isFavorite: !summary.myFavorite })}
         />
@@ -2098,17 +2136,24 @@ export function SpotPlaceSession({
   );
 }
 
-function SpotCardMedia({ spot }: { spot: Spot }) {
+function SpotCardMedia({
+  spot,
+  categories,
+}: {
+  spot: Spot;
+  categories?: VacationSpotCategory[];
+}) {
   const [broken, setBroken] = useState(false);
   const focus = parseImageFocus(spot.image_url);
   const focusStyle = imageFocusStyle(focus);
   const imageSrc = spot.image_url?.replace(/#.*$/, "") || null;
   const showImage = Boolean(imageSrc) && !broken;
+  const categoryIcon = resolveCategoryIcon(categories, spot.category);
 
   if (!showImage) {
     return (
       <div className="flex h-full w-full items-center justify-center bg-[rgba(12,24,32,0.06)]">
-        <CategoryIcon category={spot.category} size={36} tone="#ffffff" />
+        <CategoryIcon icon={categoryIcon} size={36} tone="#ffffff" />
       </div>
     );
   }
@@ -2139,6 +2184,7 @@ export function SpotList({
   currentUserId,
   canEdit = false,
   filters,
+  categories,
   onAdd,
   onChanged,
   onMyRatingPatch,
@@ -2152,6 +2198,7 @@ export function SpotList({
   currentUserId: string | null;
   canEdit?: boolean;
   filters: SpotCollectionFilterState;
+  categories?: VacationSpotCategory[];
   onAdd?: () => void;
   onChanged: () => void;
   onMyRatingPatch: (
@@ -2219,9 +2266,12 @@ export function SpotList({
                 }}
               >
                 <div className="spot-card-media">
-                  <SpotCardMedia spot={spot} />
+                  <SpotCardMedia spot={spot} categories={categories} />
                   <span className="pointer-events-none absolute bottom-2 left-2 inline-flex rounded-full bg-[var(--surface-strong)] p-1 shadow-sm">
-                    <CategoryIcon category={spot.category} size={12} />
+                    <CategoryIcon
+                      icon={resolveCategoryIcon(categories, spot.category)}
+                      size={12}
+                    />
                   </span>
                   {summary.myFavorite ? (
                     <span className="pointer-events-none absolute top-2 right-2 text-[14px] text-[var(--sun)] drop-shadow">
@@ -2246,7 +2296,7 @@ export function SpotList({
                     {spot.name}
                   </p>
                   <p className="mt-0.5 truncate text-[12px] text-[var(--ink-soft)]">
-                    {categoryLabels[spot.category]}
+                    {resolveCategoryLabel(categories, spot.category)}
                     {!relevant ? " · Archiv" : ""}
                     {formatStaySummary(spot) ? ` · ${formatStaySummary(spot)}` : ""}
                   </p>
@@ -2278,6 +2328,7 @@ export function SpotList({
           ratings={ratings}
           raters={raters}
           currentUserId={currentUserId}
+          categories={categories}
           onMyRatingPatch={onMyRatingPatch}
           onChanged={onChanged}
           onSpotPatch={onSpotPatch}

@@ -3,6 +3,7 @@
 import dynamic from "next/dynamic";
 import { getBrowserGoogleMapsKey, type MappableSpot } from "@/lib/google-maps";
 import type { SpotRatingSummary } from "@/lib/ratings";
+import type { VacationSpotCategory } from "@/lib/spots";
 
 const SpotMapGoogle = dynamic(() => import("./spot-map-google"), {
   ssr: false,
@@ -27,6 +28,7 @@ export type { MappableSpot };
 export default function SpotMapCanvas({
   spots,
   summaries,
+  categories,
   selectedId,
   onSelect,
   onEditRequest,
@@ -35,6 +37,7 @@ export default function SpotMapCanvas({
 }: {
   spots: MappableSpot[];
   summaries: Record<string, SpotRatingSummary>;
+  categories?: VacationSpotCategory[];
   selectedId: string | null;
   onSelect: (id: string | null) => void;
   onEditRequest?: (id: string) => void;
@@ -47,6 +50,7 @@ export default function SpotMapCanvas({
       <SpotMapGoogle
         spots={spots}
         summaries={summaries}
+        categories={categories}
         selectedId={selectedId}
         onSelect={onSelect}
         expanded={expanded}
@@ -58,6 +62,7 @@ export default function SpotMapCanvas({
     <SpotMapLeaflet
       spots={spots}
       summaries={summaries}
+      categories={categories}
       selectedId={selectedId}
       onSelect={onSelect}
       onEditRequest={onEditRequest}

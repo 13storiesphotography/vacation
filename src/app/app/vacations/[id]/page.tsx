@@ -13,10 +13,11 @@ import {
   type SpotCollectionFilterState,
 } from "./spot-ui";
 import { SpotMap } from "./spot-map";
+import { SpotCategoryManager } from "./category-manager";
 import { EditVacationForm } from "./vacation-edit";
 import { summarizeRatings, type RaterOption, type SpotRating } from "@/lib/ratings";
 import { resolveSpotPreviewImage } from "@/lib/geo";
-import { isSpotRelevant } from "@/lib/spots";
+import { isSpotRelevant, type VacationSpotCategory } from "@/lib/spots";
 import { healVacationSpotCoords } from "./maps-coords-actions";
 import {
   VacationTabBar,
@@ -65,6 +66,7 @@ export default function VacationDetailPage() {
   const [vacation, setVacation] = useState<Vacation | null>(null);
   const [members, setMembers] = useState<Member[]>([]);
   const [spots, setSpots] = useState<Spot[]>([]);
+  const [categories, setCategories] = useState<VacationSpotCategory[]>([]);
   const [ratings, setRatings] = useState<SpotRating[]>([]);
   const [profiles, setProfiles] = useState<Profile[]>([]);
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
@@ -72,6 +74,7 @@ export default function VacationDetailPage() {
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [showSpotForm, setShowSpotForm] = useState(false);
+  const [showCategoryManager, setShowCategoryManager] = useState(false);
   const [spotFormKey, setSpotFormKey] = useState(0);
   const [spotFormPending, setSpotFormPending] = useState(false);
   const [spotFilters, setSpotFilters] = useState<SpotCollectionFilterState>(
@@ -141,7 +144,7 @@ export default function VacationDetailPage() {
       setCurrentUserId(user?.id ?? null);
       setCurrentUserEmail(user?.email?.toLowerCase() ?? null);
 
-      const [{ data: vacationData }, { data: memberData }, { data: spotData }] =
+      const [{ data: vacationData }, { data: memberData }, { data: spotData }, { data: categoryData }] =
         await Promise.all([
           supabase.from("vacations").select("*").eq("id", vacationId).single(),
           supabase
@@ -154,7 +157,25 @@ export default function VacationDetailPage() {
             .select("*")
             .eq("vacation_id", vacationId)
             .order("created_at", { ascending: false }),
+          supabase
+            .from("vacation_spot_categories")
+            .select("*")
+            .eq("vacation_id", vacationId)
+            .order("sort_order"),
         ]);
+
+      let nextCategories = (categoryData ?? []) as VacationSpotCategory[];
+      if (nextCategories.length === 0) {
+        await supabase.rpc("seed_vacation_spot_categories", {
+          p_vacation_id: vacationId,
+        });
+        const { data: seeded } = await supabase
+          .from("vacation_spot_categories")
+          .select("*")
+          .eq("vacation_id", vacationId)
+          .order("sort_order");
+        nextCategories = (seeded ?? []) as VacationSpotCategory[];
+      }
 
       const spotIds = (spotData ?? []).map((spot) => spot.id);
       const userIds = (memberData ?? [])
@@ -172,6 +193,7 @@ export default function VacationDetailPage() {
 
       setVacation(vacationData);
       setMembers(memberData ?? []);
+      setCategories(nextCategories);
       setSpots(
         (spotData ?? []).map((spot) => ({
           ...spot,
@@ -283,6 +305,13 @@ export default function VacationDetailPage() {
     () => spots.filter((spot) => !isSpotRelevant(spot)).length,
     [spots],
   );
+  const spotCountsByCategory = useMemo(() => {
+    const counts: Record<string, number> = {};
+    for (const spot of spots) {
+      counts[spot.category] = (counts[spot.category] ?? 0) + 1;
+    }
+    return counts;
+  }, [spots]);
 
   const raters: RaterOption[] = useMemo(() => {
     return members
@@ -425,6 +454,19 @@ export default function VacationDetailPage() {
             filters={spotFilters}
             onChange={setSpotFilters}
             shelvedCount={shelvedSpotCount}
+            categories={categories}
+            canManage={canEditSpots}
+            onManage={() => setShowCategoryManager(true)}
+          />
+
+          <SpotCategoryManager
+            open={showCategoryManager}
+            onClose={() => setShowCategoryManager(false)}
+            vacationId={vacationId}
+            categories={categories}
+            spotCounts={spotCountsByCategory}
+            canEdit={canEditSpots}
+            onChanged={load}
           />
 
           <GlassSheet
@@ -460,6 +502,7 @@ export default function VacationDetailPage() {
               variant="sheet"
               hideSubmit
               vacationId={vacationId}
+              categories={categories}
               onPendingChange={setSpotFormPending}
               onCreated={async () => {
                 setSpotFormKey((value) => value + 1);
@@ -480,6 +523,7 @@ export default function VacationDetailPage() {
               currentUserId={currentUserId}
               canEdit={canEditSpots}
               filters={spotFilters}
+              categories={categories}
               onAdd={() => setShowSpotForm(true)}
               onChanged={load}
               onMyRatingPatch={applyMyRating}
@@ -496,6 +540,7 @@ export default function VacationDetailPage() {
               raters={raters}
               currentUserId={currentUserId}
               filters={spotFilters}
+              categories={categories}
               canEdit={canEditSpots}
               active={tab === "sammeln" && sammelnView === "karte"}
               onChanged={load}

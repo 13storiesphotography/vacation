@@ -2,7 +2,13 @@
 
 import dynamic from "next/dynamic";
 import { useEffect, useMemo, useState } from "react";
-import { categoryLabels, categoryOptions, isSpotRelevant } from "@/lib/spots";
+import {
+  isSpotRelevant,
+  resolveCategoryIcon,
+  resolveCategoryLabel,
+  activeCategoryOptions,
+  type VacationSpotCategory,
+} from "@/lib/spots";
 import { resolveSpotCoords } from "@/lib/geo";
 import {
   emptySummary,
@@ -39,6 +45,7 @@ export function SpotMap({
   raters,
   currentUserId,
   filters,
+  categories,
   canEdit = false,
   active = true,
   onChanged,
@@ -52,6 +59,7 @@ export function SpotMap({
   raters: RaterOption[];
   currentUserId: string | null;
   filters: SpotCollectionFilterState;
+  categories?: VacationSpotCategory[];
   canEdit?: boolean;
   /** False while another vacation tab is shown — collapse overlay and resize on return. */
   active?: boolean;
@@ -157,6 +165,7 @@ export function SpotMap({
         <SpotMapCanvas
           spots={mappable}
           summaries={summaries}
+          categories={categories}
           selectedId={selectedId}
           onSelect={(id) => selectSpot(id, false)}
           onEditRequest={canEdit ? (id) => selectSpot(id, true) : undefined}
@@ -180,6 +189,7 @@ export function SpotMap({
           ratings={ratings}
           raters={raters}
           currentUserId={currentUserId}
+          categories={categories}
           onMyRatingPatch={onMyRatingPatch}
           onChanged={() => {
             void onChanged?.();
@@ -204,11 +214,14 @@ export function SpotMap({
                   className="ios-row w-full"
                   onClick={() => selectSpot(spot.id, false)}
                 >
-                  <CategoryIcon category={spot.category} size={16} />
+                  <CategoryIcon
+                    icon={resolveCategoryIcon(categories, spot.category)}
+                    size={16}
+                  />
                   <div className="min-w-0 flex-1 text-left">
                     <p className="text-[14px] font-semibold">{spot.name}</p>
                     <p className="text-[12px] text-[var(--ink-soft)]">
-                      {categoryLabels[spot.category]}
+                      {resolveCategoryLabel(categories, spot.category)}
                       {!isSpotRelevant(spot) ? " · Archiv" : ""}
                     </p>
                   </div>
@@ -221,10 +234,10 @@ export function SpotMap({
       )}
 
       <div className="mt-4 flex flex-wrap gap-3">
-        {categoryOptions.map((option) => (
-          <span key={option} className="flex items-center gap-1.5 text-[11px] text-[var(--ink-soft)]">
-            <CategoryIcon category={option} size={14} />
-            {categoryLabels[option]}
+        {activeCategoryOptions(categories).map((option) => (
+          <span key={option.key} className="flex items-center gap-1.5 text-[11px] text-[var(--ink-soft)]">
+            <CategoryIcon icon={option.icon} size={14} />
+            {option.label}
           </span>
         ))}
       </div>

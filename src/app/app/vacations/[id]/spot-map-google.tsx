@@ -2,8 +2,8 @@
 
 import { useEffect, useRef, useState } from "react";
 import { importLibrary, setOptions } from "@googlemaps/js-api-loader";
-import { categoryIconMarkup } from "@/components/category-icon";
-import { categoryLabels, categoryTone, type SpotCategory } from "@/lib/spots";
+import { categoryIconMarkup, categoryIconTone, resolveCategoryIconKey } from "@/components/category-icon";
+import { resolveCategoryIcon, resolveCategoryLabel, type VacationSpotCategory } from "@/lib/spots";
 import { DEFAULT_MAP_CENTER, DEFAULT_MAP_ZOOM } from "@/lib/geo";
 import { getBrowserGoogleMapsKey, type MappableSpot } from "@/lib/google-maps";
 import type { SpotRatingSummary } from "@/lib/ratings";
@@ -17,8 +17,9 @@ function ratingLabel(summary: SpotRatingSummary | undefined): string {
   return `${summary.average}★ (${summary.count})${fav}`;
 }
 
-function markerIconSvg(category: SpotCategory, selected: boolean): string {
-  const color = categoryTone[category];
+function markerIconSvg(iconOrCategory: string, selected: boolean): string {
+  const icon = resolveCategoryIconKey(iconOrCategory);
+  const color = categoryIconTone[icon];
   const size = selected ? 36 : 30;
   const iconSize = selected ? 18 : 15;
   const offset = (size - iconSize) / 2;
@@ -27,7 +28,7 @@ function markerIconSvg(category: SpotCategory, selected: boolean): string {
     <svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
       <circle cx="${size / 2}" cy="${size / 2}" r="${size / 2 - 1}" fill="${color}" stroke="#ffffff" stroke-width="${selected ? 3 : 2}"/>
       <g transform="translate(${offset} ${offset}) scale(${scale})" fill="none" stroke="#ffffff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">
-        ${categoryIconMarkup[category]}
+        ${categoryIconMarkup[icon]}
       </g>
     </svg>
   `;
@@ -59,6 +60,7 @@ function isDocumentFullscreen(): boolean {
 export default function SpotMapGoogle({
   spots,
   summaries,
+  categories,
   selectedId,
   onSelect,
   expanded = false,
@@ -66,6 +68,7 @@ export default function SpotMapGoogle({
 }: {
   spots: MappableSpot[];
   summaries: Record<string, SpotRatingSummary>;
+  categories?: VacationSpotCategory[];
   selectedId: string | null;
   onSelect: (id: string | null) => void;
   /** When true (enlarged overlay), allow one-finger pan. */
@@ -167,7 +170,7 @@ export default function SpotMapGoogle({
 
     const bounds = new google.maps.LatLngBounds();
     for (const spot of spots) {
-      const category = spot.category as SpotCategory;
+      const iconKey = resolveCategoryIcon(categories, spot.category);
       const selected = selectedId === spot.id;
       const size = selected ? 36 : 30;
       const position = { lat: spot.coords.lat, lng: spot.coords.lng };
@@ -179,7 +182,7 @@ export default function SpotMapGoogle({
         title: spot.name,
         zIndex: selected ? 1000 : 1,
         icon: {
-          url: markerIconSvg(category, selected),
+          url: markerIconSvg(iconKey, selected),
           scaledSize: new google.maps.Size(size, size),
           anchor: new google.maps.Point(size / 2, size / 2),
         },
@@ -193,7 +196,7 @@ export default function SpotMapGoogle({
             <div style="min-width:160px;font:13px/1.35 system-ui,sans-serif">
               <div style="font-weight:600;color:#0F6E8C">${escapeHtml(spot.name)}</div>
               <div style="margin-top:2px;font-size:12px;color:#5b6b73">
-                ${escapeHtml(categoryLabels[category])}${
+                ${escapeHtml(resolveCategoryLabel(categories, spot.category))}${
                   spot.overnight_cost
                     ? ` · ${escapeHtml(spot.overnight_cost)}`
                     : ""
@@ -219,7 +222,7 @@ export default function SpotMapGoogle({
     } else {
       map.fitBounds(bounds, 64);
     }
-  }, [ready, spots, selectedId, summaries]);
+  }, [ready, spots, selectedId, summaries, categories]);
 
   if (!apiKey) {
     return (

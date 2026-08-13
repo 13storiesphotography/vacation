@@ -140,13 +140,7 @@ export type Database = {
           id: string;
           vacation_id: string;
           name: string;
-          category:
-            | "stellplatz"
-            | "unterkunft"
-            | "sehenswuerdigkeit"
-            | "ort"
-            | "freizeit"
-            | "versorgung";
+          category: string;
           description: string | null;
           lat: number | null;
           lng: number | null;
@@ -170,13 +164,7 @@ export type Database = {
           id?: string;
           vacation_id: string;
           name: string;
-          category:
-            | "stellplatz"
-            | "unterkunft"
-            | "sehenswuerdigkeit"
-            | "ort"
-            | "freizeit"
-            | "versorgung";
+          category: string;
           description?: string | null;
           lat?: number | null;
           lng?: number | null;
@@ -200,13 +188,7 @@ export type Database = {
           id?: string;
           vacation_id?: string;
           name?: string;
-          category?:
-            | "stellplatz"
-            | "unterkunft"
-            | "sehenswuerdigkeit"
-            | "ort"
-            | "freizeit"
-            | "versorgung";
+          category?: string;
           description?: string | null;
           lat?: number | null;
           lng?: number | null;
@@ -224,6 +206,39 @@ export type Database = {
           is_relevant?: boolean;
           price_per_night?: number | null;
           created_by?: string | null;
+          created_at?: string;
+        };
+        Relationships: [];
+      };
+      vacation_spot_categories: {
+        Row: {
+          id: string;
+          vacation_id: string;
+          key: string;
+          label: string;
+          icon: string;
+          sort_order: number;
+          supports_overnight: boolean;
+          created_at: string;
+        };
+        Insert: {
+          id?: string;
+          vacation_id: string;
+          key: string;
+          label: string;
+          icon: string;
+          sort_order?: number;
+          supports_overnight?: boolean;
+          created_at?: string;
+        };
+        Update: {
+          id?: string;
+          vacation_id?: string;
+          key?: string;
+          label?: string;
+          icon?: string;
+          sort_order?: number;
+          supports_overnight?: boolean;
           created_at?: string;
         };
         Relationships: [];
@@ -415,6 +430,10 @@ export type Database = {
         Returns: boolean;
       };
       activate_my_vacation_invites: { Args: Record<string, never>; Returns: number };
+      seed_vacation_spot_categories: {
+        Args: { p_vacation_id: string };
+        Returns: undefined;
+      };
     };
     Enums: {
       member_role: "admin" | "custom" | "editor" | "viewer";

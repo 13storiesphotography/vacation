@@ -4,21 +4,26 @@ import { useEffect, useMemo } from "react";
 import { MapContainer, Marker, Popup, TileLayer, useMap } from "react-leaflet";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
-import { categoryLabels, categoryTone, type SpotCategory } from "@/lib/spots";
+import { resolveCategoryIcon, resolveCategoryLabel, type VacationSpotCategory } from "@/lib/spots";
 import { DEFAULT_MAP_CENTER, DEFAULT_MAP_ZOOM } from "@/lib/geo";
 import type { SpotRatingSummary } from "@/lib/ratings";
 import type { MappableSpot } from "@/lib/google-maps";
-import { categoryIconSvg } from "@/components/category-icon";
+import {
+  categoryIconSvg,
+  categoryIconTone,
+  resolveCategoryIconKey,
+} from "@/components/category-icon";
 import { LeafletGestureMode } from "./map-gestures";
 
 const iconCache = new Map<string, L.DivIcon>();
 
-function categoryMapIcon(category: SpotCategory, selected: boolean): L.DivIcon {
-  const key = `${category}:${selected ? "1" : "0"}`;
+function categoryMapIcon(iconOrCategory: string, selected: boolean): L.DivIcon {
+  const icon = resolveCategoryIconKey(iconOrCategory);
+  const key = `${icon}:${selected ? "1" : "0"}`;
   const cached = iconCache.get(key);
   if (cached) return cached;
 
-  const color = categoryTone[category];
+  const color = categoryIconTone[icon];
   const size = selected ? 36 : 30;
   const iconSize = selected ? 18 : 15;
   const html = `
@@ -33,19 +38,19 @@ function categoryMapIcon(category: SpotCategory, selected: boolean): L.DivIcon {
       align-items:center;
       justify-content:center;
     ">
-      ${categoryIconSvg(category, { size: iconSize, stroke: "#ffffff", strokeWidth: 1.8 })}
+      ${categoryIconSvg(icon, { size: iconSize, stroke: "#ffffff", strokeWidth: 1.8 })}
     </div>
   `;
 
-  const icon = L.divIcon({
+  const marker = L.divIcon({
     className: "spot-category-marker",
     html,
     iconSize: [size, size],
     iconAnchor: [size / 2, size / 2],
     popupAnchor: [0, -size / 2 + 2],
   });
-  iconCache.set(key, icon);
-  return icon;
+  iconCache.set(key, marker);
+  return marker;
 }
 
 function FitBounds({ spots }: { spots: MappableSpot[] }) {
@@ -81,6 +86,7 @@ function ratingLabel(summary: SpotRatingSummary | undefined): string {
 export default function SpotMapLeaflet({
   spots,
   summaries,
+  categories,
   selectedId,
   onSelect,
   onEditRequest,
@@ -89,6 +95,7 @@ export default function SpotMapLeaflet({
 }: {
   spots: MappableSpot[];
   summaries: Record<string, SpotRatingSummary>;
+  categories?: VacationSpotCategory[];
   selectedId: string | null;
   onSelect: (id: string | null) => void;
   onEditRequest?: (id: string) => void;
@@ -98,16 +105,17 @@ export default function SpotMapLeaflet({
   const markers = useMemo(
     () =>
       spots.map((spot) => {
-        const category = spot.category as SpotCategory;
+        const iconKey = resolveCategoryIcon(categories, spot.category);
         const selected = selectedId === spot.id;
         return {
           spot,
           selected,
-          icon: categoryMapIcon(category, selected),
+          icon: categoryMapIcon(iconKey, selected),
+          label: resolveCategoryLabel(categories, spot.category),
           summary: summaries[spot.id],
         };
       }),
-    [selectedId, spots, summaries],
+    [categories, selectedId, spots, summaries],
   );
 
   return (
@@ -127,7 +135,7 @@ export default function SpotMapLeaflet({
         active={active}
       />
       <FitBounds spots={spots} />
-      {markers.map(({ spot, selected, icon, summary }) => (
+      {markers.map(({ spot, selected, icon, summary, label }) => (
         <Marker
           key={spot.id}
           position={[spot.coords.lat, spot.coords.lng]}
@@ -152,7 +160,7 @@ export default function SpotMapLeaflet({
                 <p className="font-semibold text-[var(--ink)]">{spot.name}</p>
               )}
               <p className="mt-0.5 text-[12px] text-[var(--ink-soft)]">
-                {categoryLabels[spot.category as SpotCategory]}
+                {label}
                 {spot.overnight_cost ? ` · ${spot.overnight_cost}` : ""}
                 {spot.info_url && (
                   <>

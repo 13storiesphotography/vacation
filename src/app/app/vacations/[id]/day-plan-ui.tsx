@@ -2,7 +2,7 @@
 
 import { useEffect, useMemo, useRef, useState } from "react";
 import type { Database } from "@/lib/database.types";
-import { categoryLabels, isSpotRelevant, type SpotCategory } from "@/lib/spots";
+import { isSpotRelevant, resolveCategoryIcon, resolveCategoryLabel, type SpotCategory, type VacationSpotCategory } from "@/lib/spots";
 import { isOvernightCategory } from "@/lib/overnight";
 import { formatDayLabel, type DayPlanWithStops } from "@/lib/day-plans";
 import {
@@ -229,7 +229,7 @@ export function DayPlanPanel({
       if (!q) return true;
       return (
         spot.name.toLowerCase().includes(q) ||
-        categoryLabels[spot.category as SpotCategory].toLowerCase().includes(q)
+        resolveCategoryLabel(undefined, spot.category).toLowerCase().includes(q)
       );
     });
     // Unplanned first — the smart default.
@@ -717,8 +717,7 @@ export function DayPlanPanel({
                               )
                             }
                           >
-                            <CategoryIcon
-                              category={spot.category as SpotCategory}
+                            <CategoryIcon icon={resolveCategoryIcon(undefined, spot.category)}
                               size={16}
                             />
                             <span className="min-w-0 flex-1">
@@ -726,7 +725,7 @@ export function DayPlanPanel({
                                 {spot.name}
                               </span>
                               <span className="text-[11px] text-[var(--ink-faint)]">
-                                {categoryLabels[spot.category as SpotCategory]}
+                                {resolveCategoryLabel(undefined, spot.category)}
                                 {open ? " · noch offen" : " · schon geplant"}
                               </span>
                             </span>
@@ -800,7 +799,7 @@ export function DayPlanPanel({
                             {spot.name}
                           </p>
                           <p className="text-[11px] text-[var(--ink-faint)]">
-                            {categoryLabels[spot.category as SpotCategory]}
+                            {resolveCategoryLabel(undefined, spot.category)}
                             {!relevant ? " · archiviert" : ""}
                             {isEditing ? " · wird bearbeitet" : ""}
                           </p>
@@ -1140,8 +1139,7 @@ export function DayPlanPanel({
                       )
                     }
                   >
-                    <CategoryIcon
-                      category={spot.category as SpotCategory}
+                    <CategoryIcon icon={resolveCategoryIcon(undefined, spot.category)}
                       size={14}
                     />
                     <span className="truncate">{spot.name}</span>
