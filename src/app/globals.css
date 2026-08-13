@@ -1403,21 +1403,29 @@ textarea {
 }
 
 .spot-place-card::before {
-  background: linear-gradient(
-    180deg,
-    rgba(255, 255, 255, 0.5) 0%,
-    rgba(255, 255, 255, 0.1) 45%,
-    transparent 100%
-  ) !important;
+  /* No top sheen — hero should meet the rounded edge cleanly. */
+  content: none !important;
+  display: none !important;
 }
 
 .spot-place-handle {
+  position: absolute;
+  top: 8px;
+  left: 50%;
+  z-index: 3;
   width: 36px;
   height: 4px;
-  margin: 8px auto 0;
+  margin: 0;
   border-radius: 999px;
-  background: rgba(20, 36, 48, 0.18);
-  flex-shrink: 0;
+  transform: translateX(-50%);
+  background: rgba(255, 255, 255, 0.78);
+  box-shadow: 0 1px 4px rgba(12, 24, 32, 0.25);
+  pointer-events: none;
+}
+
+.spot-place-card[data-editing="true"] .spot-place-handle {
+  background: rgba(20, 36, 48, 0.2);
+  box-shadow: none;
 }
 
 .spot-place-scroll {
