@@ -150,14 +150,26 @@ export async function POST(request: Request) {
   }
 
   const inviteLink = `${origin}/invite/${inviteToken}`;
-  // After accepting the auth invite, land on the vacation invite page.
+  // After accepting the auth invite / magic link, land on the vacation invite page.
   const redirectTo = `${origin}/auth/callback?next=${encodeURIComponent(`/invite/${inviteToken}`)}`;
 
   if (linkOnly) {
     return NextResponse.json({ ok: true, inviteLink });
   }
 
-  const mail = await sendInviteEmail(targetEmail, redirectTo, {
+  let vacationTitle: string | undefined;
+  const { data: vacationRow } = await writer
+    .from("vacations")
+    .select("title")
+    .eq("id", vacationId)
+    .maybeSingle();
+  vacationTitle = vacationRow?.title ?? undefined;
+
+  const mail = await sendInviteEmail({
+    email: targetEmail,
+    inviteLink,
+    redirectTo,
+    vacationTitle,
     supabase,
     vacationId,
   });
