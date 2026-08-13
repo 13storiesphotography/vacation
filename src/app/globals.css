@@ -1371,9 +1371,9 @@ textarea {
   padding: 0;
   cursor: pointer;
   pointer-events: auto;
-  background: rgba(12, 24, 32, 0.48);
-  backdrop-filter: blur(14px) saturate(140%);
-  -webkit-backdrop-filter: blur(14px) saturate(140%);
+  background: rgba(12, 24, 32, 0.52);
+  backdrop-filter: blur(28px) saturate(160%);
+  -webkit-backdrop-filter: blur(28px) saturate(160%);
   animation: glass-sheet-fade 180ms ease;
 }
 
@@ -1510,9 +1510,10 @@ textarea {
   margin: 0;
   cursor: pointer;
   pointer-events: auto;
-  background: rgba(12, 24, 32, 0.32);
-  backdrop-filter: blur(10px) saturate(140%);
-  -webkit-backdrop-filter: blur(10px) saturate(140%);
+  /* Dim + frost the page so sheet text stays readable over photos. */
+  background: rgba(12, 24, 32, 0.55);
+  backdrop-filter: blur(32px) saturate(160%);
+  -webkit-backdrop-filter: blur(32px) saturate(160%);
   animation: glass-sheet-fade 180ms ease;
 }
 
@@ -1528,6 +1529,21 @@ textarea {
   padding: 10px 16px 16px;
   animation: glass-sheet-up 220ms cubic-bezier(0.22, 1, 0.36, 1);
   overflow: hidden;
+  /* denser than default picker frost — sheets sit over photo grids */
+  isolation: auto;
+  background:
+    linear-gradient(
+      160deg,
+      rgba(252, 253, 254, 0.96) 0%,
+      rgba(246, 249, 250, 0.94) 45%,
+      rgba(232, 240, 244, 0.92) 100%
+    ) !important;
+  backdrop-filter: blur(40px) saturate(180%) !important;
+  -webkit-backdrop-filter: blur(40px) saturate(180%) !important;
+  border: 1px solid rgba(255, 255, 255, 0.88) !important;
+  box-shadow:
+    0 1px 0 rgba(255, 255, 255, 0.9) inset,
+    0 22px 56px rgba(12, 24, 32, 0.28) !important;
 }
 
 .glass-sheet-panel.glass-sheet-panel-tall {
@@ -1695,13 +1711,16 @@ textarea {
   }
   to {
     opacity: 1;
-    transform: translateY(0) scale(1);
+    /* Avoid leaving a transform — it breaks backdrop-filter frost. */
+    transform: none;
   }
 }
 
 @media (prefers-reduced-motion: reduce) {
   .glass-sheet-backdrop,
-  .glass-sheet-panel {
+  .glass-sheet-panel,
+  .spot-place-backdrop,
+  .spot-place-card {
     animation: none;
   }
 }
