@@ -2147,7 +2147,6 @@ function SpotCardMedia({
 }) {
   const [broken, setBroken] = useState(false);
   const focus = parseImageFocus(spot.image_url);
-  const focusStyle = imageFocusStyle(focus);
   const imageSrc = spot.image_url?.replace(/#.*$/, "") || null;
   const showImage = Boolean(imageSrc) && !broken;
   const categoryIcon = resolveCategoryIcon(categories, spot.category);
@@ -2165,11 +2164,8 @@ function SpotCardMedia({
     <img
       src={imageSrc!}
       alt=""
-      style={{
-        objectPosition: focusStyle.objectPosition,
-        transform: focusStyle.transform,
-        transformOrigin: focusStyle.objectPosition,
-      }}
+      /* Grid thumbs: object-position only — scale() leaves empty bands in the frame. */
+      style={{ objectPosition: `${focus.x}% ${focus.y}%` }}
       loading="lazy"
       referrerPolicy="no-referrer"
       onError={() => setBroken(true)}
