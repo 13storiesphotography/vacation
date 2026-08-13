@@ -159,7 +159,11 @@ function normalizeImageUrl(raw: string): string | null {
 /** Google's own signed Static Map og:images 403 outside Google. */
 export function isUsablePreviewImage(url: string | null | undefined): boolean {
   if (!url) return false;
-  const withoutFocus = url.replace(/#.*$/, "");
+  const withoutFocus = url.replace(/#.*$/, "").trim();
+  if (!withoutFocus) return false;
+  // Never treat inline/base64 dumps or blob URLs as durable previews.
+  if (/^data:/i.test(withoutFocus) || /^blob:/i.test(withoutFocus)) return false;
+
   const normalized =
     normalizeImageUrl(withoutFocus) ??
     (withoutFocus.startsWith("/api/map-preview?") ? withoutFocus : null);
@@ -169,6 +173,24 @@ export function isUsablePreviewImage(url: string | null | undefined): boolean {
     const parsed = new URL(normalized);
     const host = parsed.hostname.toLowerCase();
     const path = parsed.pathname.toLowerCase();
+
+    // Maps share/place pages are not <img> sources.
+    if (
+      host === "maps.app.goo.gl" ||
+      host === "goo.gl" ||
+      host === "g.co" ||
+      host.endsWith(".app.goo.gl") ||
+      ((host === "maps.google.com" ||
+        host.endsWith(".maps.google.com") ||
+        ((host === "google.com" ||
+          host.endsWith(".google.com") ||
+          host === "google.de" ||
+          host.endsWith(".google.de")) &&
+          path.includes("/maps"))) &&
+        !path.includes("/maps/api/"))
+    ) {
+      return false;
+    }
 
     if (path.includes("/maps/about/images/icons/")) return false;
     if (path.includes("/maps/api/staticmap")) return false;
@@ -182,6 +204,18 @@ export function isUsablePreviewImage(url: string | null | undefined): boolean {
   } catch {
     return false;
   }
+}
+
+/** App-hosted map snapshot (tile fallback), not a real place photo. */
+export function isAppMapPreviewUrl(url: string | null | undefined): boolean {
+  if (!url) return false;
+  const base = url.replace(/#.*$/, "");
+  return base.startsWith("/api/map-preview?");
+}
+
+/** True when the preview is a real place/listing photo (not a map tile). */
+export function isRealPlacePhotoUrl(url: string | null | undefined): boolean {
+  return Boolean(url && isUsablePreviewImage(url) && !isAppMapPreviewUrl(url));
 }
 
 function parseOgImage(html: string): string | null {
@@ -311,13 +345,6 @@ export function previewImageFromCoords(lat: number, lng: number): string {
   return appMapPreviewUrl(lat, lng);
 }
 
-/** App-hosted map snapshot (tile fallback), not a real place photo. */
-export function isAppMapPreviewUrl(url: string | null | undefined): boolean {
-  if (!url) return false;
-  const base = url.replace(/#.*$/, "");
-  return base.startsWith("/api/map-preview?");
-}
-
 function parseOgTitle(html: string): string | null {
   const patterns = [
     /<meta[^>]+property=["']og:title["'][^>]+content=["']([^"']+)["']/i,
@@ -436,7 +463,6 @@ export function resolveSpotPreviewImage(spot: {
   lng: number | null;
 }): string | null {
   const current = spot.image_url;
-  if (spot.image_manual && current) return current;
   if (current && isUsablePreviewImage(current)) return current;
   if (
     typeof spot.lat === "number" &&
@@ -446,6 +472,24 @@ export function resolveSpotPreviewImage(spot: {
     return previewImageFromCoords(spot.lat, spot.lng);
   }
   return null;
+}
+
+/** Classify spot preview for gallery badges. */
+export function spotPreviewKind(spot: {
+  image_url: string | null;
+  image_manual?: boolean | null;
+  lat?: number | null;
+  lng?: number | null;
+}): "photo" | "map" | "none" {
+  const resolved = resolveSpotPreviewImage({
+    image_url: spot.image_url,
+    image_manual: spot.image_manual,
+    lat: spot.lat ?? null,
+    lng: spot.lng ?? null,
+  });
+  if (!resolved) return "none";
+  if (isAppMapPreviewUrl(resolved)) return "map";
+  return "photo";
 }
 
 /** Sweden-ish default for van-trip vacations without coords yet. */

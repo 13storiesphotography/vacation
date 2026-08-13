@@ -21,7 +21,8 @@ import {
 } from "@/lib/ratings";
 import { isOvernightCategory } from "@/lib/overnight";
 import { isAirbnbUrl } from "@/lib/airbnb";
-import { isAppMapPreviewUrl } from "@/lib/geo";
+import { isAppMapPreviewUrl, spotPreviewKind } from "@/lib/geo";
+import { uploadSpotImage } from "@/lib/spot-image-upload";
 import {
   defaultImageFocus,
   imageFocusStyle,
@@ -575,6 +576,7 @@ function ImageFocusEditor({
 }
 
 function SpotFormFields({
+  vacationId,
   spot,
   showOvernight,
   category,
@@ -608,6 +610,7 @@ function SpotFormFields({
   onTagsChange,
   smartLinkResolveMode = "always",
 }: {
+  vacationId: string;
   spot?: Spot | null;
   showOvernight: boolean;
   category: SpotCategory;
@@ -647,6 +650,30 @@ function SpotFormFields({
   const explicitNights = stayNights
     ? Number.parseInt(stayNights, 10) || null
     : null;
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  async function onPickImage(file: File | null) {
+    if (!file) return;
+    setUploadError(null);
+    setUploading(true);
+    try {
+      const result = await uploadSpotImage({ vacationId, file });
+      if ("error" in result) {
+        setUploadError(result.error);
+        return;
+      }
+      onImageUrlChange(result.url);
+      onImageFocusChange({ ...defaultImageFocus });
+    } catch {
+      setUploadError("Upload fehlgeschlagen.");
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  }
+
   // While editing: do not imply nights from dates when the nights field is empty.
   const staySummary = explicitNights
     ? formatStaySummary({
@@ -912,7 +939,7 @@ function SpotFormFields({
       )}
       {autoImage && isAppMapPreviewUrl(autoImage) && !imageUrl ? (
         <p className="mt-2 text-[12px] text-[var(--ink-faint)]">
-          Automatische Karten-Vorschau — unten kannst du ein echtes Foto per URL setzen.
+          Automatische Karten-Vorschau — lade unten ein echtes Foto hoch.
         </p>
       ) : null}
 
@@ -972,25 +999,68 @@ function SpotFormFields({
         </div>
       </label>
 
-      <label className="form-label mt-3">
-        Vorschaubild-URL
+      <div className="mt-3">
+        <p className="form-label">Foto</p>
         {spot?.image_url && !spot.image_manual && !imageUrl ? (
           <input type="hidden" name="previous_image_url" value={spot.image_url} />
         ) : null}
-        <input
-          name="image_url"
-          type="text"
-          inputMode="url"
-          autoComplete="off"
-          value={imageUrl}
-          onChange={(e) => onImageUrlChange(e.target.value)}
-          className="glass-field mt-1.5 px-3 py-3"
-          placeholder="https://… · leer = automatisch"
-        />
-      </label>
-      <p className="mt-1 text-[11px] text-[var(--ink-faint)]">
-        Direkter Link zu einem Foto (https://…). Leer lassen für Ortsfoto/Karten-Vorschau.
-      </p>
+        <input type="hidden" name="image_url" value={imageUrl} />
+        <div className="mt-1.5 flex flex-wrap items-center gap-2">
+          <button
+            type="button"
+            className="cta !px-3 !py-2 text-[13px]"
+            disabled={uploading}
+            onClick={() => fileInputRef.current?.click()}
+          >
+            {uploading ? "Lädt…" : imageUrl ? "Foto ersetzen" : "Foto hochladen"}
+          </button>
+          {imageUrl ? (
+            <button
+              type="button"
+              className="glass-chip"
+              disabled={uploading}
+              onClick={() => {
+                onImageUrlChange("");
+                setUploadError(null);
+              }}
+            >
+              Entfernen
+            </button>
+          ) : null}
+          <input
+            ref={fileInputRef}
+            type="file"
+            accept="image/jpeg,image/png,image/webp,image/heic,image/heif,image/*"
+            capture="environment"
+            className="hidden"
+            onChange={(event) => {
+              const file = event.target.files?.[0] ?? null;
+              void onPickImage(file);
+            }}
+          />
+        </div>
+        {uploadError ? (
+          <p className="mt-2 text-[12px] text-[var(--danger)]">{uploadError}</p>
+        ) : (
+          <p className="mt-2 text-[11px] text-[var(--ink-faint)]">
+            Eigenes Foto aus Kamera oder Galerie · sonst Ortsfoto/Karten-Vorschau automatisch.
+          </p>
+        )}
+        <details className="mt-2">
+          <summary className="cursor-pointer text-[12px] font-semibold text-[var(--fjord)]">
+            Stattdessen Bild-URL
+          </summary>
+          <input
+            type="url"
+            inputMode="url"
+            autoComplete="off"
+            value={imageUrl}
+            onChange={(e) => onImageUrlChange(e.target.value)}
+            className="glass-field mt-2 px-3 py-3"
+            placeholder="https://… · leer = automatisch"
+          />
+        </details>
+      </div>
 
       {showOvernight ? (
         <>
@@ -1095,7 +1165,16 @@ function applySmartLinkResult(
     }
   }
   if (result.imageUrl && !isAppMapPreviewUrl(result.imageUrl)) {
-    if (!fillEmptyOnly) {
+    // Maps/Places photos must stay auto (healable). Only listing providers
+    // fill the editable "eigenes Bild" field.
+    const listingProviders = new Set([
+      "airbnb",
+      "booking",
+      "park4night",
+      "tripadvisor",
+      "generic",
+    ]);
+    if (listingProviders.has(result.provider) && !fillEmptyOnly) {
       options.setImageUrl(result.imageUrl);
     }
   }
@@ -1141,6 +1220,7 @@ export function CreateSpotForm({
         Link rein — die App erkennt Quelle und füllt aus, was geht.
       </p>
       <SpotFormFields
+        vacationId={vacationId}
         category={category}
         onCategoryChange={setCategory}
         showOvernight={isOvernightCategory(category)}
@@ -1292,6 +1372,7 @@ export function EditSpotForm({
           </div>
         </div>
         <SpotFormFields
+          vacationId={vacationId}
           spot={spot}
           category={category}
           onCategoryChange={setCategory}
@@ -1654,11 +1735,18 @@ export function SpotList({
                       ♥
                     </span>
                   ) : null}
-                  {summary.average != null ? (
-                    <span className="pointer-events-none absolute top-2 left-2 rounded-full bg-[rgba(12,24,32,0.55)] px-2 py-0.5 text-[11px] font-semibold tabular-nums text-white">
-                      Ø {formatAvg(summary.average)}
-                    </span>
-                  ) : null}
+                  {(() => {
+                    const kind = spotPreviewKind(spot);
+                    return kind === "map" ? (
+                      <span className="pointer-events-none absolute top-2 left-2 rounded-full bg-[rgba(12,24,32,0.55)] px-2 py-0.5 text-[11px] font-semibold text-white">
+                        Karte
+                      </span>
+                    ) : summary.average != null ? (
+                      <span className="pointer-events-none absolute top-2 left-2 rounded-full bg-[rgba(12,24,32,0.55)] px-2 py-0.5 text-[11px] font-semibold tabular-nums text-white">
+                        Ø {formatAvg(summary.average)}
+                      </span>
+                    ) : null;
+                  })()}
                 </div>
                 <div className="spot-card-body">
                   <p className="truncate text-[14px] font-semibold leading-tight text-[var(--ink)]">

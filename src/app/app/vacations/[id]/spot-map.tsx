@@ -253,7 +253,7 @@ export function SpotMap({
             <div className="relative aspect-[16/7] w-full media-fallback">
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
-                src={selected.image_url}
+                src={selected.image_url.replace(/#.*$/, "")}
                 alt=""
                 className="h-full w-full object-cover"
                 referrerPolicy="no-referrer"
