@@ -10,6 +10,7 @@ export function GlassSheet({
   children,
   footer,
   labelledBy,
+  panelClassName,
 }: {
   open: boolean;
   title?: string;
@@ -18,6 +19,7 @@ export function GlassSheet({
   children: ReactNode;
   footer?: ReactNode;
   labelledBy?: string;
+  panelClassName?: string;
 }) {
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
@@ -47,7 +49,7 @@ export function GlassSheet({
         onClick={onClose}
       />
       <div
-        className="glass-sheet-panel glass-picker-surface"
+        className={`glass-sheet-panel glass-picker-surface${panelClassName ? ` ${panelClassName}` : ""}`}
         role="dialog"
         aria-modal="true"
         aria-labelledby={labelledBy ?? (title ? "glass-sheet-title" : undefined)}

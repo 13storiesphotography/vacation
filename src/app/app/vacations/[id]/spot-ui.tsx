@@ -30,6 +30,7 @@ import {
   serializeImageFocus,
   type ImageFocus,
 } from "@/lib/image-focus";
+import { GlassSheet } from "@/components/ui/glass-sheet";
 import { CategoryIcon } from "@/components/category-icon";
 import { GlassDateField } from "@/components/ui/glass-date-field";
 import { isStaleServerActionError, reloadForStaleDeployment } from "@/lib/stale-action";
@@ -1489,6 +1490,116 @@ export function EditSpotForm({
   );
 }
 
+
+function SpotSheetOverview({
+  spot,
+  summary,
+  onRate,
+  onFavorite,
+  onArchive,
+  onDelete,
+  deleting,
+}: {
+  spot: Spot;
+  summary: SpotRatingSummary;
+  onRate: (value: number | null) => void;
+  onFavorite: () => void;
+  onArchive: () => void;
+  onDelete: () => void;
+  deleting: boolean;
+}) {
+  const relevant = isSpotRelevant(spot);
+  const imageSrc = spot.image_url?.replace(/#.*$/, "") || null;
+  const focus = parseImageFocus(spot.image_url);
+  const focusStyle = imageFocusStyle(focus);
+  const kind = spotPreviewKind(spot);
+
+  return (
+    <div className="space-y-3">
+      <div className="glass-media relative aspect-[16/10] w-full">
+        {imageSrc ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={imageSrc}
+            alt=""
+            className="h-full w-full object-cover"
+            style={{
+              objectPosition: focusStyle.objectPosition,
+              transform: focusStyle.transform,
+              transformOrigin: focusStyle.objectPosition,
+            }}
+            referrerPolicy="no-referrer"
+          />
+        ) : (
+          <div className="flex h-full w-full items-center justify-center bg-[rgba(12,24,32,0.06)]">
+            <CategoryIcon category={spot.category} size={40} tone="#ffffff" />
+          </div>
+        )}
+        <span className="pointer-events-none absolute bottom-2 left-2 inline-flex rounded-full bg-[var(--surface-strong)] p-1 shadow-sm">
+          <CategoryIcon category={spot.category} size={12} />
+        </span>
+        {kind === "map" ? (
+          <span className="pointer-events-none absolute top-2 left-2 rounded-full bg-[rgba(12,24,32,0.55)] px-2 py-0.5 text-[11px] font-semibold text-white">
+            Karte
+          </span>
+        ) : null}
+      </div>
+
+      <p className="text-[13px] text-[var(--ink-soft)]">
+        {categoryLabels[spot.category]}
+        {spot.overnight_cost ? ` · ${spot.overnight_cost}` : ""}
+        {spot.price_hint ? ` · ${spot.price_hint}` : ""}
+        {formatStaySummary(spot) ? ` · ${formatStaySummary(spot)}` : ""}
+        {spot.stay_status ? ` · ${stayStatusLabels[spot.stay_status]}` : ""}
+        {!relevant ? " · Archiviert" : ""}
+      </p>
+
+      {spot.description ? (
+        <p className="text-[14px] leading-relaxed text-[var(--ink-soft)]">{spot.description}</p>
+      ) : null}
+
+      <div className="flex flex-wrap items-center gap-2 rounded-[16px] bg-[rgba(255,255,255,0.28)] px-3 py-2.5">
+        <Stars value={summary.myRating} onChange={onRate} />
+        <button
+          type="button"
+          className={`inline-flex h-8 w-8 items-center justify-center rounded-full text-[16px] ${
+            summary.myFavorite ? "text-[var(--sun)]" : "text-black/20"
+          }`}
+          aria-label={summary.myFavorite ? "Favorit entfernen" : "Als Favorit"}
+          onClick={onFavorite}
+        >
+          {summary.myFavorite ? "♥" : "♡"}
+        </button>
+        {summary.average != null ? (
+          <span className="text-[12px] tabular-nums text-[var(--ink-faint)]">
+            Ø {formatAvg(summary.average)}
+            {summary.count > 1 ? ` · ${summary.count}` : ""}
+          </span>
+        ) : null}
+      </div>
+
+      <div className="flex flex-wrap gap-1.5">
+        <button
+          type="button"
+          className="glass-chip"
+          data-active={!relevant ? "true" : undefined}
+          onClick={onArchive}
+        >
+          {relevant ? "Archivieren" : "Wiederherstellen"}
+        </button>
+        <button
+          type="button"
+          className="glass-chip glass-chip-danger"
+          disabled={deleting}
+          onClick={onDelete}
+        >
+          {deleting ? "Löschen…" : "Löschen"}
+        </button>
+      </div>
+    </div>
+  );
+}
+
 type SortMode = "newest" | "favorites" | "avg" | "mine";
 
 function formatAvg(value: number | null): string {
@@ -1767,14 +1878,8 @@ export function SpotList({
                 className={`spot-card ${relevant ? "" : "opacity-60"}`}
                 data-selected={selected}
                 onClick={() => {
-                  setSelectedId((current) => {
-                    if (current === spot.id) {
-                      setEditingId(null);
-                      return null;
-                    }
-                    setEditingId(null);
-                    return spot.id;
-                  });
+                  setSelectedId(spot.id);
+                  setEditingId(null);
                 }}
               >
                 <div className="spot-card-media">
@@ -1817,146 +1922,113 @@ export function SpotList({
       )}
 
       {selectedSpot ? (
-        <div className="spot-detail-panel animate-rise">
-          {(() => {
-            const spot = selectedSpot;
-            const summary = summaries[spot.id] ?? emptySummary();
-            const relevant = isSpotRelevant(spot);
-            const isEditing = editingId === spot.id;
-            return (
+        <GlassSheet
+          open
+          panelClassName="glass-sheet-panel-tall"
+          title={editingId === selectedSpot.id ? "Spot bearbeiten" : selectedSpot.name}
+          subtitle={
+            editingId === selectedSpot.id
+              ? selectedSpot.name
+              : `${categoryLabels[selectedSpot.category]}${
+                  !isSpotRelevant(selectedSpot) ? " · Archiv" : ""
+                }`
+          }
+          onClose={() => {
+            setSelectedId(null);
+            setEditingId(null);
+          }}
+          footer={
+            editingId === selectedSpot.id ? (
+              <button
+                type="button"
+                className="glass-sheet-action glass-sheet-action-muted"
+                onClick={() => setEditingId(null)}
+              >
+                Zurück zur Übersicht
+              </button>
+            ) : (
               <>
-                <div className="flex items-start gap-3 p-4">
-                  <SpotThumb spot={spot} size={72} selected />
-                  <div className="min-w-0 flex-1">
-                    <p className="text-[17px] font-semibold leading-tight">{spot.name}</p>
-                    <p className="mt-1 text-[13px] text-[var(--ink-soft)]">
-                      {categoryLabels[spot.category]}
-                      {spot.overnight_cost ? ` · ${spot.overnight_cost}` : ""}
-                      {spot.price_hint ? ` · ${spot.price_hint}` : ""}
-                      {formatStaySummary(spot) ? ` · ${formatStaySummary(spot)}` : ""}
-                      {spot.stay_status
-                        ? ` · ${stayStatusLabels[spot.stay_status]}`
-                        : ""}
-                    </p>
-                    {spot.description ? (
-                      <p className="mt-2 text-[13px] leading-relaxed text-[var(--ink-soft)]">
-                        {spot.description}
-                      </p>
-                    ) : null}
-                    <div className="mt-3 flex flex-wrap items-center gap-2">
-                      <Stars
-                        value={summary.myRating}
-                        onChange={(value) => saveRating(spot.id, { rating: value })}
-                      />
-                      <button
-                        type="button"
-                        className={`inline-flex h-8 w-8 items-center justify-center rounded-full text-[16px] ${
-                          summary.myFavorite ? "text-[var(--sun)]" : "text-black/20"
-                        }`}
-                        aria-label={
-                          summary.myFavorite ? "Favorit entfernen" : "Als Favorit"
-                        }
-                        onClick={() =>
-                          saveRating(spot.id, { isFavorite: !summary.myFavorite })
-                        }
-                      >
-                        {summary.myFavorite ? "♥" : "♡"}
-                      </button>
-                      {summary.average != null ? (
-                        <span className="text-[12px] tabular-nums text-[var(--ink-faint)]">
-                          Ø {formatAvg(summary.average)}
-                          {summary.count > 1 ? ` · ${summary.count}` : ""}
-                        </span>
-                      ) : null}
-                    </div>
-                  </div>
-                  <button
-                    type="button"
-                    className="glass-chip shrink-0 !py-1.5"
-                    onClick={() => {
-                      setSelectedId(null);
-                      setEditingId(null);
-                    }}
+                <button
+                  type="button"
+                  className="glass-sheet-action"
+                  onClick={() => setEditingId(selectedSpot.id)}
+                >
+                  Bearbeiten
+                </button>
+                {selectedSpot.maps_url ? (
+                  <a
+                    href={selectedSpot.maps_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="glass-sheet-action"
                   >
-                    Schließen
-                  </button>
-                </div>
-
-                <div className="flex flex-wrap gap-1.5 border-t border-black/5 px-4 py-3">
-                  <button
-                    type="button"
-                    className="glass-chip !py-1.5 !text-[12px]"
-                    data-active={isEditing ? "true" : undefined}
-                    onClick={() =>
-                      setEditingId((current) => (current === spot.id ? null : spot.id))
-                    }
-                  >
-                    {isEditing ? "Formular schließen" : "Bearbeiten"}
-                  </button>
-                  {spot.maps_url ? (
-                    <a
-                      href={spot.maps_url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="glass-chip !py-1.5 !text-[12px]"
-                    >
-                      Karte öffnen
-                    </a>
-                  ) : null}
-                  {spot.info_url ? (
-                    <a
-                      href={spot.info_url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="glass-chip !py-1.5 !text-[12px]"
-                    >
-                      {isAirbnbUrl(spot.info_url) ? "Airbnb öffnen" : "Seite öffnen"}
-                    </a>
-                  ) : null}
-                  <button
-                    type="button"
-                    className="glass-chip !py-1.5 !text-[12px]"
-                    data-active={!relevant ? "true" : undefined}
-                    onClick={() => toggleRelevant(spot)}
-                  >
-                    {relevant ? "Archivieren" : "Wiederherstellen"}
-                  </button>
-                  <button
-                    type="button"
-                    className="glass-chip glass-chip-danger !py-1.5 !text-[12px]"
-                    disabled={deletingId === spot.id}
-                    onClick={() => {
-                      if (
-                        !window.confirm(
-                          `„${spot.name}“ wirklich löschen? Das lässt sich nicht rückgängig machen.`,
-                        )
-                      ) {
-                        return;
-                      }
-                      void onDelete(spot.id);
-                    }}
-                  >
-                    {deletingId === spot.id ? "Löschen…" : "Löschen"}
-                  </button>
-                </div>
-
-                {isEditing ? (
-                  <EditSpotForm
-                    vacationId={vacationId}
-                    spot={spot}
-                    deleting={deletingId === spot.id}
-                    onDelete={() => onDelete(spot.id)}
-                    onDone={() => {
-                      setEditingId(null);
-                      onChanged();
-                    }}
-                    onToggleRelevant={() => toggleRelevant(spot)}
-                  />
+                    In Google Maps öffnen
+                  </a>
                 ) : null}
+                {selectedSpot.info_url ? (
+                  <a
+                    href={selectedSpot.info_url}
+                    target="_blank"
+                    rel="noreferrer"
+                    className="glass-sheet-action"
+                  >
+                    {isAirbnbUrl(selectedSpot.info_url)
+                      ? "Airbnb öffnen"
+                      : "Seite öffnen"}
+                  </a>
+                ) : null}
+                <button
+                  type="button"
+                  className="glass-sheet-action glass-sheet-action-muted"
+                  onClick={() => {
+                    setSelectedId(null);
+                    setEditingId(null);
+                  }}
+                >
+                  Schließen
+                </button>
               </>
-            );
-          })()}
-        </div>
+            )
+          }
+        >
+          {editingId === selectedSpot.id ? (
+            <EditSpotForm
+              vacationId={vacationId}
+              spot={selectedSpot}
+              deleting={deletingId === selectedSpot.id}
+              onDelete={() => onDelete(selectedSpot.id)}
+              onDone={() => {
+                setEditingId(null);
+                setSelectedId(null);
+                onChanged();
+              }}
+              onToggleRelevant={() => toggleRelevant(selectedSpot)}
+            />
+          ) : (
+            <SpotSheetOverview
+              spot={selectedSpot}
+              summary={summaries[selectedSpot.id] ?? emptySummary()}
+              onRate={(value) => saveRating(selectedSpot.id, { rating: value })}
+              onFavorite={() =>
+                saveRating(selectedSpot.id, {
+                  isFavorite: !(summaries[selectedSpot.id] ?? emptySummary()).myFavorite,
+                })
+              }
+              onArchive={() => toggleRelevant(selectedSpot)}
+              onDelete={() => {
+                if (
+                  !window.confirm(
+                    `„${selectedSpot.name}“ wirklich löschen? Das lässt sich nicht rückgängig machen.`,
+                  )
+                ) {
+                  return;
+                }
+                void onDelete(selectedSpot.id);
+              }}
+              deleting={deletingId === selectedSpot.id}
+            />
+          )}
+        </GlassSheet>
       ) : null}
     </div>
   );

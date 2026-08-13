@@ -1392,6 +1392,11 @@ textarea {
   overflow: hidden;
 }
 
+.glass-sheet-panel.glass-sheet-panel-tall {
+  max-height: min(92vh, 52rem);
+  width: min(100%, 32rem);
+}
+
 .glass-sheet-handle {
   width: 36px;
   height: 4px;
