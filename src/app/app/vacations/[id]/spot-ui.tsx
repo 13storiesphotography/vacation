@@ -30,7 +30,7 @@ import {
   serializeImageFocus,
   type ImageFocus,
 } from "@/lib/image-focus";
-import { SpotDetailOverlay } from "@/components/ui/spot-detail-overlay";
+import { SpotPlaceCard } from "@/components/ui/spot-detail-overlay";
 import { CategoryIcon } from "@/components/category-icon";
 import { GlassDateField } from "@/components/ui/glass-date-field";
 import { isStaleServerActionError, reloadForStaleDeployment } from "@/lib/stale-action";
@@ -1548,7 +1548,7 @@ function SpotDetailView({
 
   return (
     <>
-      <div className="spot-detail-hero">
+      <div className="spot-place-hero">
         {imageSrc ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
@@ -1563,39 +1563,39 @@ function SpotDetailView({
           />
         ) : (
           <div className="flex h-full w-full items-center justify-center">
-            <CategoryIcon category={spot.category} size={48} tone="#ffffff" />
+            <CategoryIcon category={spot.category} size={36} tone="#ffffff" />
           </div>
         )}
-        <div className="spot-detail-hero-fade" />
+        <span className="pointer-events-none absolute bottom-2 left-2 inline-flex rounded-full bg-[var(--surface-strong)] p-1 shadow-sm">
+          <CategoryIcon category={spot.category} size={12} />
+        </span>
         {kind === "map" ? (
-          <span className="pointer-events-none absolute bottom-10 left-4 rounded-full bg-[rgba(12,24,32,0.55)] px-2.5 py-1 text-[11px] font-semibold text-white">
-            Karten-Vorschau
+          <span className="pointer-events-none absolute top-2 left-2 rounded-full bg-[rgba(12,24,32,0.55)] px-2 py-0.5 text-[11px] font-semibold text-white">
+            Karte
           </span>
         ) : null}
       </div>
 
-      <div className="spot-detail-body">
-        <h1 className="spot-detail-title">{spot.name}</h1>
-        <p className="spot-detail-meta">
+      <div className="spot-place-content">
+        <h2 className="spot-place-title">{spot.name}</h2>
+        <p className="spot-place-meta">
           {categoryLabels[spot.category]}
           {spot.overnight_cost ? ` · ${spot.overnight_cost}` : ""}
-          {spot.price_hint ? ` · ${spot.price_hint}` : ""}
           {formatStaySummary(spot) ? ` · ${formatStaySummary(spot)}` : ""}
-          {spot.stay_status ? ` · ${stayStatusLabels[spot.stay_status]}` : ""}
-          {!relevant ? " · Archiviert" : ""}
+          {!relevant ? " · Archiv" : ""}
         </p>
 
         {spot.description ? (
-          <p className="mt-4 text-[15px] leading-relaxed text-[var(--ink-soft)]">
+          <p className="mt-2 line-clamp-3 text-[13px] leading-relaxed text-[var(--ink-soft)]">
             {spot.description}
           </p>
         ) : null}
 
-        <div className="mt-5 flex flex-wrap items-center gap-2">
-          <Stars value={summary.myRating} onChange={onRate} />
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <Stars value={summary.myRating} onChange={onRate} size="sm" />
           <button
             type="button"
-            className={`inline-flex h-9 w-9 items-center justify-center rounded-full text-[17px] ${
+            className={`inline-flex h-7 w-7 items-center justify-center rounded-full text-[15px] ${
               summary.myFavorite ? "text-[var(--sun)]" : "text-black/20"
             }`}
             aria-label={summary.myFavorite ? "Favorit entfernen" : "Als Favorit"}
@@ -1604,23 +1604,22 @@ function SpotDetailView({
             {summary.myFavorite ? "♥" : "♡"}
           </button>
           {summary.average != null ? (
-            <span className="text-[12px] tabular-nums text-[var(--ink-faint)]">
+            <span className="text-[11px] tabular-nums text-[var(--ink-faint)]">
               Ø {formatAvg(summary.average)}
-              {summary.count > 1 ? ` · ${summary.count}` : ""}
             </span>
           ) : null}
         </div>
 
         {(mapsLink || infoLink) && (
-          <div className="spot-detail-actions">
+          <div className="mt-3 flex flex-wrap gap-1.5">
             {mapsLink ? (
-              <a href={mapsLink} target="_blank" rel="noreferrer" className="glass-chip">
-                Google Maps
+              <a href={mapsLink} target="_blank" rel="noreferrer" className="glass-chip !py-1.5">
+                Maps
               </a>
             ) : null}
             {infoLink ? (
-              <a href={infoLink} target="_blank" rel="noreferrer" className="glass-chip">
-                {isAirbnbUrl(infoLink) ? "Airbnb" : "Mehr Infos"}
+              <a href={infoLink} target="_blank" rel="noreferrer" className="glass-chip !py-1.5">
+                {isAirbnbUrl(infoLink) ? "Airbnb" : "Info"}
               </a>
             ) : null}
           </div>
@@ -1952,52 +1951,47 @@ export function SpotList({
       )}
 
       {selectedSpot ? (
-        <SpotDetailOverlay
+        <SpotPlaceCard
           open
+          editing={editingId === selectedSpot.id}
           onClose={() => {
             setSelectedId(null);
             setEditingId(null);
           }}
-        >
-          <div className="spot-detail-topbar">
-            <button
-              type="button"
-              className="spot-detail-icon-btn"
-              onClick={() => {
-                if (editingId === selectedSpot.id) {
-                  setEditingId(null);
-                  return;
-                }
-                setSelectedId(null);
-                setEditingId(null);
-              }}
-            >
-              {editingId === selectedSpot.id ? "←" : "Schließen"}
-            </button>
-            {editingId === selectedSpot.id ? (
-              <p className="min-w-0 flex-1 truncate text-center text-[13px] font-semibold text-[var(--ink-soft)]">
-                Bearbeiten
-              </p>
-            ) : (
-              <span className="flex-1" />
-            )}
-            {editingId === selectedSpot.id ? (
-              <span className="spot-detail-icon-btn !opacity-0 pointer-events-none" aria-hidden>
-                ·
-              </span>
-            ) : (
+          footer={
+            editingId === selectedSpot.id ? (
               <button
                 type="button"
-                className="spot-detail-icon-btn"
-                onClick={() => setEditingId(selectedSpot.id)}
+                className="cta cta-secondary"
+                onClick={() => setEditingId(null)}
               >
-                Bearbeiten
+                Fertig
               </button>
-            )}
-          </div>
-
+            ) : (
+              <>
+                <button
+                  type="button"
+                  className="cta cta-secondary"
+                  onClick={() => {
+                    setSelectedId(null);
+                    setEditingId(null);
+                  }}
+                >
+                  Schließen
+                </button>
+                <button
+                  type="button"
+                  className="cta"
+                  onClick={() => setEditingId(selectedSpot.id)}
+                >
+                  Bearbeiten
+                </button>
+              </>
+            )
+          }
+        >
           {editingId === selectedSpot.id ? (
-            <div className="spot-detail-body !mt-0 pt-[calc(4.5rem+env(safe-area-inset-top,0px))]">
+            <div className="px-3 pb-2 pt-1">
               <EditSpotForm
                 vacationId={vacationId}
                 spot={selectedSpot}
@@ -2025,7 +2019,7 @@ export function SpotList({
               }
             />
           )}
-        </SpotDetailOverlay>
+        </SpotPlaceCard>
       ) : null}
     </div>
   );
