@@ -1188,11 +1188,12 @@ textarea {
   }
 }
 
-/* Bottom liquid-glass sheet (team actions, rights, invite, confirm). */
+/* Bottom liquid-glass sheet (team actions, rights, invite, confirm).
+   Portaled to document.body so it stacks above the fixed tab dock. */
 .glass-sheet-root {
   position: fixed;
   inset: 0;
-  z-index: 80;
+  z-index: 90;
   display: flex;
   align-items: flex-end;
   justify-content: center;
@@ -1209,7 +1210,7 @@ textarea {
   margin: 0;
   cursor: pointer;
   pointer-events: auto;
-  background: rgba(12, 24, 32, 0.32);
+  background: rgba(12, 24, 32, 0.38);
   backdrop-filter: blur(10px) saturate(140%);
   -webkit-backdrop-filter: blur(10px) saturate(140%);
   animation: glass-sheet-fade 180ms ease;
@@ -1219,12 +1220,13 @@ textarea {
   position: relative;
   z-index: 1;
   width: min(100%, 28rem);
-  max-height: min(88vh, 40rem);
+  max-height: min(85vh, 40rem);
   display: flex;
   flex-direction: column;
   pointer-events: auto;
   border-radius: 28px !important;
-  padding: 10px 16px 16px;
+  padding: 10px 16px calc(16px + env(safe-area-inset-bottom, 0px));
+  margin-bottom: 0;
   animation: glass-sheet-up 220ms cubic-bezier(0.22, 1, 0.36, 1);
   overflow: hidden;
 }
