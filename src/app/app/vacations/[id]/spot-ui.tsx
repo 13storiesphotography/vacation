@@ -30,7 +30,7 @@ import {
   serializeImageFocus,
   type ImageFocus,
 } from "@/lib/image-focus";
-import { GlassSheet } from "@/components/ui/glass-sheet";
+import { SpotDetailOverlay } from "@/components/ui/spot-detail-overlay";
 import { CategoryIcon } from "@/components/category-icon";
 import { GlassDateField } from "@/components/ui/glass-date-field";
 import { isStaleServerActionError, reloadForStaleDeployment } from "@/lib/stale-action";
@@ -1331,6 +1331,7 @@ export function EditSpotForm({
   onDelete,
   onToggleRelevant,
   deleting = false,
+  variant = "panel",
 }: {
   vacationId: string;
   spot: Spot;
@@ -1338,6 +1339,8 @@ export function EditSpotForm({
   onDelete: () => void;
   onToggleRelevant?: () => void;
   deleting?: boolean;
+  /** `page` = full detail overlay without nested panel chrome. */
+  variant?: "panel" | "page";
 }) {
   const [state, action, pending] = useActionState(updateSpot, initialState);
   const [category, setCategory] = useState<SpotCategory>(spot.category);
@@ -1366,7 +1369,7 @@ export function EditSpotForm({
   }, [state.ok, onDone]);
 
   return (
-    <div className="glass-subpanel-flush">
+    <div className={variant === "panel" ? "glass-subpanel-flush" : undefined}>
       <form action={action}>
         <input type="hidden" name="vacation_id" value={vacationId} />
         <input type="hidden" name="spot_id" value={spot.id} />
@@ -1384,6 +1387,7 @@ export function EditSpotForm({
         {spot.image_url ? (
           <input type="hidden" name="previous_image_url" value={spot.image_url} />
         ) : null}
+        {variant === "panel" ? (
         <div className="mb-3 flex items-center justify-between gap-3">
           <p className="text-[13px] font-semibold text-[var(--ink-soft)]">
             Spot bearbeiten
@@ -1424,6 +1428,38 @@ export function EditSpotForm({
             </button>
           </div>
         </div>
+        ) : (
+          <div className="mb-3 flex flex-wrap gap-1.5">
+            {onToggleRelevant ? (
+              <button
+                type="button"
+                className="glass-chip"
+                data-active={!relevant}
+                disabled={pending}
+                onClick={onToggleRelevant}
+              >
+                {relevant ? "Archivieren" : "Wiederherstellen"}
+              </button>
+            ) : null}
+            <button
+              type="button"
+              className="glass-chip glass-chip-danger"
+              disabled={deleting || pending}
+              onClick={() => {
+                if (
+                  !window.confirm(
+                    `„${spot.name}“ wirklich löschen? Das lässt sich nicht rückgängig machen.`,
+                  )
+                ) {
+                  return;
+                }
+                onDelete();
+              }}
+            >
+              {deleting ? "Löschen…" : "Löschen"}
+            </button>
+          </div>
+        )}
         <SpotFormFields
           vacationId={vacationId}
           spot={spot}
@@ -1491,38 +1527,33 @@ export function EditSpotForm({
 }
 
 
-function SpotSheetOverview({
+function SpotDetailView({
   spot,
   summary,
   onRate,
   onFavorite,
-  onArchive,
-  onDelete,
-  deleting,
 }: {
   spot: Spot;
   summary: SpotRatingSummary;
   onRate: (value: number | null) => void;
   onFavorite: () => void;
-  onArchive: () => void;
-  onDelete: () => void;
-  deleting: boolean;
 }) {
   const relevant = isSpotRelevant(spot);
   const imageSrc = spot.image_url?.replace(/#.*$/, "") || null;
   const focus = parseImageFocus(spot.image_url);
   const focusStyle = imageFocusStyle(focus);
   const kind = spotPreviewKind(spot);
+  const mapsLink = spot.maps_url;
+  const infoLink = spot.info_url;
 
   return (
-    <div className="space-y-3">
-      <div className="glass-media relative aspect-[16/10] w-full">
+    <>
+      <div className="spot-detail-hero">
         {imageSrc ? (
           // eslint-disable-next-line @next/next/no-img-element
           <img
             src={imageSrc}
             alt=""
-            className="h-full w-full object-cover"
             style={{
               objectPosition: focusStyle.objectPosition,
               transform: focusStyle.transform,
@@ -1531,72 +1562,71 @@ function SpotSheetOverview({
             referrerPolicy="no-referrer"
           />
         ) : (
-          <div className="flex h-full w-full items-center justify-center bg-[rgba(12,24,32,0.06)]">
-            <CategoryIcon category={spot.category} size={40} tone="#ffffff" />
+          <div className="flex h-full w-full items-center justify-center">
+            <CategoryIcon category={spot.category} size={48} tone="#ffffff" />
           </div>
         )}
-        <span className="pointer-events-none absolute bottom-2 left-2 inline-flex rounded-full bg-[var(--surface-strong)] p-1 shadow-sm">
-          <CategoryIcon category={spot.category} size={12} />
-        </span>
+        <div className="spot-detail-hero-fade" />
         {kind === "map" ? (
-          <span className="pointer-events-none absolute top-2 left-2 rounded-full bg-[rgba(12,24,32,0.55)] px-2 py-0.5 text-[11px] font-semibold text-white">
-            Karte
+          <span className="pointer-events-none absolute bottom-10 left-4 rounded-full bg-[rgba(12,24,32,0.55)] px-2.5 py-1 text-[11px] font-semibold text-white">
+            Karten-Vorschau
           </span>
         ) : null}
       </div>
 
-      <p className="text-[13px] text-[var(--ink-soft)]">
-        {categoryLabels[spot.category]}
-        {spot.overnight_cost ? ` · ${spot.overnight_cost}` : ""}
-        {spot.price_hint ? ` · ${spot.price_hint}` : ""}
-        {formatStaySummary(spot) ? ` · ${formatStaySummary(spot)}` : ""}
-        {spot.stay_status ? ` · ${stayStatusLabels[spot.stay_status]}` : ""}
-        {!relevant ? " · Archiviert" : ""}
-      </p>
+      <div className="spot-detail-body">
+        <h1 className="spot-detail-title">{spot.name}</h1>
+        <p className="spot-detail-meta">
+          {categoryLabels[spot.category]}
+          {spot.overnight_cost ? ` · ${spot.overnight_cost}` : ""}
+          {spot.price_hint ? ` · ${spot.price_hint}` : ""}
+          {formatStaySummary(spot) ? ` · ${formatStaySummary(spot)}` : ""}
+          {spot.stay_status ? ` · ${stayStatusLabels[spot.stay_status]}` : ""}
+          {!relevant ? " · Archiviert" : ""}
+        </p>
 
-      {spot.description ? (
-        <p className="text-[14px] leading-relaxed text-[var(--ink-soft)]">{spot.description}</p>
-      ) : null}
-
-      <div className="flex flex-wrap items-center gap-2 rounded-[16px] bg-[rgba(255,255,255,0.28)] px-3 py-2.5">
-        <Stars value={summary.myRating} onChange={onRate} />
-        <button
-          type="button"
-          className={`inline-flex h-8 w-8 items-center justify-center rounded-full text-[16px] ${
-            summary.myFavorite ? "text-[var(--sun)]" : "text-black/20"
-          }`}
-          aria-label={summary.myFavorite ? "Favorit entfernen" : "Als Favorit"}
-          onClick={onFavorite}
-        >
-          {summary.myFavorite ? "♥" : "♡"}
-        </button>
-        {summary.average != null ? (
-          <span className="text-[12px] tabular-nums text-[var(--ink-faint)]">
-            Ø {formatAvg(summary.average)}
-            {summary.count > 1 ? ` · ${summary.count}` : ""}
-          </span>
+        {spot.description ? (
+          <p className="mt-4 text-[15px] leading-relaxed text-[var(--ink-soft)]">
+            {spot.description}
+          </p>
         ) : null}
-      </div>
 
-      <div className="flex flex-wrap gap-1.5">
-        <button
-          type="button"
-          className="glass-chip"
-          data-active={!relevant ? "true" : undefined}
-          onClick={onArchive}
-        >
-          {relevant ? "Archivieren" : "Wiederherstellen"}
-        </button>
-        <button
-          type="button"
-          className="glass-chip glass-chip-danger"
-          disabled={deleting}
-          onClick={onDelete}
-        >
-          {deleting ? "Löschen…" : "Löschen"}
-        </button>
+        <div className="mt-5 flex flex-wrap items-center gap-2">
+          <Stars value={summary.myRating} onChange={onRate} />
+          <button
+            type="button"
+            className={`inline-flex h-9 w-9 items-center justify-center rounded-full text-[17px] ${
+              summary.myFavorite ? "text-[var(--sun)]" : "text-black/20"
+            }`}
+            aria-label={summary.myFavorite ? "Favorit entfernen" : "Als Favorit"}
+            onClick={onFavorite}
+          >
+            {summary.myFavorite ? "♥" : "♡"}
+          </button>
+          {summary.average != null ? (
+            <span className="text-[12px] tabular-nums text-[var(--ink-faint)]">
+              Ø {formatAvg(summary.average)}
+              {summary.count > 1 ? ` · ${summary.count}` : ""}
+            </span>
+          ) : null}
+        </div>
+
+        {(mapsLink || infoLink) && (
+          <div className="spot-detail-actions">
+            {mapsLink ? (
+              <a href={mapsLink} target="_blank" rel="noreferrer" className="glass-chip">
+                Google Maps
+              </a>
+            ) : null}
+            {infoLink ? (
+              <a href={infoLink} target="_blank" rel="noreferrer" className="glass-chip">
+                {isAirbnbUrl(infoLink) ? "Airbnb" : "Mehr Infos"}
+              </a>
+            ) : null}
+          </div>
+        )}
       </div>
-    </div>
+    </>
   );
 }
 
@@ -1922,113 +1952,80 @@ export function SpotList({
       )}
 
       {selectedSpot ? (
-        <GlassSheet
+        <SpotDetailOverlay
           open
-          panelClassName="glass-sheet-panel-tall"
-          title={editingId === selectedSpot.id ? "Spot bearbeiten" : selectedSpot.name}
-          subtitle={
-            editingId === selectedSpot.id
-              ? selectedSpot.name
-              : `${categoryLabels[selectedSpot.category]}${
-                  !isSpotRelevant(selectedSpot) ? " · Archiv" : ""
-                }`
-          }
           onClose={() => {
             setSelectedId(null);
             setEditingId(null);
           }}
-          footer={
-            editingId === selectedSpot.id ? (
+        >
+          <div className="spot-detail-topbar">
+            <button
+              type="button"
+              className="spot-detail-icon-btn"
+              onClick={() => {
+                if (editingId === selectedSpot.id) {
+                  setEditingId(null);
+                  return;
+                }
+                setSelectedId(null);
+                setEditingId(null);
+              }}
+            >
+              {editingId === selectedSpot.id ? "←" : "Schließen"}
+            </button>
+            {editingId === selectedSpot.id ? (
+              <p className="min-w-0 flex-1 truncate text-center text-[13px] font-semibold text-[var(--ink-soft)]">
+                Bearbeiten
+              </p>
+            ) : (
+              <span className="flex-1" />
+            )}
+            {editingId === selectedSpot.id ? (
+              <span className="spot-detail-icon-btn !opacity-0 pointer-events-none" aria-hidden>
+                ·
+              </span>
+            ) : (
               <button
                 type="button"
-                className="glass-sheet-action glass-sheet-action-muted"
-                onClick={() => setEditingId(null)}
+                className="spot-detail-icon-btn"
+                onClick={() => setEditingId(selectedSpot.id)}
               >
-                Zurück zur Übersicht
+                Bearbeiten
               </button>
-            ) : (
-              <>
-                <button
-                  type="button"
-                  className="glass-sheet-action"
-                  onClick={() => setEditingId(selectedSpot.id)}
-                >
-                  Bearbeiten
-                </button>
-                {selectedSpot.maps_url ? (
-                  <a
-                    href={selectedSpot.maps_url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="glass-sheet-action"
-                  >
-                    In Google Maps öffnen
-                  </a>
-                ) : null}
-                {selectedSpot.info_url ? (
-                  <a
-                    href={selectedSpot.info_url}
-                    target="_blank"
-                    rel="noreferrer"
-                    className="glass-sheet-action"
-                  >
-                    {isAirbnbUrl(selectedSpot.info_url)
-                      ? "Airbnb öffnen"
-                      : "Seite öffnen"}
-                  </a>
-                ) : null}
-                <button
-                  type="button"
-                  className="glass-sheet-action glass-sheet-action-muted"
-                  onClick={() => {
-                    setSelectedId(null);
-                    setEditingId(null);
-                  }}
-                >
-                  Schließen
-                </button>
-              </>
-            )
-          }
-        >
+            )}
+          </div>
+
           {editingId === selectedSpot.id ? (
-            <EditSpotForm
-              vacationId={vacationId}
-              spot={selectedSpot}
-              deleting={deletingId === selectedSpot.id}
-              onDelete={() => onDelete(selectedSpot.id)}
-              onDone={() => {
-                setEditingId(null);
-                setSelectedId(null);
-                onChanged();
-              }}
-              onToggleRelevant={() => toggleRelevant(selectedSpot)}
-            />
+            <div className="spot-detail-body !mt-0 pt-[calc(4.5rem+env(safe-area-inset-top,0px))]">
+              <EditSpotForm
+                vacationId={vacationId}
+                spot={selectedSpot}
+                variant="page"
+                deleting={deletingId === selectedSpot.id}
+                onDelete={() => onDelete(selectedSpot.id)}
+                onDone={() => {
+                  setEditingId(null);
+                  onChanged();
+                }}
+                onToggleRelevant={() => toggleRelevant(selectedSpot)}
+              />
+            </div>
           ) : (
-            <SpotSheetOverview
+            <SpotDetailView
               spot={selectedSpot}
               summary={summaries[selectedSpot.id] ?? emptySummary()}
               onRate={(value) => saveRating(selectedSpot.id, { rating: value })}
               onFavorite={() =>
                 saveRating(selectedSpot.id, {
-                  isFavorite: !(summaries[selectedSpot.id] ?? emptySummary()).myFavorite,
+                  isFavorite: !(
+                    summaries[selectedSpot.id] ?? emptySummary()
+                  ).myFavorite,
                 })
               }
-              onArchive={() => toggleRelevant(selectedSpot)}
-              onDelete={() => {
-                if (
-                  !window.confirm(
-                    `„${selectedSpot.name}“ wirklich löschen? Das lässt sich nicht rückgängig machen.`,
-                  )
-                ) {
-                  return;
-                }
-                void onDelete(selectedSpot.id);
-              }}
-              deleting={deletingId === selectedSpot.id}
             />
           )}
-        </GlassSheet>
+        </SpotDetailOverlay>
       ) : null}
     </div>
   );

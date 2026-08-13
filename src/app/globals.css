@@ -1351,6 +1351,130 @@ textarea {
   }
 }
 
+/* Full-viewport spot detail (place card), above tabbar/topbar. */
+.spot-detail-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 120;
+  display: flex;
+  flex-direction: column;
+  background: var(--bg);
+  animation: spot-detail-in 220ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.spot-detail-hero {
+  position: relative;
+  flex-shrink: 0;
+  height: min(46vh, 340px);
+  overflow: hidden;
+  background: rgba(12, 24, 32, 0.08);
+}
+
+.spot-detail-hero img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.spot-detail-hero-fade {
+  position: absolute;
+  inset: auto 0 0;
+  height: 42%;
+  background: linear-gradient(to top, var(--bg) 0%, rgba(230, 236, 238, 0) 100%);
+  pointer-events: none;
+}
+
+.spot-detail-topbar {
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  z-index: 2;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding:
+    max(10px, env(safe-area-inset-top, 0px))
+    14px
+    10px;
+}
+
+.spot-detail-icon-btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 40px;
+  height: 40px;
+  padding: 0 12px;
+  border: 1px solid rgba(255, 255, 255, 0.55);
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.55);
+  backdrop-filter: blur(20px) saturate(180%);
+  -webkit-backdrop-filter: blur(20px) saturate(180%);
+  box-shadow: var(--glass-inset), 0 8px 20px rgba(12, 24, 32, 0.12);
+  color: var(--ink);
+  font-size: 13px;
+  font-weight: 650;
+  cursor: pointer;
+}
+
+.spot-detail-icon-btn:active {
+  transform: scale(0.97);
+}
+
+.spot-detail-body {
+  position: relative;
+  z-index: 1;
+  flex: 1 1 auto;
+  min-height: 0;
+  margin-top: -28px;
+  overflow: auto;
+  overscroll-behavior: contain;
+  padding: 0 20px calc(28px + env(safe-area-inset-bottom, 0px));
+}
+
+.spot-detail-title {
+  margin: 0;
+  font-size: clamp(1.55rem, 4.5vw, 1.9rem);
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  line-height: 1.15;
+  color: var(--ink);
+}
+
+.spot-detail-meta {
+  margin: 8px 0 0;
+  font-size: 13px;
+  line-height: 1.45;
+  color: var(--ink-soft);
+}
+
+.spot-detail-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+@keyframes spot-detail-in {
+  from {
+    opacity: 0;
+    transform: translateY(12px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .spot-detail-overlay {
+    animation: none;
+  }
+}
+
 /* Bottom liquid-glass sheet (team actions, rights, invite, confirm). */
 .glass-sheet-root {
   position: fixed;
