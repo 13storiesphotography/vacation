@@ -5,7 +5,13 @@ import { useCallback, useEffect, useMemo, useState } from "react";
 import { useParams } from "next/navigation";
 import { createClient } from "@/lib/supabase/client";
 import type { Database } from "@/lib/database.types";
-import { CreateSpotForm, SpotList } from "./spot-ui";
+import {
+  CreateSpotForm,
+  SpotList,
+  SpotSammelnFilters,
+  defaultSpotCollectionFilters,
+  type SpotCollectionFilterState,
+} from "./spot-ui";
 import { SpotMap } from "./spot-map";
 import { EditVacationForm } from "./vacation-edit";
 import { summarizeRatings, type RaterOption, type SpotRating } from "@/lib/ratings";
@@ -23,6 +29,7 @@ import { VacationUrlaubDashboard } from "./vacation-urlaub-dashboard";
 import { CostPlannerPanel } from "./cost-planner";
 import { TeamPanel } from "./team-panel";
 import { isStaleServerActionError } from "@/lib/stale-action";
+import { GlassSheet } from "@/components/ui/glass-sheet";
 
 type Vacation = Database["public"]["Tables"]["vacations"]["Row"];
 type Member = Database["public"]["Tables"]["vacation_members"]["Row"];
@@ -66,6 +73,10 @@ export default function VacationDetailPage() {
   const [loading, setLoading] = useState(true);
   const [showSpotForm, setShowSpotForm] = useState(false);
   const [spotFormKey, setSpotFormKey] = useState(0);
+  const [spotFormPending, setSpotFormPending] = useState(false);
+  const [spotFilters, setSpotFilters] = useState<SpotCollectionFilterState>(
+    defaultSpotCollectionFilters,
+  );
   const [editingVacation, setEditingVacation] = useState(false);
   const [sammelnView, setSammelnView] = useState<SammelnView>(() => readInitialSammelnView());
   const [mehrSection, setMehrSection] = useState<MehrSection>(() => readInitialMehrSection());
@@ -76,6 +87,7 @@ export default function VacationDetailPage() {
       return new Set<VacationTabId>([initial]);
     },
   );
+  const createSpotFormId = "create-spot-sheet-form";
 
   function writeUrl(nextTab: VacationTabId, nextView = sammelnView, nextSection = mehrSection) {
     try {
@@ -267,6 +279,10 @@ export default function VacationDetailPage() {
     () => spots.filter((spot) => isSpotRelevant(spot)).length,
     [spots],
   );
+  const shelvedSpotCount = useMemo(
+    () => spots.filter((spot) => !isSpotRelevant(spot)).length,
+    [spots],
+  );
 
   const raters: RaterOption[] = useMemo(() => {
     return members
@@ -397,25 +413,62 @@ export default function VacationDetailPage() {
                 <button
                   type="button"
                   className="cta !px-3 !py-2 text-[13px]"
-                  onClick={() => setShowSpotForm((value) => !value)}
+                  onClick={() => setShowSpotForm(true)}
                 >
-                  {showSpotForm ? "Schließen" : "Hinzufügen"}
+                  Hinzufügen
                 </button>
               ) : null}
             </div>
           </div>
 
-          {showSpotForm ? (
+          <SpotSammelnFilters
+            filters={spotFilters}
+            onChange={setSpotFilters}
+            shelvedCount={shelvedSpotCount}
+          />
+
+          <GlassSheet
+            open={showSpotForm && canEditSpots}
+            title="Spot hinzufügen"
+            subtitle="Link oder Ort — wir füllen aus, was geht"
+            onClose={() => setShowSpotForm(false)}
+            panelClassName="glass-sheet-panel-tall"
+            footer={
+              <div className="flex gap-2">
+                <button
+                  type="button"
+                  className="cta cta-secondary flex-1"
+                  disabled={spotFormPending}
+                  onClick={() => setShowSpotForm(false)}
+                >
+                  Abbrechen
+                </button>
+                <button
+                  type="submit"
+                  form={createSpotFormId}
+                  className="cta flex-1"
+                  disabled={spotFormPending}
+                >
+                  {spotFormPending ? "…" : "Speichern"}
+                </button>
+              </div>
+            }
+          >
             <CreateSpotForm
               key={spotFormKey}
+              formId={createSpotFormId}
+              variant="sheet"
+              hideSubmit
               vacationId={vacationId}
+              onPendingChange={setSpotFormPending}
               onCreated={async () => {
                 setSpotFormKey((value) => value + 1);
                 setShowSpotForm(false);
+                setSpotFormPending(false);
                 await load();
               }}
             />
-          ) : null}
+          </GlassSheet>
 
           <div hidden={sammelnView !== "galerie"}>
             <SpotList
@@ -425,6 +478,9 @@ export default function VacationDetailPage() {
               summaries={summaries}
               raters={raters}
               currentUserId={currentUserId}
+              canEdit={canEditSpots}
+              filters={spotFilters}
+              onAdd={() => setShowSpotForm(true)}
               onChanged={load}
               onMyRatingPatch={applyMyRating}
               onSpotPatch={applySpotPatch}
@@ -435,10 +491,15 @@ export default function VacationDetailPage() {
             <SpotMap
               vacationId={vacationId}
               spots={spots}
+              ratings={ratings}
               summaries={summaries}
+              raters={raters}
+              currentUserId={currentUserId}
+              filters={spotFilters}
               canEdit={canEditSpots}
               active={tab === "sammeln" && sammelnView === "karte"}
               onChanged={load}
+              onMyRatingPatch={applyMyRating}
               onSpotPatch={applySpotPatch}
             />
           </div>

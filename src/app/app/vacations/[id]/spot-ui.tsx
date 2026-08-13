@@ -1241,9 +1241,18 @@ function applySmartLinkResult(
 export function CreateSpotForm({
   vacationId,
   onCreated,
+  variant = "inline",
+  formId = "create-spot-form",
+  hideSubmit = false,
+  onPendingChange,
 }: {
   vacationId: string;
   onCreated: () => void;
+  /** `sheet` = content inside GlassSheet (no card chrome). */
+  variant?: "inline" | "sheet";
+  formId?: string;
+  hideSubmit?: boolean;
+  onPendingChange?: (pending: boolean) => void;
 }) {
   const [state, action, pending] = useActionState(createSpot, initialState);
   const [category, setCategory] = useState<SpotCategory>("stellplatz");
@@ -1265,13 +1274,29 @@ export function CreateSpotForm({
     if (state.ok) onCreated();
   }, [state.ok, onCreated]);
 
+  useEffect(() => {
+    onPendingChange?.(pending);
+  }, [pending, onPendingChange]);
+
   return (
-    <form action={action} className="ios-group mt-3 p-4">
+    <form
+      id={formId}
+      action={action}
+      className={variant === "inline" ? "ios-group mt-3 p-4" : undefined}
+    >
       <input type="hidden" name="vacation_id" value={vacationId} />
-      <p className="text-[13px] font-semibold text-[var(--ink-soft)]">Neuen Spot hinzufügen</p>
-      <p className="mt-1 text-[12px] text-[var(--ink-faint)]">
-        Link rein — die App erkennt Quelle und füllt aus, was geht.
-      </p>
+      {variant === "inline" ? (
+        <>
+          <p className="text-[13px] font-semibold text-[var(--ink-soft)]">Neuen Spot hinzufügen</p>
+          <p className="mt-1 text-[12px] text-[var(--ink-faint)]">
+            Link rein — die App erkennt Quelle und füllt aus, was geht.
+          </p>
+        </>
+      ) : (
+        <p className="mb-2 text-[12px] text-[var(--ink-faint)]">
+          Link rein — die App erkennt Quelle und füllt aus, was geht.
+        </p>
+      )}
       <SpotFormFields
         vacationId={vacationId}
         category={category}
@@ -1317,9 +1342,11 @@ export function CreateSpotForm({
         }
       />
       {state.error && <p className="mt-3 text-[13px] text-[var(--danger)]">{state.error}</p>}
-      <button type="submit" className="cta mt-4 w-full" disabled={pending}>
-        {pending ? "…" : "Spot speichern"}
-      </button>
+      {!hideSubmit ? (
+        <button type="submit" className="cta mt-4 w-full" disabled={pending}>
+          {pending ? "…" : "Spot speichern"}
+        </button>
+      ) : null}
     </form>
   );
 }
@@ -1332,6 +1359,9 @@ export function EditSpotForm({
   onToggleRelevant,
   deleting = false,
   variant = "panel",
+  formId = "edit-spot-form",
+  hideActions = false,
+  onPendingChange,
 }: {
   vacationId: string;
   spot: Spot;
@@ -1341,6 +1371,10 @@ export function EditSpotForm({
   deleting?: boolean;
   /** `page` = full detail overlay without nested panel chrome. */
   variant?: "panel" | "page";
+  formId?: string;
+  /** Hide Abbrechen/Speichern — use place-card footer with form=formId instead. */
+  hideActions?: boolean;
+  onPendingChange?: (pending: boolean) => void;
 }) {
   const [state, action, pending] = useActionState(updateSpot, initialState);
   const [category, setCategory] = useState<SpotCategory>(spot.category);
@@ -1368,9 +1402,13 @@ export function EditSpotForm({
     if (state.ok) onDone();
   }, [state.ok, onDone]);
 
+  useEffect(() => {
+    onPendingChange?.(pending);
+  }, [pending, onPendingChange]);
+
   return (
     <div className={variant === "panel" ? "glass-subpanel-flush" : undefined}>
-      <form action={action}>
+      <form id={formId} action={action}>
         <input type="hidden" name="vacation_id" value={vacationId} />
         <input type="hidden" name="spot_id" value={spot.id} />
         <input type="hidden" name="previous_maps_url" value={spot.maps_url ?? ""} />
@@ -1513,31 +1551,40 @@ export function EditSpotForm({
           }
         />
         {state.error && <p className="mt-3 text-[13px] text-[var(--danger)]">{state.error}</p>}
-        <div className="mt-4 flex gap-2">
-          <button type="button" className="cta cta-secondary flex-1" onClick={onDone}>
-            Abbrechen
-          </button>
-          <button type="submit" className="cta flex-1" disabled={pending || deleting}>
-            {pending ? "…" : "Speichern"}
-          </button>
-        </div>
+        {!hideActions ? (
+          <div className="mt-4 flex gap-2">
+            <button type="button" className="cta cta-secondary flex-1" onClick={onDone}>
+              Abbrechen
+            </button>
+            <button type="submit" className="cta flex-1" disabled={pending || deleting}>
+              {pending ? "…" : "Speichern"}
+            </button>
+          </div>
+        ) : null}
       </form>
     </div>
   );
 }
 
 
-function SpotDetailView({
+export function SpotDetailView({
   spot,
   summary,
+  ratings = [],
+  raters = [],
+  currentUserId = null,
   onRate,
   onFavorite,
 }: {
   spot: Spot;
   summary: SpotRatingSummary;
+  ratings?: SpotRating[];
+  raters?: RaterOption[];
+  currentUserId?: string | null;
   onRate: (value: number | null) => void;
   onFavorite: () => void;
 }) {
+  const [descOpen, setDescOpen] = useState(false);
   const relevant = isSpotRelevant(spot);
   const imageSrc = spot.image_url?.replace(/#.*$/, "") || null;
   const focus = parseImageFocus(spot.image_url);
@@ -1545,6 +1592,28 @@ function SpotDetailView({
   const kind = spotPreviewKind(spot);
   const mapsLink = spot.maps_url;
   const infoLink = spot.info_url;
+  const tags = spot.tags ?? [];
+  const description = spot.description?.trim() ?? "";
+  const longDescription = description.length > 140;
+
+  const teamRows = useMemo(() => {
+    const labelFor = (userId: string) =>
+      raters.find((rater) => rater.userId === userId)?.label ?? "Team";
+    return ratings
+      .filter(
+        (entry) =>
+          entry.spot_id === spot.id &&
+          entry.user_id !== currentUserId &&
+          (entry.rating != null || entry.is_favorite),
+      )
+      .map((entry) => ({
+        userId: entry.user_id,
+        label: labelFor(entry.user_id),
+        rating: entry.rating,
+        favorite: entry.is_favorite,
+      }))
+      .sort((a, b) => a.label.localeCompare(b.label, "de"));
+  }, [currentUserId, ratings, raters, spot.id]);
 
   return (
     <>
@@ -1585,10 +1654,35 @@ function SpotDetailView({
           {!relevant ? " · Archiv" : ""}
         </p>
 
-        {spot.description ? (
-          <p className="mt-2 line-clamp-3 text-[13px] leading-relaxed text-[var(--ink-soft)]">
-            {spot.description}
-          </p>
+        {tags.length > 0 ? (
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {tags.map((tag) => (
+              <span key={tag} className="glass-chip !cursor-default !py-1 !text-[11px]">
+                {tag}
+              </span>
+            ))}
+          </div>
+        ) : null}
+
+        {description ? (
+          <div className="mt-2">
+            <p
+              className={`text-[13px] leading-relaxed text-[var(--ink-soft)] ${
+                descOpen || !longDescription ? "" : "line-clamp-3"
+              }`}
+            >
+              {description}
+            </p>
+            {longDescription ? (
+              <button
+                type="button"
+                className="mt-1 text-[12px] font-semibold text-[var(--fjord)]"
+                onClick={() => setDescOpen((value) => !value)}
+              >
+                {descOpen ? "Weniger" : "Mehr"}
+              </button>
+            ) : null}
+          </div>
         ) : null}
 
         <div className="mt-3 flex flex-wrap items-center gap-2">
@@ -1606,9 +1700,29 @@ function SpotDetailView({
           {summary.average != null ? (
             <span className="text-[11px] tabular-nums text-[var(--ink-faint)]">
               Ø {formatAvg(summary.average)}
+              {summary.count > 0 ? ` · ${summary.count}` : ""}
             </span>
           ) : null}
         </div>
+
+        {teamRows.length > 0 ? (
+          <ul className="mt-3 space-y-1.5">
+            {teamRows.map((row) => (
+              <li
+                key={row.userId}
+                className="flex items-center justify-between gap-2 text-[12px] text-[var(--ink-soft)]"
+              >
+                <span className="truncate font-medium">{row.label}</span>
+                <span className="flex shrink-0 items-center gap-1.5 tabular-nums">
+                  {row.favorite ? <span className="text-[var(--sun)]">♥</span> : null}
+                  {row.rating != null ? (
+                    <Stars value={row.rating} readOnly size="sm" />
+                  ) : null}
+                </span>
+              </li>
+            ))}
+          </ul>
+        ) : null}
 
         {(mapsLink || infoLink) && (
           <div className="mt-3 flex flex-wrap gap-1.5">
@@ -1629,7 +1743,166 @@ function SpotDetailView({
   );
 }
 
-type SortMode = "newest" | "favorites" | "avg" | "mine";
+export type SpotSortMode = "newest" | "favorites" | "avg" | "mine";
+
+export type SpotCollectionFilterState = {
+  category: "alle" | SpotCategory;
+  sortMode: SpotSortMode;
+  showArchived: boolean;
+  minAvg: number;
+};
+
+export const defaultSpotCollectionFilters: SpotCollectionFilterState = {
+  category: "alle",
+  sortMode: "newest",
+  showArchived: false,
+  minAvg: 0,
+};
+
+export function filterSpotCollection(
+  spots: Spot[],
+  summaries: Record<string, SpotRatingSummary>,
+  filters: SpotCollectionFilterState,
+): Spot[] {
+  let list =
+    filters.category === "alle"
+      ? [...spots]
+      : spots.filter((spot) => spot.category === filters.category);
+
+  if (!filters.showArchived) {
+    list = list.filter((spot) => isSpotRelevant(spot));
+  }
+
+  if (filters.minAvg > 0) {
+    list = list.filter((spot) => {
+      const average = (summaries[spot.id] ?? emptySummary()).average;
+      return average != null && average >= filters.minAvg;
+    });
+  }
+
+  if (filters.sortMode === "favorites") {
+    list = list.filter((spot) => (summaries[spot.id] ?? emptySummary()).myFavorite);
+  } else if (filters.sortMode === "mine") {
+    list = list.filter((spot) => (summaries[spot.id] ?? emptySummary()).myRating != null);
+  }
+
+  list.sort((a, b) => {
+    const summaryA = summaries[a.id] ?? emptySummary();
+    const summaryB = summaries[b.id] ?? emptySummary();
+
+    if (filters.sortMode === "favorites") {
+      if (summaryA.myFavorite !== summaryB.myFavorite) {
+        return summaryA.myFavorite ? -1 : 1;
+      }
+      return (summaryB.average ?? -1) - (summaryA.average ?? -1);
+    }
+    if (filters.sortMode === "avg") {
+      return (summaryB.average ?? -1) - (summaryA.average ?? -1);
+    }
+    if (filters.sortMode === "mine") {
+      return (summaryB.myRating ?? -1) - (summaryA.myRating ?? -1);
+    }
+    const aRel = isSpotRelevant(a) ? 0 : 1;
+    const bRel = isSpotRelevant(b) ? 0 : 1;
+    if (aRel !== bRel) return aRel - bRel;
+    return 0;
+  });
+
+  return list;
+}
+
+export function SpotSammelnFilters({
+  filters,
+  onChange,
+  shelvedCount,
+}: {
+  filters: SpotCollectionFilterState;
+  onChange: (next: SpotCollectionFilterState) => void;
+  shelvedCount: number;
+}) {
+  return (
+    <div className="mt-3">
+      <div className="mb-3 flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <button
+          type="button"
+          onClick={() => onChange({ ...filters, category: "alle" })}
+          className="glass-chip shrink-0"
+          data-active={filters.category === "alle"}
+        >
+          Alle
+        </button>
+        {categoryOptions.map((option) => (
+          <button
+            key={option}
+            type="button"
+            onClick={() => onChange({ ...filters, category: option })}
+            className="glass-chip shrink-0 !px-2.5"
+            data-active={filters.category === option}
+            aria-label={categoryLabels[option]}
+            title={categoryLabels[option]}
+          >
+            <CategoryIcon
+              category={option}
+              size={16}
+              tone={filters.category === option ? "#ffffff" : undefined}
+            />
+          </button>
+        ))}
+      </div>
+
+      <div className="mb-1 flex flex-wrap items-center gap-1.5">
+        {(
+          [
+            ["newest", "Neueste"],
+            ["favorites", "Favoriten"],
+            ["avg", "Beste Ø"],
+            ["mine", "Meine"],
+          ] as const
+        ).map(([value, label]) => (
+          <button
+            key={value}
+            type="button"
+            className="glass-chip !py-1.5 !text-[12px]"
+            data-active={filters.sortMode === value}
+            onClick={() => onChange({ ...filters, sortMode: value })}
+          >
+            {label}
+          </button>
+        ))}
+        {shelvedCount > 0 ? (
+          <button
+            type="button"
+            className="glass-chip !py-1.5 !text-[12px]"
+            data-active={filters.showArchived}
+            onClick={() =>
+              onChange({ ...filters, showArchived: !filters.showArchived })
+            }
+          >
+            {filters.showArchived ? "Archiv aus" : `Archiv (${shelvedCount})`}
+          </button>
+        ) : null}
+        {(
+          [
+            [0, "Alle Noten"],
+            [3, "ab 3★"],
+            [4, "ab 4★"],
+            [4.5, "ab 4,5★"],
+          ] as const
+        ).map(([value, label]) => (
+          <button
+            key={value}
+            type="button"
+            className="glass-chip !py-1.5 !text-[12px]"
+            data-active={filters.minAvg === value}
+            onClick={() => onChange({ ...filters, minAvg: value })}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 function formatAvg(value: number | null): string {
   if (value == null) return "–";
@@ -1637,6 +1910,192 @@ function formatAvg(value: number | null): string {
     minimumFractionDigits: value % 1 === 0 ? 0 : 1,
     maximumFractionDigits: 1,
   });
+}
+
+/** Shared Maps-style place card for Galerie + Karte. */
+export function SpotPlaceSession({
+  spot,
+  vacationId,
+  canEdit,
+  editing,
+  onEditingChange,
+  onClose,
+  summary,
+  ratings,
+  raters,
+  currentUserId,
+  onMyRatingPatch,
+  onChanged,
+  onSpotPatch,
+}: {
+  spot: Spot;
+  vacationId: string;
+  canEdit: boolean;
+  editing: boolean;
+  onEditingChange: (editing: boolean) => void;
+  onClose: () => void;
+  summary: SpotRatingSummary;
+  ratings: SpotRating[];
+  raters: RaterOption[];
+  currentUserId: string | null;
+  onMyRatingPatch: (
+    spotId: string,
+    patch: { rating?: number | null; isFavorite?: boolean },
+  ) => void;
+  onChanged: () => void;
+  onSpotPatch?: (spotId: string, patch: Partial<Spot>) => void;
+}) {
+  const formId = `edit-spot-${spot.id}`;
+  const [deleting, setDeleting] = useState(false);
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function onDelete() {
+    setDeleting(true);
+    setError(null);
+    const { deleteSpot } = await import("./spot-actions");
+    const result = await deleteSpot(vacationId, spot.id);
+    setDeleting(false);
+    if (result.error) {
+      setError(result.error);
+      return;
+    }
+    onClose();
+    onChanged();
+  }
+
+  function toggleRelevant() {
+    if (!onSpotPatch) return;
+    const next = !isSpotRelevant(spot);
+    const previous = spot.is_relevant;
+    setError(null);
+    onSpotPatch(spot.id, { is_relevant: next });
+    void (async () => {
+      const supabase = createClient();
+      const { error: updateError } = await supabase
+        .from("spots")
+        .update({ is_relevant: next })
+        .eq("id", spot.id)
+        .eq("vacation_id", vacationId);
+      if (updateError) {
+        onSpotPatch(spot.id, { is_relevant: previous });
+        setError(updateError.message);
+      }
+    })();
+  }
+
+  function saveRating(patch: { rating?: number | null; isFavorite?: boolean }) {
+    if (!currentUserId) {
+      setError("Nicht angemeldet.");
+      return;
+    }
+    const previous = {
+      rating: summary.myRating,
+      isFavorite: summary.myFavorite,
+    };
+    setError(null);
+    onMyRatingPatch(spot.id, patch);
+    void (async () => {
+      const supabase = createClient();
+      const payload: {
+        spot_id: string;
+        user_id: string;
+        rating?: number | null;
+        is_favorite?: boolean;
+      } = {
+        spot_id: spot.id,
+        user_id: currentUserId,
+      };
+      if (patch.rating !== undefined) payload.rating = patch.rating;
+      if (patch.isFavorite !== undefined) payload.is_favorite = patch.isFavorite;
+      const { error: upsertError } = await supabase.from("spot_ratings").upsert(payload, {
+        onConflict: "spot_id,user_id",
+      });
+      if (upsertError) {
+        onMyRatingPatch(spot.id, previous);
+        setError(upsertError.message);
+      }
+    })();
+  }
+
+  return (
+    <SpotPlaceCard
+      open
+      editing={editing}
+      onClose={onClose}
+      footer={
+        editing && canEdit ? (
+          <>
+            <button
+              type="button"
+              className="cta cta-secondary"
+              disabled={pending || deleting}
+              onClick={() => onEditingChange(false)}
+            >
+              Abbrechen
+            </button>
+            <button
+              type="submit"
+              form={formId}
+              className="cta"
+              disabled={pending || deleting}
+            >
+              {pending ? "…" : "Speichern"}
+            </button>
+          </>
+        ) : (
+          <>
+            <button type="button" className="cta cta-secondary" onClick={onClose}>
+              Schließen
+            </button>
+            {canEdit ? (
+              <button
+                type="button"
+                className="cta"
+                onClick={() => onEditingChange(true)}
+              >
+                Bearbeiten
+              </button>
+            ) : null}
+          </>
+        )
+      }
+    >
+      {error ? (
+        <p className="px-3 pt-2 text-[13px] text-[var(--danger)]">{error}</p>
+      ) : null}
+      {editing && canEdit ? (
+        <div className="px-3 pb-2 pt-1">
+          <EditSpotForm
+            key={spot.id}
+            formId={formId}
+            vacationId={vacationId}
+            spot={spot}
+            variant="page"
+            hideActions
+            deleting={deleting}
+            onDelete={() => void onDelete()}
+            onDone={() => {
+              onEditingChange(false);
+              onChanged();
+            }}
+            onToggleRelevant={onSpotPatch ? toggleRelevant : undefined}
+            onPendingChange={setPending}
+          />
+        </div>
+      ) : (
+        <SpotDetailView
+          spot={spot}
+          summary={summary}
+          ratings={ratings}
+          raters={raters}
+          currentUserId={currentUserId}
+          onRate={(value) => saveRating({ rating: value })}
+          onFavorite={() => saveRating({ isFavorite: !summary.myFavorite })}
+        />
+      )}
+    </SpotPlaceCard>
+  );
 }
 
 function SpotCardMedia({ spot }: { spot: Spot }) {
@@ -1674,8 +2133,13 @@ function SpotCardMedia({ spot }: { spot: Spot }) {
 export function SpotList({
   vacationId,
   spots,
+  ratings,
   summaries,
+  raters,
   currentUserId,
+  canEdit = false,
+  filters,
+  onAdd,
   onChanged,
   onMyRatingPatch,
   onSpotPatch,
@@ -1686,6 +2150,9 @@ export function SpotList({
   summaries: Record<string, SpotRatingSummary>;
   raters: RaterOption[];
   currentUserId: string | null;
+  canEdit?: boolean;
+  filters: SpotCollectionFilterState;
+  onAdd?: () => void;
   onChanged: () => void;
   onMyRatingPatch: (
     spotId: string,
@@ -1693,206 +2160,45 @@ export function SpotList({
   ) => void;
   onSpotPatch: (spotId: string, patch: Partial<Spot>) => void;
 }) {
-  const [filter, setFilter] = useState<"alle" | SpotCategory>("alle");
-  const [sortMode, setSortMode] = useState<SortMode>("newest");
-  const [showArchived, setShowArchived] = useState(false);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
 
   const shelvedCount = useMemo(
     () => spots.filter((spot) => !isSpotRelevant(spot)).length,
     [spots],
   );
 
-  const visibleSpots = useMemo(() => {
-    let list =
-      filter === "alle" ? [...spots] : spots.filter((spot) => spot.category === filter);
-
-    if (!showArchived) {
-      list = list.filter((spot) => isSpotRelevant(spot));
-    }
-
-    list.sort((a, b) => {
-      const summaryA = summaries[a.id] ?? emptySummary();
-      const summaryB = summaries[b.id] ?? emptySummary();
-
-      if (sortMode === "favorites") {
-        if (summaryA.myFavorite !== summaryB.myFavorite) {
-          return summaryA.myFavorite ? -1 : 1;
-        }
-        return (summaryB.average ?? -1) - (summaryA.average ?? -1);
-      }
-      if (sortMode === "avg") {
-        return (summaryB.average ?? -1) - (summaryA.average ?? -1);
-      }
-      if (sortMode === "mine") {
-        return (summaryB.myRating ?? -1) - (summaryA.myRating ?? -1);
-      }
-      // Newest: keep DB order, but sink shelved spots.
-      const aRel = isSpotRelevant(a) ? 0 : 1;
-      const bRel = isSpotRelevant(b) ? 0 : 1;
-      if (aRel !== bRel) return aRel - bRel;
-      return 0;
-    });
-
-    return list;
-  }, [filter, showArchived, sortMode, spots, summaries]);
-
-  const selectedSpot = useMemo(
-    () => visibleSpots.find((spot) => spot.id === selectedId) ?? null,
-    [selectedId, visibleSpots],
+  const visibleSpots = useMemo(
+    () => filterSpotCollection(spots, summaries, filters),
+    [filters, spots, summaries],
   );
 
-  async function onDelete(spotId: string) {
-    setDeletingId(spotId);
-    setError(null);
-    const { deleteSpot } = await import("./spot-actions");
-    const result = await deleteSpot(vacationId, spotId);
-    setDeletingId(null);
-    if (result.error) {
-      setError(result.error);
-      return;
-    }
-    setSelectedId((current) => (current === spotId ? null : current));
-    setEditingId((current) => (current === spotId ? null : current));
-    onChanged();
-  }
-
-  function saveRating(spotId: string, patch: { rating?: number | null; isFavorite?: boolean }) {
-    if (!currentUserId) {
-      setError("Nicht angemeldet.");
-      return;
-    }
-
-    const previous = summaries[spotId] ?? emptySummary();
-    const revert = {
-      rating: previous.myRating,
-      isFavorite: previous.myFavorite,
-    };
-
-    setError(null);
-    onMyRatingPatch(spotId, patch);
-
-    void (async () => {
-      const supabase = createClient();
-      const payload: {
-        spot_id: string;
-        user_id: string;
-        rating?: number | null;
-        is_favorite?: boolean;
-      } = {
-        spot_id: spotId,
-        user_id: currentUserId,
-      };
-      if (patch.rating !== undefined) payload.rating = patch.rating;
-      if (patch.isFavorite !== undefined) payload.is_favorite = patch.isFavorite;
-
-      const { error: upsertError } = await supabase.from("spot_ratings").upsert(payload, {
-        onConflict: "spot_id,user_id",
-      });
-
-      if (upsertError) {
-        onMyRatingPatch(spotId, revert);
-        setError(upsertError.message);
-      }
-    })();
-  }
-
-  function toggleRelevant(spot: Spot) {
-    const next = !isSpotRelevant(spot);
-    const previous = spot.is_relevant;
-    setError(null);
-    onSpotPatch(spot.id, { is_relevant: next });
-
-    void (async () => {
-      const supabase = createClient();
-      const { error: updateError } = await supabase
-        .from("spots")
-        .update({ is_relevant: next })
-        .eq("id", spot.id)
-        .eq("vacation_id", vacationId);
-
-      if (updateError) {
-        onSpotPatch(spot.id, { is_relevant: previous });
-        setError(updateError.message);
-      }
-    })();
-  }
+  const selectedSpot = useMemo(
+    () => spots.find((spot) => spot.id === selectedId) ?? null,
+    [selectedId, spots],
+  );
 
   return (
     <div className="mt-3">
-      <div className="mb-3 flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
-        <button
-          type="button"
-          onClick={() => setFilter("alle")}
-          className="glass-chip shrink-0"
-          data-active={filter === "alle"}
-        >
-          Alle
-        </button>
-        {categoryOptions.map((option) => (
-          <button
-            key={option}
-            type="button"
-            onClick={() => setFilter(option)}
-            className="glass-chip shrink-0 !px-2.5"
-            data-active={filter === option}
-            aria-label={categoryLabels[option]}
-            title={categoryLabels[option]}
-          >
-            <CategoryIcon
-              category={option}
-              size={16}
-              tone={filter === option ? "#ffffff" : undefined}
-            />
-          </button>
-        ))}
-      </div>
-
-      <div className="mb-3 flex flex-wrap items-center gap-1.5">
-        {(
-          [
-            ["newest", "Neueste"],
-            ["favorites", "Favoriten"],
-            ["avg", "Beste Ø"],
-            ["mine", "Meine"],
-          ] as const
-        ).map(([value, label]) => (
-          <button
-            key={value}
-            type="button"
-            className="glass-chip !py-1.5 !text-[12px]"
-            data-active={sortMode === value}
-            onClick={() => setSortMode(value)}
-          >
-            {label}
-          </button>
-        ))}
-        {shelvedCount > 0 ? (
-          <button
-            type="button"
-            className="glass-chip !py-1.5 !text-[12px]"
-            data-active={showArchived}
-            onClick={() => setShowArchived((value) => !value)}
-          >
-            {showArchived ? "Archiv aus" : `Archiv (${shelvedCount})`}
-          </button>
-        ) : null}
-      </div>
-
-      {error && <p className="mb-3 text-[13px] text-[var(--danger)]">{error}</p>}
-
       {visibleSpots.length === 0 ? (
         <div className="ios-group p-5 text-[14px] text-[var(--ink-soft)]">
-          {spots.length === 0
-            ? "Noch keine Spots — füge den ersten Ort zur Sammlung hinzu."
-            : showArchived
-              ? "Keine Spots für diesen Filter."
-              : shelvedCount > 0
-                ? "Keine aktiven Spots — Archiv anzeigen, um abgelegte Orte zu sehen."
-                : "Keine Spots für diesen Filter."}
+          <p>
+            {spots.length === 0
+              ? "Noch keine Spots — füge den ersten Ort zur Sammlung hinzu."
+              : filters.showArchived
+                ? "Keine Spots für diesen Filter."
+                : shelvedCount > 0 &&
+                    filters.category === "alle" &&
+                    filters.sortMode === "newest" &&
+                    filters.minAvg === 0
+                  ? "Keine aktiven Spots — Archiv anzeigen, um abgelegte Orte zu sehen."
+                  : "Keine Spots für diesen Filter."}
+          </p>
+          {spots.length === 0 && canEdit && onAdd ? (
+            <button type="button" className="cta mt-4 w-full" onClick={onAdd}>
+              Hinzufügen
+            </button>
+          ) : null}
         </div>
       ) : (
         <div className="spot-collection">
@@ -1900,6 +2206,7 @@ export function SpotList({
             const summary = summaries[spot.id] ?? emptySummary();
             const relevant = isSpotRelevant(spot);
             const selected = selectedId === spot.id;
+            const tags = spot.tags ?? [];
             return (
               <button
                 key={spot.id}
@@ -1943,6 +2250,12 @@ export function SpotList({
                     {!relevant ? " · Archiv" : ""}
                     {formatStaySummary(spot) ? ` · ${formatStaySummary(spot)}` : ""}
                   </p>
+                  {tags.length > 0 ? (
+                    <p className="mt-0.5 truncate text-[11px] text-[var(--ink-faint)]">
+                      {tags.slice(0, 2).join(" · ")}
+                      {tags.length > 2 ? "…" : ""}
+                    </p>
+                  ) : null}
                 </div>
               </button>
             );
@@ -1951,75 +2264,24 @@ export function SpotList({
       )}
 
       {selectedSpot ? (
-        <SpotPlaceCard
-          open
+        <SpotPlaceSession
+          spot={selectedSpot}
+          vacationId={vacationId}
+          canEdit={canEdit}
           editing={editingId === selectedSpot.id}
+          onEditingChange={(next) => setEditingId(next ? selectedSpot.id : null)}
           onClose={() => {
             setSelectedId(null);
             setEditingId(null);
           }}
-          footer={
-            editingId === selectedSpot.id ? (
-              <button
-                type="button"
-                className="cta cta-secondary"
-                onClick={() => setEditingId(null)}
-              >
-                Fertig
-              </button>
-            ) : (
-              <>
-                <button
-                  type="button"
-                  className="cta cta-secondary"
-                  onClick={() => {
-                    setSelectedId(null);
-                    setEditingId(null);
-                  }}
-                >
-                  Schließen
-                </button>
-                <button
-                  type="button"
-                  className="cta"
-                  onClick={() => setEditingId(selectedSpot.id)}
-                >
-                  Bearbeiten
-                </button>
-              </>
-            )
-          }
-        >
-          {editingId === selectedSpot.id ? (
-            <div className="px-3 pb-2 pt-1">
-              <EditSpotForm
-                vacationId={vacationId}
-                spot={selectedSpot}
-                variant="page"
-                deleting={deletingId === selectedSpot.id}
-                onDelete={() => onDelete(selectedSpot.id)}
-                onDone={() => {
-                  setEditingId(null);
-                  onChanged();
-                }}
-                onToggleRelevant={() => toggleRelevant(selectedSpot)}
-              />
-            </div>
-          ) : (
-            <SpotDetailView
-              spot={selectedSpot}
-              summary={summaries[selectedSpot.id] ?? emptySummary()}
-              onRate={(value) => saveRating(selectedSpot.id, { rating: value })}
-              onFavorite={() =>
-                saveRating(selectedSpot.id, {
-                  isFavorite: !(
-                    summaries[selectedSpot.id] ?? emptySummary()
-                  ).myFavorite,
-                })
-              }
-            />
-          )}
-        </SpotPlaceCard>
+          summary={summaries[selectedSpot.id] ?? emptySummary()}
+          ratings={ratings}
+          raters={raters}
+          currentUserId={currentUserId}
+          onMyRatingPatch={onMyRatingPatch}
+          onChanged={onChanged}
+          onSpotPatch={onSpotPatch}
+        />
       ) : null}
     </div>
   );
