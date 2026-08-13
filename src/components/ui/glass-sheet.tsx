@@ -1,6 +1,7 @@
 "use client";
 
-import { useEffect, useRef, type ReactNode } from "react";
+import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
+import { createPortal } from "react-dom";
 
 export function GlassSheet({
   open,
@@ -23,6 +24,11 @@ export function GlassSheet({
 }) {
   const onCloseRef = useRef(onClose);
   onCloseRef.current = onClose;
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
 
   useEffect(() => {
     if (!open) return;
@@ -38,15 +44,17 @@ export function GlassSheet({
     };
   }, [open]);
 
-  if (!open) return null;
+  const close = useCallback(() => onCloseRef.current(), []);
 
-  return (
+  if (!open || !mounted) return null;
+
+  return createPortal(
     <div className="glass-sheet-root" role="presentation">
       <button
         type="button"
         className="glass-sheet-backdrop"
         aria-label="Schließen"
-        onClick={onClose}
+        onClick={close}
       />
       <div
         className={`glass-sheet-panel glass-picker-surface${panelClassName ? ` ${panelClassName}` : ""}`}
@@ -68,6 +76,7 @@ export function GlassSheet({
         <div className="glass-sheet-body">{children}</div>
         {footer ? <div className="glass-sheet-footer">{footer}</div> : null}
       </div>
-    </div>
+    </div>,
+    document.body,
   );
 }
