@@ -1366,6 +1366,38 @@ function formatAvg(value: number | null): string {
   });
 }
 
+function SpotCardMedia({ spot }: { spot: Spot }) {
+  const [broken, setBroken] = useState(false);
+  const focus = parseImageFocus(spot.image_url);
+  const focusStyle = imageFocusStyle(focus);
+  const imageSrc = spot.image_url?.replace(/#.*$/, "") || null;
+  const showImage = Boolean(imageSrc) && !broken;
+
+  if (!showImage) {
+    return (
+      <div className="flex h-full w-full items-center justify-center bg-[rgba(12,24,32,0.06)]">
+        <CategoryIcon category={spot.category} size={36} tone="#ffffff" />
+      </div>
+    );
+  }
+
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={imageSrc!}
+      alt=""
+      style={{
+        objectPosition: focusStyle.objectPosition,
+        transform: focusStyle.transform,
+        transformOrigin: focusStyle.objectPosition,
+      }}
+      loading="lazy"
+      referrerPolicy="no-referrer"
+      onError={() => setBroken(true)}
+    />
+  );
+}
+
 export function SpotList({
   vacationId,
   spots,
@@ -1390,7 +1422,8 @@ export function SpotList({
 }) {
   const [filter, setFilter] = useState<"alle" | SpotCategory>("alle");
   const [sortMode, setSortMode] = useState<SortMode>("newest");
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [showArchived, setShowArchived] = useState(false);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
   const [deletingId, setDeletingId] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -1401,8 +1434,12 @@ export function SpotList({
   );
 
   const visibleSpots = useMemo(() => {
-    const list =
+    let list =
       filter === "alle" ? [...spots] : spots.filter((spot) => spot.category === filter);
+
+    if (!showArchived) {
+      list = list.filter((spot) => isSpotRelevant(spot));
+    }
 
     list.sort((a, b) => {
       const summaryA = summaries[a.id] ?? emptySummary();
@@ -1428,7 +1465,12 @@ export function SpotList({
     });
 
     return list;
-  }, [filter, sortMode, spots, summaries]);
+  }, [filter, showArchived, sortMode, spots, summaries]);
+
+  const selectedSpot = useMemo(
+    () => visibleSpots.find((spot) => spot.id === selectedId) ?? null,
+    [selectedId, visibleSpots],
+  );
 
   async function onDelete(spotId: string) {
     setDeletingId(spotId);
@@ -1440,6 +1482,8 @@ export function SpotList({
       setError(result.error);
       return;
     }
+    setSelectedId((current) => (current === spotId ? null : current));
+    setEditingId((current) => (current === spotId ? null : current));
     onChanged();
   }
 
@@ -1533,8 +1577,8 @@ export function SpotList({
         ))}
       </div>
 
-      <div className="mb-3">
-        <label className="form-label">
+      <div className="mb-3 flex flex-wrap items-end gap-3">
+        <label className="form-label min-w-[10rem] flex-1">
           Sortierung
           <select
             value={sortMode}
@@ -1547,205 +1591,208 @@ export function SpotList({
             <option value="mine">Meine Tops</option>
           </select>
         </label>
+        {shelvedCount > 0 ? (
+          <button
+            type="button"
+            className="glass-chip mb-0.5"
+            data-active={showArchived}
+            onClick={() => setShowArchived((value) => !value)}
+          >
+            {showArchived ? "Archiv ausblenden" : `Archiv (${shelvedCount})`}
+          </button>
+        ) : null}
       </div>
-
-      {shelvedCount > 0 ? (
-        <p className="mb-3 text-[12px] text-[var(--ink-faint)]">
-          {shelvedCount} Spot{shelvedCount === 1 ? "" : "s"} archiviert — unten in der
-          Liste, nicht in Plan/Karte.
-        </p>
-      ) : null}
 
       {error && <p className="mb-3 text-[13px] text-[var(--danger)]">{error}</p>}
 
-      <div className="ios-group">
-        {visibleSpots.length === 0 ? (
-          <div className="p-5 text-[14px] text-[var(--ink-soft)]">
-            {spots.length === 0
-              ? "Noch keine Spots in dieser Kategorie."
-              : "Keine Spots für diesen Filter."}
-          </div>
-        ) : (
-          visibleSpots.map((spot) => {
+      {visibleSpots.length === 0 ? (
+        <div className="ios-group p-5 text-[14px] text-[var(--ink-soft)]">
+          {spots.length === 0
+            ? "Noch keine Spots — füge den ersten Ort zur Sammlung hinzu."
+            : showArchived
+              ? "Keine Spots für diesen Filter."
+              : shelvedCount > 0
+                ? "Keine aktiven Spots — Archiv anzeigen, um abgelegte Orte zu sehen."
+                : "Keine Spots für diesen Filter."}
+        </div>
+      ) : (
+        <div className="spot-collection">
+          {visibleSpots.map((spot) => {
             const summary = summaries[spot.id] ?? emptySummary();
-            const isExpanded = expandedId === spot.id;
-            const isEditing = editingId === spot.id;
             const relevant = isSpotRelevant(spot);
-            function toggleExpand() {
-              setExpandedId((current) => {
-                if (current === spot.id) {
-                  setEditingId(null);
-                  return null;
-                }
-                return spot.id;
-              });
-            }
+            const selected = selectedId === spot.id;
             return (
-              <div key={spot.id}>
-                <div
-                  className={`ios-row !items-center !py-2.5 cursor-pointer ${
-                    isExpanded ? "bg-[rgba(15,110,140,0.06)]" : ""
-                  } ${relevant ? "" : "opacity-55"}`}
-                  onClick={toggleExpand}
-                >
-                  <SpotThumb
-                    spot={spot}
-                    size={52}
-                    selected={isExpanded}
-                    onOpen={toggleExpand}
-                  />
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-start gap-2">
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-[15px] font-semibold leading-tight">
-                          {spot.name}
-                        </p>
-                        <div className="mt-0.5 text-[12px] leading-snug text-[var(--ink-soft)]">
-                          <span className="min-w-0">
-                            {categoryLabels[spot.category]}
-                            {spot.overnight_cost ? ` · ${spot.overnight_cost}` : ""}
-                            {spot.price_hint ? ` · ${spot.price_hint}` : ""}
-                            {formatStaySummary(spot)
-                              ? ` · ${formatStaySummary(spot)}`
-                              : ""}
-                            {spot.stay_status
-                              ? ` · ${stayStatusLabels[spot.stay_status]}`
-                              : ""}
-                            {spot.tags?.length
-                              ? ` · ${spot.tags.slice(0, 3).join(", ")}${
-                                  spot.tags.length > 3 ? "…" : ""
-                                }`
-                              : ""}
-                            {summary.average != null && (
-                              <>
-                                {" · "}
-                                <span className="tabular-nums text-[var(--ink-faint)]">
-                                  Ø {formatAvg(summary.average)}
-                                  {summary.count > 1 ? ` · ${summary.count}` : ""}
-                                </span>
-                              </>
-                            )}
-                          </span>
-                        </div>
-                      </div>
-                      <div
-                        className="flex shrink-0 items-center gap-0.5 pt-0.5"
-                        onClick={(event) => event.stopPropagation()}
-                        onKeyDown={(event) => event.stopPropagation()}
-                      >
-                        <Stars
-                          value={summary.myRating}
-                          onChange={(value) => saveRating(spot.id, { rating: value })}
-                          size="sm"
-                        />
-                        <button
-                          type="button"
-                          className={`inline-flex h-6 w-6 items-center justify-center text-[14px] leading-none ${
-                            summary.myFavorite ? "text-[var(--sun)]" : "text-black/18"
-                          }`}
-                          aria-label={summary.myFavorite ? "Favorit entfernen" : "Als Favorit"}
-                          onClick={() =>
-                            saveRating(spot.id, { isFavorite: !summary.myFavorite })
-                          }
-                        >
-                          {summary.myFavorite ? "♥" : "♡"}
-                        </button>
-                      </div>
-                    </div>
+              <button
+                key={spot.id}
+                type="button"
+                className={`spot-card ${relevant ? "" : "opacity-60"}`}
+                data-selected={selected}
+                onClick={() => {
+                  setSelectedId((current) => {
+                    if (current === spot.id) {
+                      setEditingId(null);
+                      return null;
+                    }
+                    setEditingId(null);
+                    return spot.id;
+                  });
+                }}
+              >
+                <div className="spot-card-media">
+                  <SpotCardMedia spot={spot} />
+                  <span className="pointer-events-none absolute bottom-2 left-2 inline-flex rounded-full bg-[var(--surface-strong)] p-1 shadow-sm">
+                    <CategoryIcon category={spot.category} size={12} />
+                  </span>
+                  {summary.myFavorite ? (
+                    <span className="pointer-events-none absolute top-2 right-2 text-[14px] text-[var(--sun)] drop-shadow">
+                      ♥
+                    </span>
+                  ) : null}
+                  {summary.average != null ? (
+                    <span className="pointer-events-none absolute top-2 left-2 rounded-full bg-[rgba(12,24,32,0.55)] px-2 py-0.5 text-[11px] font-semibold tabular-nums text-white">
+                      Ø {formatAvg(summary.average)}
+                    </span>
+                  ) : null}
+                </div>
+                <div className="spot-card-body">
+                  <p className="truncate text-[14px] font-semibold leading-tight text-[var(--ink)]">
+                    {spot.name}
+                  </p>
+                  <p className="mt-0.5 truncate text-[12px] text-[var(--ink-soft)]">
+                    {categoryLabels[spot.category]}
+                    {!relevant ? " · Archiv" : ""}
+                    {formatStaySummary(spot) ? ` · ${formatStaySummary(spot)}` : ""}
+                  </p>
+                </div>
+              </button>
+            );
+          })}
+        </div>
+      )}
 
+      {selectedSpot ? (
+        <div className="spot-detail-panel animate-rise">
+          {(() => {
+            const spot = selectedSpot;
+            const summary = summaries[spot.id] ?? emptySummary();
+            const relevant = isSpotRelevant(spot);
+            const isEditing = editingId === spot.id;
+            return (
+              <>
+                <div className="flex items-start gap-3 p-4">
+                  <SpotThumb spot={spot} size={72} selected />
+                  <div className="min-w-0 flex-1">
+                    <p className="text-[17px] font-semibold leading-tight">{spot.name}</p>
+                    <p className="mt-1 text-[13px] text-[var(--ink-soft)]">
+                      {categoryLabels[spot.category]}
+                      {spot.overnight_cost ? ` · ${spot.overnight_cost}` : ""}
+                      {spot.price_hint ? ` · ${spot.price_hint}` : ""}
+                      {formatStaySummary(spot) ? ` · ${formatStaySummary(spot)}` : ""}
+                      {spot.stay_status
+                        ? ` · ${stayStatusLabels[spot.stay_status]}`
+                        : ""}
+                    </p>
                     {spot.description ? (
-                      <p className="mt-1 line-clamp-1 text-[12px] leading-snug text-[var(--ink-soft)]">
+                      <p className="mt-2 text-[13px] leading-relaxed text-[var(--ink-soft)]">
                         {spot.description}
                       </p>
                     ) : null}
-
-                    {!relevant ? (
-                      <div
-                        className="mt-1.5"
-                        onClick={(event) => event.stopPropagation()}
+                    <div className="mt-3 flex flex-wrap items-center gap-2">
+                      <Stars
+                        value={summary.myRating}
+                        onChange={(value) => saveRating(spot.id, { rating: value })}
+                      />
+                      <button
+                        type="button"
+                        className={`inline-flex h-8 w-8 items-center justify-center rounded-full text-[16px] ${
+                          summary.myFavorite ? "text-[var(--sun)]" : "text-black/20"
+                        }`}
+                        aria-label={
+                          summary.myFavorite ? "Favorit entfernen" : "Als Favorit"
+                        }
+                        onClick={() =>
+                          saveRating(spot.id, { isFavorite: !summary.myFavorite })
+                        }
                       >
-                        <button
-                          type="button"
-                          className="glass-chip !py-1 !text-[11px]"
-                          data-active="true"
-                          title="Wiederherstellen"
-                          onClick={() => toggleRelevant(spot)}
-                        >
-                          Archiviert
-                        </button>
-                      </div>
-                    ) : null}
+                        {summary.myFavorite ? "♥" : "♡"}
+                      </button>
+                      {summary.average != null ? (
+                        <span className="text-[12px] tabular-nums text-[var(--ink-faint)]">
+                          Ø {formatAvg(summary.average)}
+                          {summary.count > 1 ? ` · ${summary.count}` : ""}
+                        </span>
+                      ) : null}
+                    </div>
                   </div>
-                  <span
-                    className={`ios-chevron shrink-0 transition-transform ${
-                      isExpanded ? "rotate-90" : ""
-                    }`}
-                    aria-hidden
-                  />
+                  <button
+                    type="button"
+                    className="glass-chip shrink-0 !py-1.5"
+                    onClick={() => {
+                      setSelectedId(null);
+                      setEditingId(null);
+                    }}
+                  >
+                    Schließen
+                  </button>
                 </div>
 
-                {isExpanded ? (
-                  <div
-                    className="flex flex-wrap gap-1.5 border-t border-black/5 bg-[rgba(255,255,255,0.28)] px-4 py-2.5"
-                    onClick={(event) => event.stopPropagation()}
+                <div className="flex flex-wrap gap-1.5 border-t border-black/5 px-4 py-3">
+                  <button
+                    type="button"
+                    className="glass-chip !py-1.5 !text-[12px]"
+                    data-active={isEditing ? "true" : undefined}
+                    onClick={() =>
+                      setEditingId((current) => (current === spot.id ? null : spot.id))
+                    }
                   >
-                    <button
-                      type="button"
+                    {isEditing ? "Formular schließen" : "Bearbeiten"}
+                  </button>
+                  {spot.maps_url ? (
+                    <a
+                      href={spot.maps_url}
+                      target="_blank"
+                      rel="noreferrer"
                       className="glass-chip !py-1.5 !text-[12px]"
-                      data-active={isEditing ? "true" : undefined}
-                      onClick={() =>
-                        setEditingId((current) => (current === spot.id ? null : spot.id))
+                    >
+                      Karte öffnen
+                    </a>
+                  ) : null}
+                  {spot.info_url ? (
+                    <a
+                      href={spot.info_url}
+                      target="_blank"
+                      rel="noreferrer"
+                      className="glass-chip !py-1.5 !text-[12px]"
+                    >
+                      {isAirbnbUrl(spot.info_url) ? "Airbnb öffnen" : "Seite öffnen"}
+                    </a>
+                  ) : null}
+                  <button
+                    type="button"
+                    className="glass-chip !py-1.5 !text-[12px]"
+                    data-active={!relevant ? "true" : undefined}
+                    onClick={() => toggleRelevant(spot)}
+                  >
+                    {relevant ? "Archivieren" : "Wiederherstellen"}
+                  </button>
+                  <button
+                    type="button"
+                    className="glass-chip glass-chip-danger !py-1.5 !text-[12px]"
+                    disabled={deletingId === spot.id}
+                    onClick={() => {
+                      if (
+                        !window.confirm(
+                          `„${spot.name}“ wirklich löschen? Das lässt sich nicht rückgängig machen.`,
+                        )
+                      ) {
+                        return;
                       }
-                    >
-                      {isEditing ? "Formular schließen" : "Bearbeiten"}
-                    </button>
-                    {spot.maps_url ? (
-                      <a
-                        href={spot.maps_url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="glass-chip !py-1.5 !text-[12px]"
-                      >
-                        Karte öffnen
-                      </a>
-                    ) : null}
-                    {spot.info_url ? (
-                      <a
-                        href={spot.info_url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="glass-chip !py-1.5 !text-[12px]"
-                      >
-                        {isAirbnbUrl(spot.info_url) ? "Airbnb öffnen" : "Seite öffnen"}
-                      </a>
-                    ) : null}
-                    <button
-                      type="button"
-                      className="glass-chip !py-1.5 !text-[12px]"
-                      data-active={!relevant ? "true" : undefined}
-                      onClick={() => toggleRelevant(spot)}
-                    >
-                      {relevant ? "Archivieren" : "Wiederherstellen"}
-                    </button>
-                    <button
-                      type="button"
-                      className="glass-chip glass-chip-danger !py-1.5 !text-[12px]"
-                      disabled={deletingId === spot.id}
-                      onClick={() => {
-                        if (
-                          !window.confirm(
-                            `„${spot.name}“ wirklich löschen? Das lässt sich nicht rückgängig machen.`,
-                          )
-                        ) {
-                          return;
-                        }
-                        void onDelete(spot.id);
-                      }}
-                    >
-                      {deletingId === spot.id ? "Löschen…" : "Löschen"}
-                    </button>
-                  </div>
-                ) : null}
+                      void onDelete(spot.id);
+                    }}
+                  >
+                    {deletingId === spot.id ? "Löschen…" : "Löschen"}
+                  </button>
+                </div>
 
                 {isEditing ? (
                   <EditSpotForm
@@ -1760,11 +1807,11 @@ export function SpotList({
                     onToggleRelevant={() => toggleRelevant(spot)}
                   />
                 ) : null}
-              </div>
+              </>
             );
-          })
-        )}
-      </div>
+          })()}
+        </div>
+      ) : null}
     </div>
   );
 }

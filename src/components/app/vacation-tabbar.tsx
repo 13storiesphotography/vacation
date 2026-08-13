@@ -1,15 +1,22 @@
 "use client";
 
 export const vacationTabs = [
-  { id: "urlaub", label: "Urlaub", short: "Urlaub" },
-  { id: "spots", label: "Spots", short: "Spots" },
-  { id: "karte", label: "Karte", short: "Karte" },
-  { id: "plan", label: "Plan", short: "Plan" },
-  { id: "kosten", label: "Kosten", short: "Kosten" },
+  { id: "sammeln", label: "Sammeln", short: "Sammeln" },
+  { id: "planen", label: "Planen", short: "Planen" },
   { id: "team", label: "Team", short: "Team" },
+  { id: "mehr", label: "Mehr", short: "Mehr" },
 ] as const;
 
 export type VacationTabId = (typeof vacationTabs)[number]["id"];
+
+/** Map legacy ?tab= values from old 6-tab IA onto the new 4 tabs. */
+export function normalizeVacationTab(value: string | null | undefined): VacationTabId {
+  if (value === "sammeln" || value === "spots" || value === "karte") return "sammeln";
+  if (value === "planen" || value === "plan") return "planen";
+  if (value === "team") return "team";
+  if (value === "mehr" || value === "urlaub" || value === "kosten") return "mehr";
+  return "sammeln";
+}
 
 function TabGlyph({ id }: { id: VacationTabId }) {
   const common = {
@@ -25,41 +32,19 @@ function TabGlyph({ id }: { id: VacationTabId }) {
   };
 
   switch (id) {
-    case "urlaub":
-      return (
-        <svg {...common}>
-          <path d="M4 17.5V8.2L11 4l7 4.2v9.3" />
-          <path d="M8.2 17.5v-4.2h5.6v4.2" />
-        </svg>
-      );
-    case "spots":
+    case "sammeln":
       return (
         <svg {...common}>
           <path d="M11 18.2s-5.2-4.1-5.2-8.1A5.2 5.2 0 0 1 11 4.9a5.2 5.2 0 0 1 5.2 5.2c0 4-5.2 8.1-5.2 8.1Z" />
           <circle cx="11" cy="10" r="1.7" />
         </svg>
       );
-    case "karte":
-      return (
-        <svg {...common}>
-          <path d="M3.5 6.2 8.2 4.5l5.6 1.7 4.7-1.7v11.6l-4.7 1.7-5.6-1.7-4.7 1.7V6.2Z" />
-          <path d="M8.2 4.5v11.6M13.8 6.2v11.6" />
-        </svg>
-      );
-    case "plan":
+    case "planen":
       return (
         <svg {...common}>
           <rect x="4.2" y="3.8" width="13.6" height="14.4" rx="2.2" />
           <path d="M7.2 2.8v2.4M14.8 2.8v2.4M4.2 8.4h13.6" />
           <path d="M7.5 12h3.2M7.5 15h7" />
-        </svg>
-      );
-    case "kosten":
-      return (
-        <svg {...common}>
-          <rect x="3.8" y="5.2" width="14.4" height="11.6" rx="2" />
-          <path d="M7 9.2h8M7 12.4h5.5" />
-          <circle cx="15.2" cy="12.4" r="1.2" />
         </svg>
       );
     case "team":
@@ -69,6 +54,14 @@ function TabGlyph({ id }: { id: VacationTabId }) {
           <circle cx="14.6" cy="8.6" r="2" />
           <path d="M3.8 17.2c.4-2.6 2.2-3.9 4.4-3.9s4 1.3 4.4 3.9" />
           <path d="M12.2 17.2c.2-1.7 1.2-2.8 2.8-2.8 1.4 0 2.4.8 2.8 2.2" />
+        </svg>
+      );
+    case "mehr":
+      return (
+        <svg {...common}>
+          <circle cx="5.5" cy="11" r="1.35" fill="currentColor" stroke="none" />
+          <circle cx="11" cy="11" r="1.35" fill="currentColor" stroke="none" />
+          <circle cx="16.5" cy="11" r="1.35" fill="currentColor" stroke="none" />
         </svg>
       );
   }

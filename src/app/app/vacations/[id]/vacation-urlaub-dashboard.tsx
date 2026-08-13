@@ -28,7 +28,7 @@ export function VacationUrlaubDashboard({
   spots: Spot[];
   canEdit: boolean;
   onEdit: () => void;
-  onOpenTab: (tab: "plan" | "karte" | "spots" | "team" | "kosten" | "urlaub") => void;
+  onOpenTab: (tab: "sammeln" | "planen" | "team" | "mehr") => void;
 }) {
   const [featured, setFeatured] = useState<FeaturedDashboard | null>(null);
   const [days, setDays] = useState<DayPlanWithStops[]>([]);
@@ -125,7 +125,7 @@ export function VacationUrlaubDashboard({
           vacationStart={vacation.start_date}
           vacationEnd={vacation.end_date}
           home={home}
-          onSelectDay={() => onOpenTab("plan")}
+          onSelectDay={() => onOpenTab("planen")}
         />
       ) : null}
     </div>

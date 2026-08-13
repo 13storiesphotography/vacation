@@ -85,7 +85,7 @@ export default async function AppHomePage() {
             return (
               <Link
                 key={vacation.id}
-                href={`/app/vacations/${vacation.id}?tab=urlaub`}
+                href={`/app/vacations/${vacation.id}?tab=mehr`}
                 className="ios-row ios-chevron"
               >
                 <div className="min-w-0">

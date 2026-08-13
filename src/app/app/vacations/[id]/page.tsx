@@ -14,6 +14,7 @@ import { isSpotRelevant } from "@/lib/spots";
 import { healVacationSpotCoords } from "./maps-coords-actions";
 import {
   VacationTabBar,
+  normalizeVacationTab,
   type VacationTabId,
 } from "@/components/app/vacation-tabbar";
 import { VacationTabPanel } from "@/components/app/vacation-tab-panel";
@@ -27,20 +28,28 @@ type Vacation = Database["public"]["Tables"]["vacations"]["Row"];
 type Member = Database["public"]["Tables"]["vacation_members"]["Row"];
 type Spot = Database["public"]["Tables"]["spots"]["Row"];
 type Profile = Database["public"]["Tables"]["profiles"]["Row"];
+type SammelnView = "galerie" | "karte";
+type MehrSection = "ueberblick" | "kosten";
+
 function readInitialTab(): VacationTabId {
-  if (typeof window === "undefined") return "spots";
-  const value = new URLSearchParams(window.location.search).get("tab");
-  if (
-    value === "urlaub" ||
-    value === "spots" ||
-    value === "karte" ||
-    value === "plan" ||
-    value === "kosten" ||
-    value === "team"
-  ) {
-    return value;
+  if (typeof window === "undefined") return "sammeln";
+  return normalizeVacationTab(new URLSearchParams(window.location.search).get("tab"));
+}
+
+function readInitialSammelnView(): SammelnView {
+  if (typeof window === "undefined") return "galerie";
+  const params = new URLSearchParams(window.location.search);
+  if (params.get("tab") === "karte" || params.get("view") === "karte") return "karte";
+  return "galerie";
+}
+
+function readInitialMehrSection(): MehrSection {
+  if (typeof window === "undefined") return "ueberblick";
+  const params = new URLSearchParams(window.location.search);
+  if (params.get("tab") === "kosten" || params.get("section") === "kosten") {
+    return "kosten";
   }
-  return "spots";
+  return "ueberblick";
 }
 
 export default function VacationDetailPage() {
@@ -58,6 +67,8 @@ export default function VacationDetailPage() {
   const [showSpotForm, setShowSpotForm] = useState(false);
   const [spotFormKey, setSpotFormKey] = useState(0);
   const [editingVacation, setEditingVacation] = useState(false);
+  const [sammelnView, setSammelnView] = useState<SammelnView>(() => readInitialSammelnView());
+  const [mehrSection, setMehrSection] = useState<MehrSection>(() => readInitialMehrSection());
   const [tab, setTab] = useState<VacationTabId>(() => readInitialTab());
   const [visitedTabs, setVisitedTabs] = useState<ReadonlySet<VacationTabId>>(
     () => {
@@ -65,6 +76,26 @@ export default function VacationDetailPage() {
       return new Set<VacationTabId>([initial]);
     },
   );
+
+  function writeUrl(nextTab: VacationTabId, nextView = sammelnView, nextSection = mehrSection) {
+    try {
+      const url = new URL(window.location.href);
+      url.searchParams.set("tab", nextTab);
+      if (nextTab === "sammeln" && nextView === "karte") {
+        url.searchParams.set("view", "karte");
+      } else {
+        url.searchParams.delete("view");
+      }
+      if (nextTab === "mehr" && nextSection === "kosten") {
+        url.searchParams.set("section", "kosten");
+      } else {
+        url.searchParams.delete("section");
+      }
+      window.history.replaceState({}, "", url.toString());
+    } catch {
+      // ignore
+    }
+  }
 
   function changeTab(next: VacationTabId) {
     setTab(next);
@@ -74,15 +105,20 @@ export default function VacationDetailPage() {
       nextVisited.add(next);
       return nextVisited;
     });
-    if (next !== "spots") setShowSpotForm(false);
-    if (next !== "urlaub") setEditingVacation(false);
-    try {
-      const url = new URL(window.location.href);
-      url.searchParams.set("tab", next);
-      window.history.replaceState({}, "", url.toString());
-    } catch {
-      // ignore
-    }
+    if (next !== "sammeln") setShowSpotForm(false);
+    if (next !== "mehr") setEditingVacation(false);
+    writeUrl(next);
+  }
+
+  function changeSammelnView(next: SammelnView) {
+    setSammelnView(next);
+    writeUrl("sammeln", next);
+  }
+
+  function changeMehrSection(next: MehrSection) {
+    setMehrSection(next);
+    if (next !== "ueberblick") setEditingVacation(false);
+    writeUrl("mehr", sammelnView, next);
   }
 
   const load = useCallback(async () => {
@@ -290,7 +326,7 @@ export default function VacationDetailPage() {
           <Link href="/app" className="text-[13px] font-semibold text-[var(--fjord)]">
             ← Urlaube
           </Link>
-          {tab !== "urlaub" ? (
+          {tab !== "mehr" || mehrSection !== "ueberblick" || editingVacation ? (
             <p className="truncate text-[13px] font-semibold text-[var(--ink-soft)]">
               {vacation.title}
             </p>
@@ -304,52 +340,51 @@ export default function VacationDetailPage() {
       {error ? (
         <p className="mb-3 text-[13px] text-[var(--danger)]">{error}</p>
       ) : null}
-      {visitedTabs.has("urlaub") && (
-        <VacationTabPanel id="urlaub" active={tab === "urlaub"}>
-          {!editingVacation ? (
-            <VacationUrlaubDashboard
-              vacation={vacation}
-              spots={spots}
-              canEdit={canEditVacation}
-              onEdit={() => setEditingVacation(true)}
-              onOpenTab={changeTab}
-            />
-          ) : (
-            <EditVacationForm
-              vacation={vacation}
-              onDone={async () => {
-                setEditingVacation(false);
-                await load();
-              }}
-            />
-          )}
-        </VacationTabPanel>
-      )}
 
-      {visitedTabs.has("spots") && (
-        <VacationTabPanel id="spots" active={tab === "spots"}>
+      {visitedTabs.has("sammeln") && (
+        <VacationTabPanel id="sammeln" active={tab === "sammeln"}>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
-              <h1 className="display text-2xl">Spots</h1>
+              <h1 className="display text-2xl">Sammeln</h1>
               <p className="tab-subtitle">
-                {spots.length} in der Sammlung
-                {spots.length > 0 && relevantSpotCount !== spots.length
+                {relevantSpotCount} Spot{relevantSpotCount === 1 ? "" : "s"}
+                {spots.length > relevantSpotCount
                   ? ` · ${spots.length - relevantSpotCount} archiviert`
                   : ""}
               </p>
             </div>
-            {canEditSpots ? (
-              <button
-                type="button"
-                className="cta !px-3 !py-2 text-[13px]"
-                onClick={() => setShowSpotForm((value) => !value)}
-              >
-                {showSpotForm ? "Schließen" : "Hinzufügen"}
-              </button>
-            ) : null}
+            <div className="flex flex-wrap items-center gap-2">
+              <div className="flex items-center gap-1 rounded-full border border-[var(--separator)] bg-[rgba(255,255,255,0.35)] p-1">
+                <button
+                  type="button"
+                  className="glass-chip !py-1.5"
+                  data-active={sammelnView === "galerie"}
+                  onClick={() => changeSammelnView("galerie")}
+                >
+                  Galerie
+                </button>
+                <button
+                  type="button"
+                  className="glass-chip !py-1.5"
+                  data-active={sammelnView === "karte"}
+                  onClick={() => changeSammelnView("karte")}
+                >
+                  Karte
+                </button>
+              </div>
+              {canEditSpots ? (
+                <button
+                  type="button"
+                  className="cta !px-3 !py-2 text-[13px]"
+                  onClick={() => setShowSpotForm((value) => !value)}
+                >
+                  {showSpotForm ? "Schließen" : "Hinzufügen"}
+                </button>
+              ) : null}
+            </div>
           </div>
 
-          {showSpotForm && (
+          {showSpotForm ? (
             <CreateSpotForm
               key={spotFormKey}
               vacationId={vacationId}
@@ -359,41 +394,39 @@ export default function VacationDetailPage() {
                 await load();
               }}
             />
-          )}
+          ) : null}
 
-          <SpotList
-            vacationId={vacationId}
-            spots={spots}
-            ratings={ratings}
-            summaries={summaries}
-            raters={raters}
-            currentUserId={currentUserId}
-            onChanged={load}
-            onMyRatingPatch={applyMyRating}
-            onSpotPatch={applySpotPatch}
-          />
+          <div hidden={sammelnView !== "galerie"}>
+            <SpotList
+              vacationId={vacationId}
+              spots={spots}
+              ratings={ratings}
+              summaries={summaries}
+              raters={raters}
+              currentUserId={currentUserId}
+              onChanged={load}
+              onMyRatingPatch={applyMyRating}
+              onSpotPatch={applySpotPatch}
+            />
+          </div>
+
+          <div hidden={sammelnView !== "karte"} className="mt-3">
+            <SpotMap
+              vacationId={vacationId}
+              spots={spots}
+              summaries={summaries}
+              canEdit={canEditSpots}
+              active={tab === "sammeln" && sammelnView === "karte"}
+              onChanged={load}
+              onSpotPatch={applySpotPatch}
+            />
+          </div>
         </VacationTabPanel>
       )}
 
-      {visitedTabs.has("karte") && (
-        <VacationTabPanel id="karte" active={tab === "karte"}>
-          <h1 className="display text-2xl">Karte</h1>
-          <p className="tab-subtitle">Spots mit Position</p>
-          <SpotMap
-            vacationId={vacationId}
-            spots={spots}
-            summaries={summaries}
-            canEdit={canEditSpots}
-            active={tab === "karte"}
-            onChanged={load}
-            onSpotPatch={applySpotPatch}
-          />
-        </VacationTabPanel>
-      )}
-
-      {visitedTabs.has("plan") && (
-        <VacationTabPanel id="plan" active={tab === "plan"}>
-          <h1 className="display text-2xl">Plan</h1>
+      {visitedTabs.has("planen") && (
+        <VacationTabPanel id="planen" active={tab === "planen"}>
+          <h1 className="display text-2xl">Planen</h1>
           <p className="tab-subtitle">
             Tag wählen — Spot tippen zum Bearbeiten
           </p>
@@ -402,19 +435,6 @@ export default function VacationDetailPage() {
             spots={spots}
             onSpotsChanged={load}
             onSpotPatch={applySpotPatch}
-          />
-        </VacationTabPanel>
-      )}
-
-      {visitedTabs.has("kosten") && vacation && (
-        <VacationTabPanel id="kosten" active={tab === "kosten"}>
-          <CostPlannerPanel
-            vacation={vacation}
-            spots={spots}
-            canEdit={canEditCosts}
-            onVacationPatch={(patch) =>
-              setVacation((prev) => (prev ? { ...prev, ...patch } : prev))
-            }
           />
         </VacationTabPanel>
       )}
@@ -429,6 +449,66 @@ export default function VacationDetailPage() {
             canManageTeam={canManageTeam}
             onChanged={load}
           />
+        </VacationTabPanel>
+      )}
+
+      {visitedTabs.has("mehr") && vacation && (
+        <VacationTabPanel id="mehr" active={tab === "mehr"}>
+          <div className="flex flex-wrap items-center justify-between gap-3">
+            <div>
+              <h1 className="display text-2xl">Mehr</h1>
+              <p className="tab-subtitle">Überblick, Kosten und Urlaubsdaten</p>
+            </div>
+            <div className="flex items-center gap-1 rounded-full border border-[var(--separator)] bg-[rgba(255,255,255,0.35)] p-1">
+              <button
+                type="button"
+                className="glass-chip !py-1.5"
+                data-active={mehrSection === "ueberblick"}
+                onClick={() => changeMehrSection("ueberblick")}
+              >
+                Überblick
+              </button>
+              <button
+                type="button"
+                className="glass-chip !py-1.5"
+                data-active={mehrSection === "kosten"}
+                onClick={() => changeMehrSection("kosten")}
+              >
+                Kosten
+              </button>
+            </div>
+          </div>
+
+          <div hidden={mehrSection !== "ueberblick"} className="mt-3">
+            {!editingVacation ? (
+              <VacationUrlaubDashboard
+                vacation={vacation}
+                spots={spots}
+                canEdit={canEditVacation}
+                onEdit={() => setEditingVacation(true)}
+                onOpenTab={changeTab}
+              />
+            ) : (
+              <EditVacationForm
+                vacation={vacation}
+                onDone={async () => {
+                  setEditingVacation(false);
+                  await load();
+                }}
+              />
+            )}
+          </div>
+
+          <div hidden={mehrSection !== "kosten"} className="mt-3">
+            <CostPlannerPanel
+              vacation={vacation}
+              spots={spots}
+              canEdit={canEditCosts}
+              onVacationPatch={(patch) =>
+                setVacation((prev) => (prev ? { ...prev, ...patch } : prev))
+              }
+            />
+          </div>
         </VacationTabPanel>
       )}
 
