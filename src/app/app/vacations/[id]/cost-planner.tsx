@@ -194,11 +194,14 @@ export function CostPlannerPanel({
   spots,
   canEdit,
   onVacationPatch,
+  embedded = false,
 }: {
   vacation: Vacation;
   spots: Spot[];
   canEdit: boolean;
   onVacationPatch: (patch: Partial<Vacation>) => void;
+  /** Hide page title when nested under Mehr. */
+  embedded?: boolean;
 }) {
   const [items, setItems] = useState<CostItem[]>([]);
   const [days, setDays] = useState<DayPlanWithStops[]>([]);
@@ -569,12 +572,18 @@ export function CostPlannerPanel({
 
   return (
     <div className="space-y-4">
-      <div>
-        <h1 className="display text-2xl">Kosten</h1>
-        <p className="tab-subtitle">
+      {embedded ? (
+        <p className="tab-subtitle !mt-0">
           Übernachtungen, Anschaffungen, Sprit & Co. im Blick.
         </p>
-      </div>
+      ) : (
+        <div>
+          <h1 className="display text-2xl">Kosten</h1>
+          <p className="tab-subtitle">
+            Übernachtungen, Anschaffungen, Sprit & Co. im Blick.
+          </p>
+        </div>
+      )}
 
       {loading ? (
         <div className="ios-group p-4 text-[14px] text-[var(--ink-soft)]">Lädt…</div>

@@ -79,7 +79,10 @@ function needsImageRefresh(spot: {
   image_url: string | null;
   image_manual: boolean | null;
 }): boolean {
-  if (spot.image_manual) return false;
+  // Manual uploads/URLs stay put when usable; broken "manual" Maps pages get healed.
+  if (spot.image_manual && spot.image_url && isUsablePreviewImage(spot.image_url)) {
+    return false;
+  }
   if (!spot.image_url) return true;
   if (!isUsablePreviewImage(spot.image_url)) return true;
   return isAppMapPreviewUrl(spot.image_url);
@@ -116,6 +119,7 @@ export async function healVacationSpotCoords(vacationId: string): Promise<{
           lng?: number;
           maps_url?: string;
           image_url?: string;
+          image_manual?: boolean;
         } = {};
 
         if (spot.maps_url) {
@@ -146,6 +150,8 @@ export async function healVacationSpotCoords(vacationId: string): Promise<{
             enriched.imageUrl !== spot.image_url
           ) {
             patch.image_url = enriched.imageUrl;
+            // Broken "manual" Maps pages become auto place photos again.
+            if (spot.image_manual) patch.image_manual = false;
           }
         } else if (!previous && spot.info_url && isAirbnbUrl(spot.info_url)) {
           const meta = await fetchAirbnbMetadata(spot.info_url);

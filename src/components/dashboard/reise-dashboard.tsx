@@ -140,7 +140,7 @@ function StatusStrip({
   onOpenTab,
 }: {
   featured: FeaturedDashboard;
-  onOpenTab?: (tab: "plan" | "karte" | "spots") => void;
+  onOpenTab?: (tab: "planen" | "sammeln") => void;
 }) {
   return (
     <div className="flex flex-wrap items-center justify-between gap-3 px-0.5">
@@ -149,20 +149,37 @@ function StatusStrip({
         {featured.vacation.region ? ` · ${featured.vacation.region}` : ""}
       </p>
       {onOpenTab ? (
-        <button
-          type="button"
-          className="glass-chip shrink-0"
-          onClick={() => onOpenTab("plan")}
-        >
-          Plan
-        </button>
+        <div className="flex shrink-0 flex-wrap gap-1.5">
+          <button
+            type="button"
+            className="glass-chip"
+            onClick={() => onOpenTab("sammeln")}
+          >
+            Sammeln
+          </button>
+          <button
+            type="button"
+            className="glass-chip"
+            onClick={() => onOpenTab("planen")}
+          >
+            Planen
+          </button>
+        </div>
       ) : (
-        <Link
-          href={`/app/vacations/${featured.vacation.id}?tab=plan`}
-          className="glass-chip shrink-0"
-        >
-          Plan
-        </Link>
+        <div className="flex shrink-0 flex-wrap gap-1.5">
+          <Link
+            href={`/app/vacations/${featured.vacation.id}?tab=sammeln`}
+            className="glass-chip"
+          >
+            Sammeln
+          </Link>
+          <Link
+            href={`/app/vacations/${featured.vacation.id}?tab=planen`}
+            className="glass-chip"
+          >
+            Planen
+          </Link>
+        </div>
       )}
     </div>
   );
@@ -173,7 +190,7 @@ function NextUpCard({
   onOpenTab,
 }: {
   featured: FeaturedDashboard;
-  onOpenTab?: (tab: "plan" | "karte" | "spots") => void;
+  onOpenTab?: (tab: "planen" | "sammeln") => void;
 }) {
   const lead = featured.places[0] ?? featured.overnight;
 
@@ -185,22 +202,22 @@ function NextUpCard({
         </p>
         <p className="mt-2 text-[15px] font-semibold">Noch nichts eingeplant</p>
         <p className="mt-1 text-[13px] text-[var(--ink-soft)]">
-          Im Plan die ersten Stops legen — dann steht hier der nächste Halt.
+          Unter Planen die ersten Stops legen — dann steht hier der nächste Halt.
         </p>
         {onOpenTab ? (
           <button
             type="button"
             className="cta mt-4 inline-flex"
-            onClick={() => onOpenTab("plan")}
+            onClick={() => onOpenTab("planen")}
           >
-            Zum Plan
+            Zum Planen
           </button>
         ) : (
           <Link
-            href={`/app/vacations/${featured.vacation.id}?tab=plan`}
+            href={`/app/vacations/${featured.vacation.id}?tab=planen`}
             className="cta mt-4 inline-flex"
           >
-            Zum Plan
+            Zum Planen
           </Link>
         )}
       </section>
@@ -286,7 +303,7 @@ function OtherVacations({ vacations }: { vacations: VacationSummary[] }) {
         {vacations.map((vacation) => (
           <Link
             key={vacation.id}
-            href={`/app/vacations/${vacation.id}?tab=urlaub`}
+            href={`/app/vacations/${vacation.id}?tab=ueberblick`}
             className="ios-row ios-chevron"
           >
             <div className="min-w-0">
@@ -312,7 +329,7 @@ export function VacationTripDashboard({
   className = "space-y-4",
 }: {
   featured: FeaturedDashboard;
-  onOpenTab?: (tab: "plan" | "karte" | "spots") => void;
+  onOpenTab?: (tab: "planen" | "sammeln") => void;
   className?: string;
 }) {
   return (
@@ -331,7 +348,7 @@ export function ReiseDashboard({ payload }: { payload: DashboardPayload }) {
       <div className="ios-group mt-6 p-5">
         <p className="text-[15px] font-semibold">Noch keine Urlaube</p>
         <p className="mt-2 text-[14px] text-[var(--ink-soft)]">
-          Lege den nächsten Trip an — das Dashboard findest du danach im Tab Urlaub.
+          Lege den nächsten Trip an — Überblick und Kosten findest du danach unter Mehr.
         </p>
         <Link href="/app/vacations/new" className="cta mt-4 inline-flex">
           Ersten Urlaub anlegen

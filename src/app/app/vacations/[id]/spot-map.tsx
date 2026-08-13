@@ -3,19 +3,28 @@
 import dynamic from "next/dynamic";
 import { useEffect, useMemo, useState } from "react";
 import {
-  categoryLabels,
-  categoryOptions,
   isSpotRelevant,
-  type SpotCategory,
+  resolveCategoryIcon,
+  resolveCategoryLabel,
+  activeCategoryOptions,
+  type VacationSpotCategory,
 } from "@/lib/spots";
 import { resolveSpotCoords } from "@/lib/geo";
-import { emptySummary, type SpotRatingSummary } from "@/lib/ratings";
+import {
+  emptySummary,
+  type RaterOption,
+  type SpotRating,
+  type SpotRatingSummary,
+} from "@/lib/ratings";
 import type { Database } from "@/lib/database.types";
 import type { MappableSpot } from "@/lib/google-maps";
 import { CategoryIcon } from "@/components/category-icon";
-import { isAirbnbUrl } from "@/lib/airbnb";
 import { hasFinePointer } from "./map-gestures";
-import { EditSpotForm } from "./spot-ui";
+import {
+  filterSpotCollection,
+  SpotPlaceSession,
+  type SpotCollectionFilterState,
+} from "./spot-ui";
 
 type Spot = Database["public"]["Tables"]["spots"]["Row"];
 
@@ -28,33 +37,41 @@ const SpotMapCanvas = dynamic(() => import("./spot-map-canvas"), {
   ),
 });
 
-type MapFilter = "alle" | SpotCategory;
-type FocusMode = "all" | "favorites" | "rated" | "include_shelved";
-
 export function SpotMap({
   vacationId,
   spots,
+  ratings,
   summaries,
+  raters,
+  currentUserId,
+  filters,
+  categories,
   canEdit = false,
   active = true,
   onChanged,
+  onMyRatingPatch,
   onSpotPatch,
 }: {
   vacationId: string;
   spots: Spot[];
+  ratings: SpotRating[];
   summaries: Record<string, SpotRatingSummary>;
+  raters: RaterOption[];
+  currentUserId: string | null;
+  filters: SpotCollectionFilterState;
+  categories?: VacationSpotCategory[];
   canEdit?: boolean;
   /** False while another vacation tab is shown — collapse overlay and resize on return. */
   active?: boolean;
   onChanged?: () => void | Promise<void>;
+  onMyRatingPatch: (
+    spotId: string,
+    patch: { rating?: number | null; isFavorite?: boolean },
+  ) => void;
   onSpotPatch?: (spotId: string, patch: Partial<Spot>) => void;
 }) {
-  const [filter, setFilter] = useState<MapFilter>("alle");
-  const [focus, setFocus] = useState<FocusMode>("all");
-  const [minAvg, setMinAvg] = useState(0);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editing, setEditing] = useState(false);
-  const [deleting, setDeleting] = useState(false);
   const [expanded, setExpanded] = useState(false);
   const [desktopPointer, setDesktopPointer] = useState(true);
 
@@ -85,32 +102,25 @@ export function SpotMap({
     };
   }, [expanded]);
 
+  const filtered = useMemo(
+    () => filterSpotCollection(spots, summaries, filters),
+    [filters, spots, summaries],
+  );
+
   const { mappable, withoutCoords } = useMemo(() => {
     const withCoords: MappableSpot[] = [];
     const missing: Spot[] = [];
-    for (const spot of spots) {
+    for (const spot of filtered) {
       const coords = resolveSpotCoords(spot);
       if (coords) withCoords.push({ ...spot, coords });
       else missing.push(spot);
     }
     return { mappable: withCoords, withoutCoords: missing };
-  }, [spots]);
-
-  const visible = useMemo(() => {
-    return mappable.filter((spot) => {
-      if (focus !== "include_shelved" && !isSpotRelevant(spot)) return false;
-      if (filter !== "alle" && spot.category !== filter) return false;
-      const summary = summaries[spot.id] ?? emptySummary();
-      if (focus === "favorites" && !summary.myFavorite) return false;
-      if (focus === "rated" && summary.myRating == null) return false;
-      if (minAvg > 0 && (summary.average ?? 0) < minAvg) return false;
-      return true;
-    });
-  }, [filter, focus, mappable, minAvg, summaries]);
+  }, [filtered]);
 
   const selected =
     spots.find((spot) => spot.id === selectedId) ??
-    visible.find((spot) => spot.id === selectedId) ??
+    mappable.find((spot) => spot.id === selectedId) ??
     null;
 
   function selectSpot(id: string | null, openEditor = false) {
@@ -118,100 +128,16 @@ export function SpotMap({
     setEditing(Boolean(id && openEditor && canEdit));
   }
 
-  async function handleDelete(spotId: string) {
-    setDeleting(true);
-    const { deleteSpot } = await import("./spot-actions");
-    const result = await deleteSpot(vacationId, spotId);
-    setDeleting(false);
-    if (result.error) return;
-    setEditing(false);
-    setSelectedId(null);
-    await onChanged?.();
-  }
-
-  function toggleRelevant(spot: Spot) {
-    if (!onSpotPatch) return;
-    const next = !isSpotRelevant(spot);
-    const previous = spot.is_relevant;
-    onSpotPatch(spot.id, { is_relevant: next });
-    void (async () => {
-      const { createClient } = await import("@/lib/supabase/client");
-      const supabase = createClient();
-      const { error } = await supabase
-        .from("spots")
-        .update({ is_relevant: next })
-        .eq("id", spot.id)
-        .eq("vacation_id", vacationId);
-      if (error) onSpotPatch(spot.id, { is_relevant: previous });
-    })();
-  }
-
   return (
     <div className="mt-3">
-      <div className="mb-3 flex flex-wrap items-center gap-2">
-        <button
-          type="button"
-          onClick={() => setFilter("alle")}
-          className="glass-chip"
-          data-active={filter === "alle"}
-        >
-          Alle
-        </button>
-        {categoryOptions.map((option) => (
-          <button
-            key={option}
-            type="button"
-            onClick={() => setFilter(option)}
-            className="glass-chip"
-            data-active={filter === option}
-          >
-            <CategoryIcon
-              category={option}
-              size={14}
-              tone={filter === option ? "#ffffff" : undefined}
-            />
-            {categoryLabels[option]}
-          </button>
-        ))}
-      </div>
-
-      <div className="mb-3 grid gap-2 sm:grid-cols-2">
-        <label className="form-label">
-          Fokus
-          <select
-            value={focus}
-            onChange={(e) => setFocus(e.target.value as FocusMode)}
-            className="glass-field mt-1.5 px-3 py-2.5 text-[14px]"
-          >
-            <option value="all">Auswahl mit Koordinaten</option>
-            <option value="favorites">Nur meine Favoriten</option>
-            <option value="rated">Nur von mir bewertet</option>
-            <option value="include_shelved">Auch archivierte</option>
-          </select>
-        </label>
-        <label className="form-label">
-          Min. Gesamtbewertung
-          <select
-            value={minAvg}
-            onChange={(e) => setMinAvg(Number(e.target.value))}
-            className="glass-field mt-1.5 px-3 py-2.5 text-[14px]"
-          >
-            <option value={0}>Keine Mindestnote</option>
-            <option value={3}>ab 3★</option>
-            <option value={4}>ab 4★</option>
-            <option value={4.5}>ab 4,5★</option>
-          </select>
-        </label>
-      </div>
-
       <p className="meta-text mb-2">
-        {visible.length} Spot{visible.length === 1 ? "" : "s"} auf der Karte
+        {mappable.length} Spot{mappable.length === 1 ? "" : "s"} auf der Karte
         {withoutCoords.length > 0
           ? ` · ${withoutCoords.length} ohne Koordinaten`
           : ""}
         {process.env.NEXT_PUBLIC_GOOGLE_MAPS_API_KEY
           ? " · Google Maps"
-          : " · OpenStreetMap (Google-Key fehlt)"}
+          : " · OpenStreetMap"}
         {" · "}
         {expanded || desktopPointer
           ? "Ziehen oder Mausrad zum Zoomen"
@@ -237,8 +163,9 @@ export function SpotMap({
           </button>
         </div>
         <SpotMapCanvas
-          spots={visible}
+          spots={mappable}
           summaries={summaries}
+          categories={categories}
           selectedId={selectedId}
           onSelect={(id) => selectSpot(id, false)}
           onEditRequest={canEdit ? (id) => selectSpot(id, true) : undefined}
@@ -247,139 +174,29 @@ export function SpotMap({
         />
       </div>
 
-      {selected && (
-        <div className="ios-group mt-3 overflow-hidden">
-          {selected.image_url ? (
-            <div className="relative aspect-[16/7] w-full media-fallback">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={selected.image_url}
-                alt=""
-                className="h-full w-full object-cover"
-                referrerPolicy="no-referrer"
-              />
-              <span className="absolute bottom-2 left-2 inline-flex rounded-full bg-[var(--surface-strong)] p-1.5 shadow-sm">
-                <CategoryIcon category={selected.category} size={14} />
-              </span>
-              {selected.maps_url || selected.info_url ? (
-                <a
-                  href={(selected.maps_url || selected.info_url)!}
-                  target="_blank"
-                  rel="noreferrer"
-                  aria-label={
-                    selected.maps_url
-                      ? "Karte öffnen"
-                      : selected.info_url && isAirbnbUrl(selected.info_url)
-                        ? "Airbnb öffnen"
-                        : "Seite öffnen"
-                  }
-                  className="absolute top-2 right-2 inline-flex h-9 w-9 items-center justify-center rounded-full bg-[rgba(20,36,48,0.72)] text-[15px] font-semibold text-white shadow-md backdrop-blur-sm"
-                >
-                  ↗
-                </a>
-              ) : null}
-            </div>
-          ) : null}
-          <div className="flex items-start gap-3 p-4">
-            {!selected.image_url && (
-              <CategoryIcon category={selected.category} size={18} className="mt-0.5" />
-            )}
-            <div className="min-w-0 flex-1">
-              {selected.maps_url ? (
-                <a
-                  href={selected.maps_url}
-                  target="_blank"
-                  rel="noreferrer"
-                  className="text-[15px] font-semibold text-[var(--fjord)] hover:underline"
-                >
-                  {selected.name}
-                </a>
-              ) : (
-                <p className="text-[15px] font-semibold">{selected.name}</p>
-              )}
-              <p className="text-[12px] text-[var(--ink-soft)]">
-                {categoryLabels[selected.category]}
-                {selected.overnight_cost ? ` · ${selected.overnight_cost}` : ""}
-                {selected.info_url && (
-                  <>
-                    {" · "}
-                    <a
-                      href={selected.info_url}
-                      target="_blank"
-                      rel="noreferrer"
-                      className="font-semibold text-[var(--fjord)]"
-                    >
-                      Info
-                    </a>
-                  </>
-                )}
-              </p>
-              {selected.description && (
-                <p className="mt-2 text-[13px] leading-relaxed text-[var(--ink-soft)]">
-                  {selected.description}
-                </p>
-              )}
-            </div>
-          </div>
-
-          <div className="flex flex-wrap gap-1.5 border-t border-black/5 px-4 py-2.5">
-            {canEdit ? (
-              <button
-                type="button"
-                className="glass-chip !py-1.5 !text-[12px]"
-                data-active={editing ? "true" : undefined}
-                onClick={() => setEditing((open) => !open)}
-              >
-                {editing ? "Formular schließen" : "Bearbeiten"}
-              </button>
-            ) : null}
-            {selected.maps_url ? (
-              <a
-                href={selected.maps_url}
-                target="_blank"
-                rel="noreferrer"
-                className="glass-chip !py-1.5 !text-[12px]"
-              >
-                Karte öffnen
-              </a>
-            ) : null}
-            {selected.info_url ? (
-              <a
-                href={selected.info_url}
-                target="_blank"
-                rel="noreferrer"
-                className="glass-chip !py-1.5 !text-[12px]"
-              >
-                {isAirbnbUrl(selected.info_url) ? "Airbnb öffnen" : "Seite öffnen"}
-              </a>
-            ) : null}
-            {canEdit && onSpotPatch ? (
-              <button
-                type="button"
-                className="glass-chip !py-1.5 !text-[12px]"
-                data-active={!isSpotRelevant(selected) ? "true" : undefined}
-                onClick={() => toggleRelevant(selected)}
-              >
-                {isSpotRelevant(selected) ? "Archivieren" : "Wiederherstellen"}
-              </button>
-            ) : null}
-          </div>
-
-          {editing && canEdit ? (
-            <EditSpotForm
-              vacationId={vacationId}
-              spot={selected}
-              deleting={deleting}
-              onDelete={() => void handleDelete(selected.id)}
-              onToggleRelevant={() => toggleRelevant(selected)}
-              onDone={async () => {
-                setEditing(false);
-                await onChanged?.();
-              }}
-            />
-          ) : null}
-        </div>
-      )}
+      {selected ? (
+        <SpotPlaceSession
+          spot={selected}
+          vacationId={vacationId}
+          canEdit={canEdit}
+          editing={editing}
+          onEditingChange={setEditing}
+          onClose={() => {
+            setSelectedId(null);
+            setEditing(false);
+          }}
+          summary={summaries[selected.id] ?? emptySummary()}
+          ratings={ratings}
+          raters={raters}
+          currentUserId={currentUserId}
+          categories={categories}
+          onMyRatingPatch={onMyRatingPatch}
+          onChanged={() => {
+            void onChanged?.();
+          }}
+          onSpotPatch={onSpotPatch}
+        />
+      ) : null}
 
       {withoutCoords.length > 0 && (
         <div className="mt-4">
@@ -387,7 +204,7 @@ export function SpotMap({
             Ohne Kartenposition
           </p>
           <p className="mt-1 text-[12px] text-[var(--ink-faint)]">
-            Spot bearbeiten und einen Google-Maps-Link („Link teilen“) hinterlegen.
+            Spot öffnen und einen Google-Maps-Link („Link teilen“) hinterlegen.
           </p>
           <ul className="ios-group mt-2">
             {withoutCoords.map((spot) => (
@@ -395,17 +212,20 @@ export function SpotMap({
                 <button
                   type="button"
                   className="ios-row w-full"
-                  onClick={() => selectSpot(spot.id, canEdit)}
+                  onClick={() => selectSpot(spot.id, false)}
                 >
-                  <CategoryIcon category={spot.category} size={16} />
+                  <CategoryIcon
+                    icon={resolveCategoryIcon(categories, spot.category)}
+                    size={16}
+                  />
                   <div className="min-w-0 flex-1 text-left">
                     <p className="text-[14px] font-semibold">{spot.name}</p>
                     <p className="text-[12px] text-[var(--ink-soft)]">
-                      {categoryLabels[spot.category]}
-                      {canEdit ? " · tippen zum Bearbeiten" : ""}
+                      {resolveCategoryLabel(categories, spot.category)}
+                      {!isSpotRelevant(spot) ? " · Archiv" : ""}
                     </p>
                   </div>
-                  {canEdit ? <span className="ios-chevron" aria-hidden /> : null}
+                  <span className="ios-chevron" aria-hidden />
                 </button>
               </li>
             ))}
@@ -414,10 +234,10 @@ export function SpotMap({
       )}
 
       <div className="mt-4 flex flex-wrap gap-3">
-        {categoryOptions.map((option) => (
-          <span key={option} className="flex items-center gap-1.5 text-[11px] text-[var(--ink-soft)]">
-            <CategoryIcon category={option} size={14} />
-            {categoryLabels[option]}
+        {activeCategoryOptions(categories).map((option) => (
+          <span key={option.key} className="flex items-center gap-1.5 text-[11px] text-[var(--ink-soft)]">
+            <CategoryIcon icon={option.icon} size={14} />
+            {option.label}
           </span>
         ))}
       </div>

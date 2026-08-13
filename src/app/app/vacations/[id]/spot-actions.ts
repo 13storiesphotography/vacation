@@ -69,9 +69,13 @@ async function readSpotFields(formData: FormData) {
   const tags = parseTags(String(formData.get("tags") ?? ""));
   const imageUrlRaw = String(formData.get("image_url") ?? "").trim();
   // Relative map snapshots are auto-generated — never treat as a manual URL.
+  // Also reject Maps pages / data-URLs that are not usable <img> sources.
+  const imageUrlCandidate = imageUrlRaw.replace(/#.*$/, "");
   const imageUrlManual =
-    imageUrlRaw && !isAppMapPreviewUrl(imageUrlRaw.replace(/#.*$/, ""))
-      ? imageUrlRaw.replace(/#.*$/, "")
+    imageUrlCandidate &&
+    !isAppMapPreviewUrl(imageUrlCandidate) &&
+    isUsablePreviewImage(imageUrlCandidate)
+      ? imageUrlCandidate
       : "";
   const previousAutoImage = String(formData.get("previous_image_url") ?? "").trim();
   const previousMapsUrl = String(formData.get("previous_maps_url") ?? "").trim();

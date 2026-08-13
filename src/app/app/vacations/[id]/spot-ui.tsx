@@ -2,11 +2,13 @@
 
 import { useActionState, useEffect, useMemo, useRef, useState, useTransition, type PointerEvent as ReactPointerEvent } from "react";
 import {
-  categoryLabels,
-  categoryOptions,
   isSpotRelevant,
   suggestedSpotTags,
+  activeCategoryOptions,
+  resolveCategoryIcon,
+  resolveCategoryLabel,
   type SpotCategory,
+  type VacationSpotCategory,
 } from "@/lib/spots";
 import type { Database } from "@/lib/database.types";
 import { createClient } from "@/lib/supabase/client";
@@ -21,7 +23,8 @@ import {
 } from "@/lib/ratings";
 import { isOvernightCategory } from "@/lib/overnight";
 import { isAirbnbUrl } from "@/lib/airbnb";
-import { isAppMapPreviewUrl } from "@/lib/geo";
+import { isAppMapPreviewUrl, spotPreviewKind } from "@/lib/geo";
+import { uploadSpotImage } from "@/lib/spot-image-upload";
 import {
   defaultImageFocus,
   imageFocusStyle,
@@ -29,6 +32,7 @@ import {
   serializeImageFocus,
   type ImageFocus,
 } from "@/lib/image-focus";
+import { SpotPlaceCard } from "@/components/ui/spot-detail-overlay";
 import { CategoryIcon } from "@/components/category-icon";
 import { GlassDateField } from "@/components/ui/glass-date-field";
 import { isStaleServerActionError, reloadForStaleDeployment } from "@/lib/stale-action";
@@ -431,12 +435,12 @@ function SpotThumb({
           />
         ) : (
           <div className="flex h-full w-full items-center justify-center bg-black/5">
-            <CategoryIcon category={spot.category} size={Math.round(size * 0.36)} tone="#ffffff" />
+            <CategoryIcon icon={resolveCategoryIcon(undefined, spot.category)} size={Math.round(size * 0.36)} tone="#ffffff" />
           </div>
         )}
       </button>
       <span className="pointer-events-none absolute bottom-0.5 left-0.5 z-[1] inline-flex rounded-full bg-[var(--surface-strong)] p-0.5 shadow-sm">
-        <CategoryIcon category={spot.category} size={11} />
+        <CategoryIcon icon={resolveCategoryIcon(undefined, spot.category)} size={11} />
       </span>
       {link && showImage ? (
         <ImageLinkOverlay
@@ -450,24 +454,61 @@ function SpotThumb({
   );
 }
 
-function ImageFocusEditor({
-  src,
+function SpotPhotoPanel({
+  vacationId,
+  previewSrc,
+  isMapPreview,
+  hasManualImage,
+  previousAutoImage,
+  imageUrl,
+  onImageUrlChange,
   focus,
-  onChange,
+  onFocusChange,
   openHref,
   openLabel,
 }: {
-  src: string;
+  vacationId: string;
+  previewSrc: string | null;
+  isMapPreview: boolean;
+  hasManualImage: boolean;
+  previousAutoImage: string | null;
+  imageUrl: string;
+  onImageUrlChange: (value: string) => void;
   focus: ImageFocus;
-  onChange: (value: ImageFocus) => void;
+  onFocusChange: (value: ImageFocus) => void;
   openHref?: string | null;
   openLabel?: string;
 }) {
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [showUrl, setShowUrl] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const dragging = useRef(false);
   const last = useRef<{ x: number; y: number } | null>(null);
   const style = imageFocusStyle(focus);
 
+  async function onPickImage(file: File | null) {
+    if (!file) return;
+    setUploadError(null);
+    setUploading(true);
+    try {
+      const result = await uploadSpotImage({ vacationId, file });
+      if ("error" in result) {
+        setUploadError(result.error);
+        return;
+      }
+      onImageUrlChange(result.url);
+      onFocusChange({ ...defaultImageFocus });
+    } catch {
+      setUploadError("Upload fehlgeschlagen.");
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  }
+
   function onPointerDown(event: ReactPointerEvent<HTMLDivElement>) {
+    if (!previewSrc) return;
     dragging.current = true;
     last.current = { x: event.clientX, y: event.clientY };
     event.currentTarget.setPointerCapture(event.pointerId);
@@ -478,8 +519,7 @@ function ImageFocusEditor({
     const dx = event.clientX - last.current.x;
     const dy = event.clientY - last.current.y;
     last.current = { x: event.clientX, y: event.clientY };
-    // Dragging the image right reveals the left side → decrease focus x.
-    onChange({
+    onFocusChange({
       ...focus,
       x: Math.min(100, Math.max(0, focus.x - dx * 0.35)),
       y: Math.min(100, Math.max(0, focus.y - dy * 0.35)),
@@ -498,87 +538,190 @@ function ImageFocusEditor({
 
   function nudgeZoom(delta: number) {
     const next = Math.round(Math.min(2.5, Math.max(1, focus.z + delta)) * 100) / 100;
-    onChange({ ...focus, z: next });
+    onFocusChange({ ...focus, z: next });
   }
 
   return (
     <div className="mt-3">
-      <div
-        className="relative h-44 w-full cursor-grab overflow-hidden rounded-[14px] active:cursor-grabbing touch-none"
-        onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={onPointerUp}
-        onPointerCancel={onPointerUp}
-      >
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={src}
-          alt=""
-          draggable={false}
-          className="h-full w-full select-none object-cover"
-          style={{
-            objectPosition: style.objectPosition,
-            transform: style.transform,
-            transformOrigin: style.objectPosition,
-          }}
-          referrerPolicy="no-referrer"
-        />
-        {openHref ? (
-          <ImageLinkOverlay
-            href={openHref}
-            label={openLabel ?? "Link öffnen"}
-            className="absolute top-2 right-2 z-[1]"
-          />
-        ) : null}
-        <div
-          className="absolute bottom-2 right-2 flex items-center gap-1 rounded-full bg-[rgba(20,36,48,0.72)] p-1 shadow-md backdrop-blur-sm"
-          onPointerDown={(event) => event.stopPropagation()}
-        >
-          <button
-            type="button"
-            className="inline-flex h-8 w-8 items-center justify-center rounded-full text-[18px] font-semibold leading-none text-white disabled:opacity-35"
-            aria-label="Verkleinern"
-            disabled={focus.z <= 1}
-            onClick={() => nudgeZoom(-0.2)}
-          >
-            −
-          </button>
-          <span className="min-w-[2.4rem] text-center text-[11px] font-semibold tabular-nums text-white/90">
-            {Math.round(focus.z * 100)}%
+      <div className="mb-1.5 flex items-center justify-between gap-2">
+        <p className="form-label !mb-0">Foto</p>
+        {isMapPreview && !hasManualImage ? (
+          <span className="glass-chip !py-1 !text-[11px]">Karten-Vorschau</span>
+        ) : hasManualImage ? (
+          <span className="glass-chip !py-1 !text-[11px]" data-active="true">
+            Eigenes Foto
           </span>
-          <button
-            type="button"
-            className="inline-flex h-8 w-8 items-center justify-center rounded-full text-[18px] font-semibold leading-none text-white disabled:opacity-35"
-            aria-label="Vergrößern"
-            disabled={focus.z >= 2.5}
-            onClick={() => nudgeZoom(0.2)}
-          >
-            +
-          </button>
-        </div>
+        ) : previewSrc ? (
+          <span className="glass-chip !py-1 !text-[11px]">Ortsfoto</span>
+        ) : null}
       </div>
-      <div className="mt-1.5 flex items-center justify-between gap-2">
-        <p className="text-[11px] text-[var(--ink-faint)]">
-          Ziehen zum Verschieben · +/− zum Zoomen
-        </p>
+
+      {previousAutoImage ? (
+        <input type="hidden" name="previous_image_url" value={previousAutoImage} />
+      ) : null}
+      <input type="hidden" name="image_url" value={imageUrl} />
+      <input type="hidden" name="image_focus" value={serializeImageFocus(focus) ?? ""} />
+
+      {previewSrc ? (
+        <div
+          className="glass-media relative h-44 w-full cursor-grab active:cursor-grabbing touch-none"
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={onPointerUp}
+          onPointerCancel={onPointerUp}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={previewSrc}
+            alt=""
+            draggable={false}
+            className="h-full w-full select-none object-cover"
+            style={{
+              objectPosition: style.objectPosition,
+              transform: style.transform,
+              transformOrigin: style.objectPosition,
+            }}
+            referrerPolicy="no-referrer"
+          />
+          {openHref ? (
+            <ImageLinkOverlay
+              href={openHref}
+              label={openLabel ?? "Link öffnen"}
+              className="absolute top-2 right-2 z-[1]"
+            />
+          ) : null}
+          <div
+            className="absolute bottom-2 right-2 flex items-center gap-1 rounded-full bg-[rgba(20,36,48,0.55)] p-1 shadow-md backdrop-blur-md"
+            onPointerDown={(event) => event.stopPropagation()}
+          >
+            <button
+              type="button"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-full text-[18px] font-semibold leading-none text-white disabled:opacity-35"
+              aria-label="Verkleinern"
+              disabled={focus.z <= 1}
+              onClick={() => nudgeZoom(-0.2)}
+            >
+              −
+            </button>
+            <span className="min-w-[2.4rem] text-center text-[11px] font-semibold tabular-nums text-white/90">
+              {Math.round(focus.z * 100)}%
+            </span>
+            <button
+              type="button"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-full text-[18px] font-semibold leading-none text-white disabled:opacity-35"
+              aria-label="Vergrößern"
+              disabled={focus.z >= 2.5}
+              onClick={() => nudgeZoom(0.2)}
+            >
+              +
+            </button>
+          </div>
+        </div>
+      ) : (
         <button
           type="button"
-          className="text-[11px] font-semibold text-[var(--fjord)]"
-          onClick={() => onChange({ ...defaultImageFocus })}
+          className="glass-media glass-media-empty w-full"
+          disabled={uploading}
+          onClick={() => fileInputRef.current?.click()}
         >
-          Zurücksetzen
+          <span className="text-[15px] font-semibold text-[var(--ink)]">
+            {uploading ? "Foto wird geladen…" : "Foto hinzufügen"}
+          </span>
+          <span className="text-[12px] text-[var(--ink-soft)]">
+            Kamera oder Galerie — oder später automatisch aus dem Link
+          </span>
+        </button>
+      )}
+
+      <div className="mt-2 flex flex-wrap items-center gap-1.5">
+        <button
+          type="button"
+          className="glass-chip"
+          disabled={uploading}
+          onClick={() => fileInputRef.current?.click()}
+        >
+          {uploading ? "Lädt…" : previewSrc ? "Ersetzen" : "Hochladen"}
+        </button>
+        {hasManualImage ? (
+          <button
+            type="button"
+            className="glass-chip"
+            disabled={uploading}
+            onClick={() => {
+              onImageUrlChange("");
+              setUploadError(null);
+            }}
+          >
+            Entfernen
+          </button>
+        ) : null}
+        {previewSrc ? (
+          <button
+            type="button"
+            className="glass-chip"
+            onClick={() => onFocusChange({ ...defaultImageFocus })}
+          >
+            Ausschnitt zurück
+          </button>
+        ) : null}
+        <button
+          type="button"
+          className="glass-chip"
+          data-active={showUrl}
+          onClick={() => setShowUrl((value) => !value)}
+        >
+          URL
         </button>
       </div>
-      <input type="hidden" name="image_focus" value={serializeImageFocus(focus) ?? ""} />
+
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/jpeg,image/png,image/webp,image/heic,image/heif,image/*"
+        capture="environment"
+        className="hidden"
+        onChange={(event) => {
+          const file = event.target.files?.[0] ?? null;
+          void onPickImage(file);
+        }}
+      />
+
+      {uploadError ? (
+        <p className="mt-2 text-[12px] text-[var(--danger)]">{uploadError}</p>
+      ) : previewSrc ? (
+        <p className="mt-1.5 text-[11px] text-[var(--ink-faint)]">
+          Ziehen zum Verschieben · +/− zum Zoomen
+        </p>
+      ) : null}
+
+      {showUrl ? (
+        <div className="glass-disclosure mt-2 !block">
+          <label className="form-label py-2">
+            Bild-URL
+            <input
+              type="url"
+              inputMode="url"
+              autoComplete="off"
+              value={imageUrl}
+              onChange={(e) => onImageUrlChange(e.target.value)}
+              className="glass-field mt-1.5 mb-2 px-3 py-2.5"
+              placeholder="https://…"
+            />
+          </label>
+        </div>
+      ) : null}
     </div>
   );
 }
 
+
 function SpotFormFields({
+  vacationId,
   spot,
   showOvernight,
   category,
   onCategoryChange,
+  categories,
   name,
   onNameChange,
   description,
@@ -608,10 +751,12 @@ function SpotFormFields({
   onTagsChange,
   smartLinkResolveMode = "always",
 }: {
+  vacationId: string;
   spot?: Spot | null;
   showOvernight: boolean;
   category: SpotCategory;
   onCategoryChange: (value: SpotCategory) => void;
+  categories?: VacationSpotCategory[];
   name: string;
   onNameChange: (value: string) => void;
   description: string;
@@ -641,6 +786,7 @@ function SpotFormFields({
   onTagsChange: (tags: string[]) => void;
   smartLinkResolveMode?: "always" | "onChange";
 }) {
+  const categoryChoices = activeCategoryOptions(categories);
   const derivedNights = stayNightCountFromDates(stayCheckIn || null, stayCheckOut || null);
   // Controlled only by stayNights — never ghost-fill from dates (that blocked clearing).
   const nightsValue = stayNights;
@@ -728,9 +874,9 @@ function SpotFormFields({
           onChange={(e) => onCategoryChange(e.target.value as SpotCategory)}
           className="glass-field mt-1.5 px-3 py-3"
         >
-          {categoryOptions.map((option) => (
-            <option key={option} value={option}>
-              {categoryLabels[option]}
+          {categoryChoices.map((option) => (
+            <option key={option.key} value={option.key}>
+              {option.label}
             </option>
           ))}
         </select>
@@ -899,22 +1045,24 @@ function SpotFormFields({
         </div>
       )}
 
-      {previewSrc ? (
-        <ImageFocusEditor
-          src={previewSrc}
-          focus={imageFocus}
-          onChange={onImageFocusChange}
-          openHref={previewLink?.href}
-          openLabel={previewLink?.label}
-        />
-      ) : (
-        <input type="hidden" name="image_focus" value="" />
-      )}
-      {autoImage && isAppMapPreviewUrl(autoImage) && !imageUrl ? (
-        <p className="mt-2 text-[12px] text-[var(--ink-faint)]">
-          Automatische Karten-Vorschau — unten kannst du ein echtes Foto per URL setzen.
-        </p>
-      ) : null}
+      <SpotPhotoPanel
+        vacationId={vacationId}
+        previewSrc={previewSrc}
+        isMapPreview={Boolean(
+          (imageUrl && isAppMapPreviewUrl(imageUrl)) ||
+            (autoImage && isAppMapPreviewUrl(autoImage) && !imageUrl),
+        )}
+        hasManualImage={Boolean(imageUrl)}
+        previousAutoImage={
+          spot?.image_url && !spot.image_manual && !imageUrl ? spot.image_url : null
+        }
+        imageUrl={imageUrl}
+        onImageUrlChange={onImageUrlChange}
+        focus={imageFocus}
+        onFocusChange={onImageFocusChange}
+        openHref={previewLink?.href}
+        openLabel={previewLink?.label}
+      />
 
       <label className="form-label mt-3">
         Beschreibung
@@ -971,26 +1119,6 @@ function SpotFormFields({
           ) : null}
         </div>
       </label>
-
-      <label className="form-label mt-3">
-        Vorschaubild-URL
-        {spot?.image_url && !spot.image_manual && !imageUrl ? (
-          <input type="hidden" name="previous_image_url" value={spot.image_url} />
-        ) : null}
-        <input
-          name="image_url"
-          type="text"
-          inputMode="url"
-          autoComplete="off"
-          value={imageUrl}
-          onChange={(e) => onImageUrlChange(e.target.value)}
-          className="glass-field mt-1.5 px-3 py-3"
-          placeholder="https://… · leer = automatisch"
-        />
-      </label>
-      <p className="mt-1 text-[11px] text-[var(--ink-faint)]">
-        Direkter Link zu einem Foto (https://…). Leer lassen für Ortsfoto/Karten-Vorschau.
-      </p>
 
       {showOvernight ? (
         <>
@@ -1095,7 +1223,16 @@ function applySmartLinkResult(
     }
   }
   if (result.imageUrl && !isAppMapPreviewUrl(result.imageUrl)) {
-    if (!fillEmptyOnly) {
+    // Maps/Places photos must stay auto (healable). Only listing providers
+    // fill the editable "eigenes Bild" field.
+    const listingProviders = new Set([
+      "airbnb",
+      "booking",
+      "park4night",
+      "tripadvisor",
+      "generic",
+    ]);
+    if (listingProviders.has(result.provider) && !fillEmptyOnly) {
       options.setImageUrl(result.imageUrl);
     }
   }
@@ -1109,12 +1246,26 @@ function applySmartLinkResult(
 export function CreateSpotForm({
   vacationId,
   onCreated,
+  categories,
+  variant = "inline",
+  formId = "create-spot-form",
+  hideSubmit = false,
+  onPendingChange,
 }: {
   vacationId: string;
   onCreated: () => void;
+  categories?: VacationSpotCategory[];
+  /** `sheet` = content inside GlassSheet (no card chrome). */
+  variant?: "inline" | "sheet";
+  formId?: string;
+  hideSubmit?: boolean;
+  onPendingChange?: (pending: boolean) => void;
 }) {
+  const categoryChoices = activeCategoryOptions(categories);
   const [state, action, pending] = useActionState(createSpot, initialState);
-  const [category, setCategory] = useState<SpotCategory>("stellplatz");
+  const [category, setCategory] = useState<SpotCategory>(
+    categoryChoices[0]?.key ?? "stellplatz",
+  );
   const [name, setName] = useState("");
   const [description, setDescription] = useState("");
   const [imageUrl, setImageUrl] = useState("");
@@ -1133,17 +1284,35 @@ export function CreateSpotForm({
     if (state.ok) onCreated();
   }, [state.ok, onCreated]);
 
+  useEffect(() => {
+    onPendingChange?.(pending);
+  }, [pending, onPendingChange]);
+
   return (
-    <form action={action} className="ios-group mt-3 p-4">
+    <form
+      id={formId}
+      action={action}
+      className={variant === "inline" ? "ios-group mt-3 p-4" : undefined}
+    >
       <input type="hidden" name="vacation_id" value={vacationId} />
-      <p className="text-[13px] font-semibold text-[var(--ink-soft)]">Neuen Spot hinzufügen</p>
-      <p className="mt-1 text-[12px] text-[var(--ink-faint)]">
-        Link rein — die App erkennt Quelle und füllt aus, was geht.
-      </p>
+      {variant === "inline" ? (
+        <>
+          <p className="text-[13px] font-semibold text-[var(--ink-soft)]">Neuen Spot hinzufügen</p>
+          <p className="mt-1 text-[12px] text-[var(--ink-faint)]">
+            Link rein — die App erkennt Quelle und füllt aus, was geht.
+          </p>
+        </>
+      ) : (
+        <p className="mb-2 text-[12px] text-[var(--ink-faint)]">
+          Link rein — die App erkennt Quelle und füllt aus, was geht.
+        </p>
+      )}
       <SpotFormFields
+        vacationId={vacationId}
         category={category}
         onCategoryChange={setCategory}
-        showOvernight={isOvernightCategory(category)}
+        categories={categories}
+        showOvernight={isOvernightCategory(category, categories)}
         name={name}
         onNameChange={setName}
         description={description}
@@ -1184,9 +1353,11 @@ export function CreateSpotForm({
         }
       />
       {state.error && <p className="mt-3 text-[13px] text-[var(--danger)]">{state.error}</p>}
-      <button type="submit" className="cta mt-4 w-full" disabled={pending}>
-        {pending ? "…" : "Spot speichern"}
-      </button>
+      {!hideSubmit ? (
+        <button type="submit" className="cta mt-4 w-full" disabled={pending}>
+          {pending ? "…" : "Spot speichern"}
+        </button>
+      ) : null}
     </form>
   );
 }
@@ -1198,6 +1369,11 @@ export function EditSpotForm({
   onDelete,
   onToggleRelevant,
   deleting = false,
+  variant = "panel",
+  formId = "edit-spot-form",
+  hideActions = false,
+  onPendingChange,
+  categories,
 }: {
   vacationId: string;
   spot: Spot;
@@ -1205,6 +1381,13 @@ export function EditSpotForm({
   onDelete: () => void;
   onToggleRelevant?: () => void;
   deleting?: boolean;
+  /** `page` = full detail overlay without nested panel chrome. */
+  variant?: "panel" | "page";
+  formId?: string;
+  /** Hide Abbrechen/Speichern — use place-card footer with form=formId instead. */
+  hideActions?: boolean;
+  onPendingChange?: (pending: boolean) => void;
+  categories?: VacationSpotCategory[];
 }) {
   const [state, action, pending] = useActionState(updateSpot, initialState);
   const [category, setCategory] = useState<SpotCategory>(spot.category);
@@ -1232,9 +1415,13 @@ export function EditSpotForm({
     if (state.ok) onDone();
   }, [state.ok, onDone]);
 
+  useEffect(() => {
+    onPendingChange?.(pending);
+  }, [pending, onPendingChange]);
+
   return (
-    <div className="glass-subpanel-flush">
-      <form action={action}>
+    <div className={variant === "panel" ? "glass-subpanel-flush" : undefined}>
+      <form id={formId} action={action}>
         <input type="hidden" name="vacation_id" value={vacationId} />
         <input type="hidden" name="spot_id" value={spot.id} />
         <input type="hidden" name="previous_maps_url" value={spot.maps_url ?? ""} />
@@ -1251,6 +1438,7 @@ export function EditSpotForm({
         {spot.image_url ? (
           <input type="hidden" name="previous_image_url" value={spot.image_url} />
         ) : null}
+        {variant === "panel" ? (
         <div className="mb-3 flex items-center justify-between gap-3">
           <p className="text-[13px] font-semibold text-[var(--ink-soft)]">
             Spot bearbeiten
@@ -1291,11 +1479,45 @@ export function EditSpotForm({
             </button>
           </div>
         </div>
+        ) : (
+          <div className="mb-3 flex flex-wrap gap-1.5">
+            {onToggleRelevant ? (
+              <button
+                type="button"
+                className="glass-chip"
+                data-active={!relevant}
+                disabled={pending}
+                onClick={onToggleRelevant}
+              >
+                {relevant ? "Archivieren" : "Wiederherstellen"}
+              </button>
+            ) : null}
+            <button
+              type="button"
+              className="glass-chip glass-chip-danger"
+              disabled={deleting || pending}
+              onClick={() => {
+                if (
+                  !window.confirm(
+                    `„${spot.name}“ wirklich löschen? Das lässt sich nicht rückgängig machen.`,
+                  )
+                ) {
+                  return;
+                }
+                onDelete();
+              }}
+            >
+              {deleting ? "Löschen…" : "Löschen"}
+            </button>
+          </div>
+        )}
         <SpotFormFields
+          vacationId={vacationId}
           spot={spot}
           category={category}
           onCategoryChange={setCategory}
-          showOvernight={isOvernightCategory(category)}
+          categories={categories}
+          showOvernight={isOvernightCategory(category, categories)}
           name={name}
           onNameChange={setName}
           description={description}
@@ -1343,20 +1565,378 @@ export function EditSpotForm({
           }
         />
         {state.error && <p className="mt-3 text-[13px] text-[var(--danger)]">{state.error}</p>}
-        <div className="mt-4 flex gap-2">
-          <button type="button" className="cta cta-secondary flex-1" onClick={onDone}>
-            Abbrechen
-          </button>
-          <button type="submit" className="cta flex-1" disabled={pending || deleting}>
-            {pending ? "…" : "Speichern"}
-          </button>
-        </div>
+        {!hideActions ? (
+          <div className="mt-4 flex gap-2">
+            <button type="button" className="cta cta-secondary flex-1" onClick={onDone}>
+              Abbrechen
+            </button>
+            <button type="submit" className="cta flex-1" disabled={pending || deleting}>
+              {pending ? "…" : "Speichern"}
+            </button>
+          </div>
+        ) : null}
       </form>
     </div>
   );
 }
 
-type SortMode = "newest" | "favorites" | "avg" | "mine";
+
+export function SpotDetailView({
+  spot,
+  summary,
+  ratings = [],
+  raters = [],
+  currentUserId = null,
+  categories,
+  onRate,
+  onFavorite,
+}: {
+  spot: Spot;
+  summary: SpotRatingSummary;
+  ratings?: SpotRating[];
+  raters?: RaterOption[];
+  currentUserId?: string | null;
+  categories?: VacationSpotCategory[];
+  onRate: (value: number | null) => void;
+  onFavorite: () => void;
+}) {
+  const [descOpen, setDescOpen] = useState(false);
+  const relevant = isSpotRelevant(spot);
+  const imageSrc = spot.image_url?.replace(/#.*$/, "") || null;
+  const focus = parseImageFocus(spot.image_url);
+  const focusStyle = imageFocusStyle(focus);
+  const kind = spotPreviewKind(spot);
+  const mapsLink = spot.maps_url;
+  const infoLink = spot.info_url;
+  const tags = spot.tags ?? [];
+  const description = spot.description?.trim() ?? "";
+  const longDescription = description.length > 140;
+  const categoryIcon = resolveCategoryIcon(categories, spot.category);
+  const categoryLabel = resolveCategoryLabel(categories, spot.category);
+
+  const teamRows = useMemo(() => {
+    const labelFor = (userId: string) =>
+      raters.find((rater) => rater.userId === userId)?.label ?? "Team";
+    return ratings
+      .filter(
+        (entry) =>
+          entry.spot_id === spot.id &&
+          entry.user_id !== currentUserId &&
+          (entry.rating != null || entry.is_favorite),
+      )
+      .map((entry) => ({
+        userId: entry.user_id,
+        label: labelFor(entry.user_id),
+        rating: entry.rating,
+        favorite: entry.is_favorite,
+      }))
+      .sort((a, b) => a.label.localeCompare(b.label, "de"));
+  }, [currentUserId, ratings, raters, spot.id]);
+
+  return (
+    <>
+      <div className="spot-place-hero">
+        {imageSrc ? (
+          // eslint-disable-next-line @next/next/no-img-element
+          <img
+            src={imageSrc}
+            alt=""
+            style={{
+              objectPosition: focusStyle.objectPosition,
+              transform: focusStyle.transform,
+              transformOrigin: focusStyle.objectPosition,
+            }}
+            referrerPolicy="no-referrer"
+          />
+        ) : (
+          <div className="flex h-full w-full items-center justify-center">
+            <CategoryIcon icon={categoryIcon} size={36} tone="#ffffff" />
+          </div>
+        )}
+        <span className="pointer-events-none absolute bottom-2 left-2 inline-flex rounded-full bg-[var(--surface-strong)] p-1 shadow-sm">
+          <CategoryIcon icon={categoryIcon} size={12} />
+        </span>
+        {kind === "map" ? (
+          <span className="pointer-events-none absolute top-2 left-2 rounded-full bg-[rgba(12,24,32,0.55)] px-2 py-0.5 text-[11px] font-semibold text-white">
+            Karte
+          </span>
+        ) : null}
+      </div>
+
+      <div className="spot-place-content">
+        <h2 className="spot-place-title">{spot.name}</h2>
+        <p className="spot-place-meta">
+          {categoryLabel}
+          {spot.overnight_cost ? ` · ${spot.overnight_cost}` : ""}
+          {formatStaySummary(spot) ? ` · ${formatStaySummary(spot)}` : ""}
+          {!relevant ? " · Archiv" : ""}
+        </p>
+
+        {tags.length > 0 ? (
+          <div className="mt-2 flex flex-wrap gap-1.5">
+            {tags.map((tag) => (
+              <span key={tag} className="glass-chip !cursor-default !py-1 !text-[11px]">
+                {tag}
+              </span>
+            ))}
+          </div>
+        ) : null}
+
+        {description ? (
+          <div className="mt-2">
+            <p
+              className={`text-[13px] leading-relaxed text-[var(--ink-soft)] ${
+                descOpen || !longDescription ? "" : "line-clamp-3"
+              }`}
+            >
+              {description}
+            </p>
+            {longDescription ? (
+              <button
+                type="button"
+                className="mt-1 text-[12px] font-semibold text-[var(--fjord)]"
+                onClick={() => setDescOpen((value) => !value)}
+              >
+                {descOpen ? "Weniger" : "Mehr"}
+              </button>
+            ) : null}
+          </div>
+        ) : null}
+
+        <div className="mt-3 flex flex-wrap items-center gap-2">
+          <Stars value={summary.myRating} onChange={onRate} size="sm" />
+          <button
+            type="button"
+            className={`inline-flex h-7 w-7 items-center justify-center rounded-full text-[15px] ${
+              summary.myFavorite ? "text-[var(--sun)]" : "text-black/20"
+            }`}
+            aria-label={summary.myFavorite ? "Favorit entfernen" : "Als Favorit"}
+            onClick={onFavorite}
+          >
+            {summary.myFavorite ? "♥" : "♡"}
+          </button>
+          {summary.average != null ? (
+            <span className="text-[11px] tabular-nums text-[var(--ink-faint)]">
+              Ø {formatAvg(summary.average)}
+              {summary.count > 0 ? ` · ${summary.count}` : ""}
+            </span>
+          ) : null}
+        </div>
+
+        {teamRows.length > 0 ? (
+          <ul className="mt-3 space-y-1.5">
+            {teamRows.map((row) => (
+              <li
+                key={row.userId}
+                className="flex items-center justify-between gap-2 text-[12px] text-[var(--ink-soft)]"
+              >
+                <span className="truncate font-medium">{row.label}</span>
+                <span className="flex shrink-0 items-center gap-1.5 tabular-nums">
+                  {row.favorite ? <span className="text-[var(--sun)]">♥</span> : null}
+                  {row.rating != null ? (
+                    <Stars value={row.rating} readOnly size="sm" />
+                  ) : null}
+                </span>
+              </li>
+            ))}
+          </ul>
+        ) : null}
+
+        {(mapsLink || infoLink) && (
+          <div className="mt-3 flex flex-wrap gap-1.5">
+            {mapsLink ? (
+              <a href={mapsLink} target="_blank" rel="noreferrer" className="glass-chip !py-1.5">
+                Maps
+              </a>
+            ) : null}
+            {infoLink ? (
+              <a href={infoLink} target="_blank" rel="noreferrer" className="glass-chip !py-1.5">
+                {isAirbnbUrl(infoLink) ? "Airbnb" : "Info"}
+              </a>
+            ) : null}
+          </div>
+        )}
+      </div>
+    </>
+  );
+}
+
+export type SpotSortMode = "newest" | "favorites" | "avg" | "mine";
+
+export type SpotCollectionFilterState = {
+  category: "alle" | SpotCategory;
+  sortMode: SpotSortMode;
+  showArchived: boolean;
+  minAvg: number;
+};
+
+export const defaultSpotCollectionFilters: SpotCollectionFilterState = {
+  category: "alle",
+  sortMode: "newest",
+  showArchived: false,
+  minAvg: 0,
+};
+
+export function filterSpotCollection(
+  spots: Spot[],
+  summaries: Record<string, SpotRatingSummary>,
+  filters: SpotCollectionFilterState,
+): Spot[] {
+  let list =
+    filters.category === "alle"
+      ? [...spots]
+      : spots.filter((spot) => spot.category === filters.category);
+
+  if (!filters.showArchived) {
+    list = list.filter((spot) => isSpotRelevant(spot));
+  }
+
+  if (filters.minAvg > 0) {
+    list = list.filter((spot) => {
+      const average = (summaries[spot.id] ?? emptySummary()).average;
+      return average != null && average >= filters.minAvg;
+    });
+  }
+
+  if (filters.sortMode === "favorites") {
+    list = list.filter((spot) => (summaries[spot.id] ?? emptySummary()).myFavorite);
+  } else if (filters.sortMode === "mine") {
+    list = list.filter((spot) => (summaries[spot.id] ?? emptySummary()).myRating != null);
+  }
+
+  list.sort((a, b) => {
+    const summaryA = summaries[a.id] ?? emptySummary();
+    const summaryB = summaries[b.id] ?? emptySummary();
+
+    if (filters.sortMode === "favorites") {
+      if (summaryA.myFavorite !== summaryB.myFavorite) {
+        return summaryA.myFavorite ? -1 : 1;
+      }
+      return (summaryB.average ?? -1) - (summaryA.average ?? -1);
+    }
+    if (filters.sortMode === "avg") {
+      return (summaryB.average ?? -1) - (summaryA.average ?? -1);
+    }
+    if (filters.sortMode === "mine") {
+      return (summaryB.myRating ?? -1) - (summaryA.myRating ?? -1);
+    }
+    const aRel = isSpotRelevant(a) ? 0 : 1;
+    const bRel = isSpotRelevant(b) ? 0 : 1;
+    if (aRel !== bRel) return aRel - bRel;
+    return 0;
+  });
+
+  return list;
+}
+
+export function SpotSammelnFilters({
+  filters,
+  onChange,
+  shelvedCount,
+  categories,
+  canManage = false,
+  onManage,
+}: {
+  filters: SpotCollectionFilterState;
+  onChange: (next: SpotCollectionFilterState) => void;
+  shelvedCount: number;
+  categories?: VacationSpotCategory[];
+  canManage?: boolean;
+  onManage?: () => void;
+}) {
+  const categoryChoices = activeCategoryOptions(categories);
+  return (
+    <div className="mt-3">
+      <div className="mb-3 flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
+        <button
+          type="button"
+          onClick={() => onChange({ ...filters, category: "alle" })}
+          className="glass-chip shrink-0"
+          data-active={filters.category === "alle"}
+        >
+          Alle
+        </button>
+        {categoryChoices.map((option) => (
+          <button
+            key={option.key}
+            type="button"
+            onClick={() => onChange({ ...filters, category: option.key })}
+            className="glass-chip shrink-0"
+            data-active={filters.category === option.key}
+            title={option.label}
+          >
+            <CategoryIcon
+              icon={option.icon}
+              size={14}
+              tone={filters.category === option.key ? "#ffffff" : undefined}
+            />
+            <span>{option.label}</span>
+          </button>
+        ))}
+        {canManage && onManage ? (
+          <button
+            type="button"
+            className="glass-chip shrink-0 !text-[12px]"
+            onClick={onManage}
+          >
+            Verwalten
+          </button>
+        ) : null}
+      </div>
+
+      <div className="mb-1 flex flex-wrap items-center gap-1.5">
+        {(
+          [
+            ["newest", "Neueste"],
+            ["favorites", "Favoriten"],
+            ["avg", "Beste Ø"],
+            ["mine", "Meine"],
+          ] as const
+        ).map(([value, label]) => (
+          <button
+            key={value}
+            type="button"
+            className="glass-chip !py-1.5 !text-[12px]"
+            data-active={filters.sortMode === value}
+            onClick={() => onChange({ ...filters, sortMode: value })}
+          >
+            {label}
+          </button>
+        ))}
+        {shelvedCount > 0 ? (
+          <button
+            type="button"
+            className="glass-chip !py-1.5 !text-[12px]"
+            data-active={filters.showArchived}
+            onClick={() =>
+              onChange({ ...filters, showArchived: !filters.showArchived })
+            }
+          >
+            {filters.showArchived ? "Archiv aus" : `Archiv (${shelvedCount})`}
+          </button>
+        ) : null}
+        {(
+          [
+            [0, "Alle Noten"],
+            [3, "ab 3★"],
+            [4, "ab 4★"],
+            [4.5, "ab 4,5★"],
+          ] as const
+        ).map(([value, label]) => (
+          <button
+            key={value}
+            type="button"
+            className="glass-chip !py-1.5 !text-[12px]"
+            data-active={filters.minAvg === value}
+            onClick={() => onChange({ ...filters, minAvg: value })}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+    </div>
+  );
+}
 
 function formatAvg(value: number | null): string {
   if (value == null) return "–";
@@ -1366,11 +1946,246 @@ function formatAvg(value: number | null): string {
   });
 }
 
+/** Shared Maps-style place card for Galerie + Karte. */
+export function SpotPlaceSession({
+  spot,
+  vacationId,
+  canEdit,
+  editing,
+  onEditingChange,
+  onClose,
+  summary,
+  ratings,
+  raters,
+  currentUserId,
+  categories,
+  onMyRatingPatch,
+  onChanged,
+  onSpotPatch,
+}: {
+  spot: Spot;
+  vacationId: string;
+  canEdit: boolean;
+  editing: boolean;
+  onEditingChange: (editing: boolean) => void;
+  onClose: () => void;
+  summary: SpotRatingSummary;
+  ratings: SpotRating[];
+  raters: RaterOption[];
+  currentUserId: string | null;
+  categories?: VacationSpotCategory[];
+  onMyRatingPatch: (
+    spotId: string,
+    patch: { rating?: number | null; isFavorite?: boolean },
+  ) => void;
+  onChanged: () => void;
+  onSpotPatch?: (spotId: string, patch: Partial<Spot>) => void;
+}) {
+  const formId = `edit-spot-${spot.id}`;
+  const [deleting, setDeleting] = useState(false);
+  const [pending, setPending] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  async function onDelete() {
+    setDeleting(true);
+    setError(null);
+    const { deleteSpot } = await import("./spot-actions");
+    const result = await deleteSpot(vacationId, spot.id);
+    setDeleting(false);
+    if (result.error) {
+      setError(result.error);
+      return;
+    }
+    onClose();
+    onChanged();
+  }
+
+  function toggleRelevant() {
+    if (!onSpotPatch) return;
+    const next = !isSpotRelevant(spot);
+    const previous = spot.is_relevant;
+    setError(null);
+    onSpotPatch(spot.id, { is_relevant: next });
+    void (async () => {
+      const supabase = createClient();
+      const { error: updateError } = await supabase
+        .from("spots")
+        .update({ is_relevant: next })
+        .eq("id", spot.id)
+        .eq("vacation_id", vacationId);
+      if (updateError) {
+        onSpotPatch(spot.id, { is_relevant: previous });
+        setError(updateError.message);
+      }
+    })();
+  }
+
+  function saveRating(patch: { rating?: number | null; isFavorite?: boolean }) {
+    if (!currentUserId) {
+      setError("Nicht angemeldet.");
+      return;
+    }
+    const previous = {
+      rating: summary.myRating,
+      isFavorite: summary.myFavorite,
+    };
+    setError(null);
+    onMyRatingPatch(spot.id, patch);
+    void (async () => {
+      const supabase = createClient();
+      const payload: {
+        spot_id: string;
+        user_id: string;
+        rating?: number | null;
+        is_favorite?: boolean;
+      } = {
+        spot_id: spot.id,
+        user_id: currentUserId,
+      };
+      if (patch.rating !== undefined) payload.rating = patch.rating;
+      if (patch.isFavorite !== undefined) payload.is_favorite = patch.isFavorite;
+      const { error: upsertError } = await supabase.from("spot_ratings").upsert(payload, {
+        onConflict: "spot_id,user_id",
+      });
+      if (upsertError) {
+        onMyRatingPatch(spot.id, previous);
+        setError(upsertError.message);
+      }
+    })();
+  }
+
+  return (
+    <SpotPlaceCard
+      open
+      editing={editing}
+      onClose={onClose}
+      footer={
+        editing && canEdit ? (
+          <>
+            <button
+              type="button"
+              className="cta cta-secondary"
+              disabled={pending || deleting}
+              onClick={() => onEditingChange(false)}
+            >
+              Abbrechen
+            </button>
+            <button
+              type="submit"
+              form={formId}
+              className="cta"
+              disabled={pending || deleting}
+            >
+              {pending ? "…" : "Speichern"}
+            </button>
+          </>
+        ) : (
+          <>
+            <button type="button" className="cta cta-secondary" onClick={onClose}>
+              Schließen
+            </button>
+            {canEdit ? (
+              <button
+                type="button"
+                className="cta"
+                onClick={() => onEditingChange(true)}
+              >
+                Bearbeiten
+              </button>
+            ) : null}
+          </>
+        )
+      }
+    >
+      {error ? (
+        <p className="px-3 pt-2 text-[13px] text-[var(--danger)]">{error}</p>
+      ) : null}
+      {editing && canEdit ? (
+        <div className="px-3 pb-2 pt-1">
+          <EditSpotForm
+            key={spot.id}
+            formId={formId}
+            vacationId={vacationId}
+            spot={spot}
+            variant="page"
+            hideActions
+            categories={categories}
+            deleting={deleting}
+            onDelete={() => void onDelete()}
+            onDone={() => {
+              onEditingChange(false);
+              onChanged();
+            }}
+            onToggleRelevant={onSpotPatch ? toggleRelevant : undefined}
+            onPendingChange={setPending}
+          />
+        </div>
+      ) : (
+        <SpotDetailView
+          spot={spot}
+          summary={summary}
+          ratings={ratings}
+          raters={raters}
+          currentUserId={currentUserId}
+          categories={categories}
+          onRate={(value) => saveRating({ rating: value })}
+          onFavorite={() => saveRating({ isFavorite: !summary.myFavorite })}
+        />
+      )}
+    </SpotPlaceCard>
+  );
+}
+
+function SpotCardMedia({
+  spot,
+  categories,
+}: {
+  spot: Spot;
+  categories?: VacationSpotCategory[];
+}) {
+  const [broken, setBroken] = useState(false);
+  const focus = parseImageFocus(spot.image_url);
+  const focusStyle = imageFocusStyle(focus);
+  const imageSrc = spot.image_url?.replace(/#.*$/, "") || null;
+  const showImage = Boolean(imageSrc) && !broken;
+  const categoryIcon = resolveCategoryIcon(categories, spot.category);
+
+  if (!showImage) {
+    return (
+      <div className="flex h-full w-full items-center justify-center bg-[rgba(12,24,32,0.06)]">
+        <CategoryIcon icon={categoryIcon} size={36} tone="#ffffff" />
+      </div>
+    );
+  }
+
+  return (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={imageSrc!}
+      alt=""
+      style={{
+        objectPosition: focusStyle.objectPosition,
+        transform: focusStyle.transform,
+        transformOrigin: focusStyle.objectPosition,
+      }}
+      loading="lazy"
+      referrerPolicy="no-referrer"
+      onError={() => setBroken(true)}
+    />
+  );
+}
+
 export function SpotList({
   vacationId,
   spots,
+  ratings,
   summaries,
+  raters,
   currentUserId,
+  canEdit = false,
+  filters,
+  categories,
+  onAdd,
   onChanged,
   onMyRatingPatch,
   onSpotPatch,
@@ -1381,6 +2196,10 @@ export function SpotList({
   summaries: Record<string, SpotRatingSummary>;
   raters: RaterOption[];
   currentUserId: string | null;
+  canEdit?: boolean;
+  filters: SpotCollectionFilterState;
+  categories?: VacationSpotCategory[];
+  onAdd?: () => void;
   onChanged: () => void;
   onMyRatingPatch: (
     spotId: string,
@@ -1388,383 +2207,133 @@ export function SpotList({
   ) => void;
   onSpotPatch: (spotId: string, patch: Partial<Spot>) => void;
 }) {
-  const [filter, setFilter] = useState<"alle" | SpotCategory>("alle");
-  const [sortMode, setSortMode] = useState<SortMode>("newest");
-  const [expandedId, setExpandedId] = useState<string | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [editingId, setEditingId] = useState<string | null>(null);
-  const [deletingId, setDeletingId] = useState<string | null>(null);
-  const [error, setError] = useState<string | null>(null);
 
   const shelvedCount = useMemo(
     () => spots.filter((spot) => !isSpotRelevant(spot)).length,
     [spots],
   );
 
-  const visibleSpots = useMemo(() => {
-    const list =
-      filter === "alle" ? [...spots] : spots.filter((spot) => spot.category === filter);
+  const visibleSpots = useMemo(
+    () => filterSpotCollection(spots, summaries, filters),
+    [filters, spots, summaries],
+  );
 
-    list.sort((a, b) => {
-      const summaryA = summaries[a.id] ?? emptySummary();
-      const summaryB = summaries[b.id] ?? emptySummary();
-
-      if (sortMode === "favorites") {
-        if (summaryA.myFavorite !== summaryB.myFavorite) {
-          return summaryA.myFavorite ? -1 : 1;
-        }
-        return (summaryB.average ?? -1) - (summaryA.average ?? -1);
-      }
-      if (sortMode === "avg") {
-        return (summaryB.average ?? -1) - (summaryA.average ?? -1);
-      }
-      if (sortMode === "mine") {
-        return (summaryB.myRating ?? -1) - (summaryA.myRating ?? -1);
-      }
-      // Newest: keep DB order, but sink shelved spots.
-      const aRel = isSpotRelevant(a) ? 0 : 1;
-      const bRel = isSpotRelevant(b) ? 0 : 1;
-      if (aRel !== bRel) return aRel - bRel;
-      return 0;
-    });
-
-    return list;
-  }, [filter, sortMode, spots, summaries]);
-
-  async function onDelete(spotId: string) {
-    setDeletingId(spotId);
-    setError(null);
-    const { deleteSpot } = await import("./spot-actions");
-    const result = await deleteSpot(vacationId, spotId);
-    setDeletingId(null);
-    if (result.error) {
-      setError(result.error);
-      return;
-    }
-    onChanged();
-  }
-
-  function saveRating(spotId: string, patch: { rating?: number | null; isFavorite?: boolean }) {
-    if (!currentUserId) {
-      setError("Nicht angemeldet.");
-      return;
-    }
-
-    const previous = summaries[spotId] ?? emptySummary();
-    const revert = {
-      rating: previous.myRating,
-      isFavorite: previous.myFavorite,
-    };
-
-    setError(null);
-    onMyRatingPatch(spotId, patch);
-
-    void (async () => {
-      const supabase = createClient();
-      const payload: {
-        spot_id: string;
-        user_id: string;
-        rating?: number | null;
-        is_favorite?: boolean;
-      } = {
-        spot_id: spotId,
-        user_id: currentUserId,
-      };
-      if (patch.rating !== undefined) payload.rating = patch.rating;
-      if (patch.isFavorite !== undefined) payload.is_favorite = patch.isFavorite;
-
-      const { error: upsertError } = await supabase.from("spot_ratings").upsert(payload, {
-        onConflict: "spot_id,user_id",
-      });
-
-      if (upsertError) {
-        onMyRatingPatch(spotId, revert);
-        setError(upsertError.message);
-      }
-    })();
-  }
-
-  function toggleRelevant(spot: Spot) {
-    const next = !isSpotRelevant(spot);
-    const previous = spot.is_relevant;
-    setError(null);
-    onSpotPatch(spot.id, { is_relevant: next });
-
-    void (async () => {
-      const supabase = createClient();
-      const { error: updateError } = await supabase
-        .from("spots")
-        .update({ is_relevant: next })
-        .eq("id", spot.id)
-        .eq("vacation_id", vacationId);
-
-      if (updateError) {
-        onSpotPatch(spot.id, { is_relevant: previous });
-        setError(updateError.message);
-      }
-    })();
-  }
+  const selectedSpot = useMemo(
+    () => spots.find((spot) => spot.id === selectedId) ?? null,
+    [selectedId, spots],
+  );
 
   return (
     <div className="mt-3">
-      <div className="mb-3 flex flex-wrap items-center gap-2">
-        <button
-          type="button"
-          onClick={() => setFilter("alle")}
-          className="glass-chip"
-          data-active={filter === "alle"}
-        >
-          Alle
-        </button>
-        {categoryOptions.map((option) => (
-          <button
-            key={option}
-            type="button"
-            onClick={() => setFilter(option)}
-            className="glass-chip"
-            data-active={filter === option}
-          >
-            <CategoryIcon
-              category={option}
-              size={14}
-              tone={filter === option ? "#ffffff" : undefined}
-            />
-            {categoryLabels[option]}
-          </button>
-        ))}
-      </div>
-
-      <div className="mb-3">
-        <label className="form-label">
-          Sortierung
-          <select
-            value={sortMode}
-            onChange={(e) => setSortMode(e.target.value as SortMode)}
-            className="glass-field mt-1.5 px-3 py-2.5 text-[14px]"
-          >
-            <option value="newest">Neueste</option>
-            <option value="favorites">Favoriten</option>
-            <option value="avg">Beste Ø</option>
-            <option value="mine">Meine Tops</option>
-          </select>
-        </label>
-      </div>
-
-      {shelvedCount > 0 ? (
-        <p className="mb-3 text-[12px] text-[var(--ink-faint)]">
-          {shelvedCount} Spot{shelvedCount === 1 ? "" : "s"} archiviert — unten in der
-          Liste, nicht in Plan/Karte.
-        </p>
-      ) : null}
-
-      {error && <p className="mb-3 text-[13px] text-[var(--danger)]">{error}</p>}
-
-      <div className="ios-group">
-        {visibleSpots.length === 0 ? (
-          <div className="p-5 text-[14px] text-[var(--ink-soft)]">
+      {visibleSpots.length === 0 ? (
+        <div className="ios-group p-5 text-[14px] text-[var(--ink-soft)]">
+          <p>
             {spots.length === 0
-              ? "Noch keine Spots in dieser Kategorie."
-              : "Keine Spots für diesen Filter."}
-          </div>
-        ) : (
-          visibleSpots.map((spot) => {
+              ? "Noch keine Spots — füge den ersten Ort zur Sammlung hinzu."
+              : filters.showArchived
+                ? "Keine Spots für diesen Filter."
+                : shelvedCount > 0 &&
+                    filters.category === "alle" &&
+                    filters.sortMode === "newest" &&
+                    filters.minAvg === 0
+                  ? "Keine aktiven Spots — Archiv anzeigen, um abgelegte Orte zu sehen."
+                  : "Keine Spots für diesen Filter."}
+          </p>
+          {spots.length === 0 && canEdit && onAdd ? (
+            <button type="button" className="cta mt-4 w-full" onClick={onAdd}>
+              Hinzufügen
+            </button>
+          ) : null}
+        </div>
+      ) : (
+        <div className="spot-collection">
+          {visibleSpots.map((spot) => {
             const summary = summaries[spot.id] ?? emptySummary();
-            const isExpanded = expandedId === spot.id;
-            const isEditing = editingId === spot.id;
             const relevant = isSpotRelevant(spot);
-            function toggleExpand() {
-              setExpandedId((current) => {
-                if (current === spot.id) {
-                  setEditingId(null);
-                  return null;
-                }
-                return spot.id;
-              });
-            }
+            const selected = selectedId === spot.id;
+            const tags = spot.tags ?? [];
             return (
-              <div key={spot.id}>
-                <div
-                  className={`ios-row !items-center !py-2.5 cursor-pointer ${
-                    isExpanded ? "bg-[rgba(15,110,140,0.06)]" : ""
-                  } ${relevant ? "" : "opacity-55"}`}
-                  onClick={toggleExpand}
-                >
-                  <SpotThumb
-                    spot={spot}
-                    size={52}
-                    selected={isExpanded}
-                    onOpen={toggleExpand}
-                  />
-                  <div className="min-w-0 flex-1">
-                    <div className="flex items-start gap-2">
-                      <div className="min-w-0 flex-1">
-                        <p className="truncate text-[15px] font-semibold leading-tight">
-                          {spot.name}
-                        </p>
-                        <div className="mt-0.5 text-[12px] leading-snug text-[var(--ink-soft)]">
-                          <span className="min-w-0">
-                            {categoryLabels[spot.category]}
-                            {spot.overnight_cost ? ` · ${spot.overnight_cost}` : ""}
-                            {spot.price_hint ? ` · ${spot.price_hint}` : ""}
-                            {formatStaySummary(spot)
-                              ? ` · ${formatStaySummary(spot)}`
-                              : ""}
-                            {spot.stay_status
-                              ? ` · ${stayStatusLabels[spot.stay_status]}`
-                              : ""}
-                            {spot.tags?.length
-                              ? ` · ${spot.tags.slice(0, 3).join(", ")}${
-                                  spot.tags.length > 3 ? "…" : ""
-                                }`
-                              : ""}
-                            {summary.average != null && (
-                              <>
-                                {" · "}
-                                <span className="tabular-nums text-[var(--ink-faint)]">
-                                  Ø {formatAvg(summary.average)}
-                                  {summary.count > 1 ? ` · ${summary.count}` : ""}
-                                </span>
-                              </>
-                            )}
-                          </span>
-                        </div>
-                      </div>
-                      <div
-                        className="flex shrink-0 items-center gap-0.5 pt-0.5"
-                        onClick={(event) => event.stopPropagation()}
-                        onKeyDown={(event) => event.stopPropagation()}
-                      >
-                        <Stars
-                          value={summary.myRating}
-                          onChange={(value) => saveRating(spot.id, { rating: value })}
-                          size="sm"
-                        />
-                        <button
-                          type="button"
-                          className={`inline-flex h-6 w-6 items-center justify-center text-[14px] leading-none ${
-                            summary.myFavorite ? "text-[var(--sun)]" : "text-black/18"
-                          }`}
-                          aria-label={summary.myFavorite ? "Favorit entfernen" : "Als Favorit"}
-                          onClick={() =>
-                            saveRating(spot.id, { isFavorite: !summary.myFavorite })
-                          }
-                        >
-                          {summary.myFavorite ? "♥" : "♡"}
-                        </button>
-                      </div>
-                    </div>
-
-                    {spot.description ? (
-                      <p className="mt-1 line-clamp-1 text-[12px] leading-snug text-[var(--ink-soft)]">
-                        {spot.description}
-                      </p>
-                    ) : null}
-
-                    {!relevant ? (
-                      <div
-                        className="mt-1.5"
-                        onClick={(event) => event.stopPropagation()}
-                      >
-                        <button
-                          type="button"
-                          className="glass-chip !py-1 !text-[11px]"
-                          data-active="true"
-                          title="Wiederherstellen"
-                          onClick={() => toggleRelevant(spot)}
-                        >
-                          Archiviert
-                        </button>
-                      </div>
-                    ) : null}
-                  </div>
-                  <span
-                    className={`ios-chevron shrink-0 transition-transform ${
-                      isExpanded ? "rotate-90" : ""
-                    }`}
-                    aria-hidden
-                  />
+              <button
+                key={spot.id}
+                type="button"
+                className={`spot-card ${relevant ? "" : "opacity-60"}`}
+                data-selected={selected}
+                onClick={() => {
+                  setSelectedId(spot.id);
+                  setEditingId(null);
+                }}
+              >
+                <div className="spot-card-media">
+                  <SpotCardMedia spot={spot} categories={categories} />
+                  <span className="pointer-events-none absolute bottom-2 left-2 inline-flex rounded-full bg-[var(--surface-strong)] p-1 shadow-sm">
+                    <CategoryIcon
+                      icon={resolveCategoryIcon(categories, spot.category)}
+                      size={12}
+                    />
+                  </span>
+                  {summary.myFavorite ? (
+                    <span className="pointer-events-none absolute top-2 right-2 text-[14px] text-[var(--sun)] drop-shadow">
+                      ♥
+                    </span>
+                  ) : null}
+                  {(() => {
+                    const kind = spotPreviewKind(spot);
+                    return kind === "map" ? (
+                      <span className="pointer-events-none absolute top-2 left-2 rounded-full bg-[rgba(12,24,32,0.55)] px-2 py-0.5 text-[11px] font-semibold text-white">
+                        Karte
+                      </span>
+                    ) : summary.average != null ? (
+                      <span className="pointer-events-none absolute top-2 left-2 rounded-full bg-[rgba(12,24,32,0.55)] px-2 py-0.5 text-[11px] font-semibold tabular-nums text-white">
+                        Ø {formatAvg(summary.average)}
+                      </span>
+                    ) : null;
+                  })()}
                 </div>
-
-                {isExpanded ? (
-                  <div
-                    className="flex flex-wrap gap-1.5 border-t border-black/5 bg-[rgba(255,255,255,0.28)] px-4 py-2.5"
-                    onClick={(event) => event.stopPropagation()}
-                  >
-                    <button
-                      type="button"
-                      className="glass-chip !py-1.5 !text-[12px]"
-                      data-active={isEditing ? "true" : undefined}
-                      onClick={() =>
-                        setEditingId((current) => (current === spot.id ? null : spot.id))
-                      }
-                    >
-                      {isEditing ? "Formular schließen" : "Bearbeiten"}
-                    </button>
-                    {spot.maps_url ? (
-                      <a
-                        href={spot.maps_url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="glass-chip !py-1.5 !text-[12px]"
-                      >
-                        Karte öffnen
-                      </a>
-                    ) : null}
-                    {spot.info_url ? (
-                      <a
-                        href={spot.info_url}
-                        target="_blank"
-                        rel="noreferrer"
-                        className="glass-chip !py-1.5 !text-[12px]"
-                      >
-                        {isAirbnbUrl(spot.info_url) ? "Airbnb öffnen" : "Seite öffnen"}
-                      </a>
-                    ) : null}
-                    <button
-                      type="button"
-                      className="glass-chip !py-1.5 !text-[12px]"
-                      data-active={!relevant ? "true" : undefined}
-                      onClick={() => toggleRelevant(spot)}
-                    >
-                      {relevant ? "Archivieren" : "Wiederherstellen"}
-                    </button>
-                    <button
-                      type="button"
-                      className="glass-chip glass-chip-danger !py-1.5 !text-[12px]"
-                      disabled={deletingId === spot.id}
-                      onClick={() => {
-                        if (
-                          !window.confirm(
-                            `„${spot.name}“ wirklich löschen? Das lässt sich nicht rückgängig machen.`,
-                          )
-                        ) {
-                          return;
-                        }
-                        void onDelete(spot.id);
-                      }}
-                    >
-                      {deletingId === spot.id ? "Löschen…" : "Löschen"}
-                    </button>
-                  </div>
-                ) : null}
-
-                {isEditing ? (
-                  <EditSpotForm
-                    vacationId={vacationId}
-                    spot={spot}
-                    deleting={deletingId === spot.id}
-                    onDelete={() => onDelete(spot.id)}
-                    onDone={() => {
-                      setEditingId(null);
-                      onChanged();
-                    }}
-                    onToggleRelevant={() => toggleRelevant(spot)}
-                  />
-                ) : null}
-              </div>
+                <div className="spot-card-body">
+                  <p className="truncate text-[14px] font-semibold leading-tight text-[var(--ink)]">
+                    {spot.name}
+                  </p>
+                  <p className="mt-0.5 truncate text-[12px] text-[var(--ink-soft)]">
+                    {resolveCategoryLabel(categories, spot.category)}
+                    {!relevant ? " · Archiv" : ""}
+                    {formatStaySummary(spot) ? ` · ${formatStaySummary(spot)}` : ""}
+                  </p>
+                  {tags.length > 0 ? (
+                    <p className="mt-0.5 truncate text-[11px] text-[var(--ink-faint)]">
+                      {tags.slice(0, 2).join(" · ")}
+                      {tags.length > 2 ? "…" : ""}
+                    </p>
+                  ) : null}
+                </div>
+              </button>
             );
-          })
-        )}
-      </div>
+          })}
+        </div>
+      )}
+
+      {selectedSpot ? (
+        <SpotPlaceSession
+          spot={selectedSpot}
+          vacationId={vacationId}
+          canEdit={canEdit}
+          editing={editingId === selectedSpot.id}
+          onEditingChange={(next) => setEditingId(next ? selectedSpot.id : null)}
+          onClose={() => {
+            setSelectedId(null);
+            setEditingId(null);
+          }}
+          summary={summaries[selectedSpot.id] ?? emptySummary()}
+          ratings={ratings}
+          raters={raters}
+          currentUserId={currentUserId}
+          categories={categories}
+          onMyRatingPatch={onMyRatingPatch}
+          onChanged={onChanged}
+          onSpotPatch={onSpotPatch}
+        />
+      ) : null}
     </div>
   );
 }

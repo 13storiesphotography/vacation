@@ -56,6 +56,7 @@ export function TeamPanel({
   currentUserId,
   canManageTeam,
   onChanged,
+  embedded = false,
 }: {
   vacationId: string;
   members: Member[];
@@ -63,6 +64,8 @@ export function TeamPanel({
   currentUserId: string | null;
   canManageTeam: boolean;
   onChanged: () => Promise<void> | void;
+  /** Hide page title when nested under Mehr. */
+  embedded?: boolean;
 }) {
   const origin = typeof window !== "undefined" ? window.location.origin : null;
   const [message, setMessage] = useState<string | null>(null);
@@ -341,12 +344,20 @@ export function TeamPanel({
 
   return (
     <div>
-      <h1 className="display text-2xl">Team</h1>
-      <p className="tab-subtitle">
-        {members.length} Mitglied{members.length === 1 ? "" : "er"}
-      </p>
+      {embedded ? (
+        <p className="tab-subtitle !mt-0 mb-3">
+          {members.length} Mitglied{members.length === 1 ? "" : "er"}
+        </p>
+      ) : (
+        <>
+          <h1 className="display text-2xl">Team</h1>
+          <p className="tab-subtitle">
+            {members.length} Mitglied{members.length === 1 ? "" : "er"}
+          </p>
+        </>
+      )}
 
-      <div className="ios-group mt-4 overflow-hidden">
+      <div className={`ios-group overflow-hidden ${embedded ? "mt-0" : "mt-4"}`}>
         {sortedMembers.length === 0 ? (
           <p className="px-4 py-5 text-[14px] text-[var(--ink-soft)]">
             Noch niemand im Team.
