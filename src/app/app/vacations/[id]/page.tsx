@@ -495,6 +495,7 @@ export default function VacationDetailPage() {
               currentUserId={currentUserId}
               canManageTeam={canManageTeam}
               onChanged={load}
+              embedded
             />
           </div>
 
@@ -503,6 +504,7 @@ export default function VacationDetailPage() {
               vacation={vacation}
               spots={spots}
               canEdit={canEditCosts}
+              embedded
               onVacationPatch={(patch) =>
                 setVacation((prev) => (prev ? { ...prev, ...patch } : prev))
               }

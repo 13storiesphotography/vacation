@@ -149,20 +149,37 @@ function StatusStrip({
         {featured.vacation.region ? ` · ${featured.vacation.region}` : ""}
       </p>
       {onOpenTab ? (
-        <button
-          type="button"
-          className="glass-chip shrink-0"
-          onClick={() => onOpenTab("planen")}
-        >
-          Planen
-        </button>
+        <div className="flex shrink-0 flex-wrap gap-1.5">
+          <button
+            type="button"
+            className="glass-chip"
+            onClick={() => onOpenTab("sammeln")}
+          >
+            Sammeln
+          </button>
+          <button
+            type="button"
+            className="glass-chip"
+            onClick={() => onOpenTab("planen")}
+          >
+            Planen
+          </button>
+        </div>
       ) : (
-        <Link
-          href={`/app/vacations/${featured.vacation.id}?tab=planen`}
-          className="glass-chip shrink-0"
-        >
-          Planen
-        </Link>
+        <div className="flex shrink-0 flex-wrap gap-1.5">
+          <Link
+            href={`/app/vacations/${featured.vacation.id}?tab=sammeln`}
+            className="glass-chip"
+          >
+            Sammeln
+          </Link>
+          <Link
+            href={`/app/vacations/${featured.vacation.id}?tab=planen`}
+            className="glass-chip"
+          >
+            Planen
+          </Link>
+        </div>
       )}
     </div>
   );

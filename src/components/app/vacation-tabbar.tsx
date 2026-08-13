@@ -1,7 +1,7 @@
 "use client";
 
 export const vacationTabs = [
-  { id: "ueberblick", label: "Überblick", short: "Überblick" },
+  { id: "ueberblick", label: "Überblick", short: "Home" },
   { id: "sammeln", label: "Sammeln", short: "Sammeln" },
   { id: "planen", label: "Planen", short: "Planen" },
   { id: "mehr", label: "Mehr", short: "Mehr" },

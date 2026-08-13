@@ -1550,11 +1550,11 @@ export function SpotList({
 
   return (
     <div className="mt-3">
-      <div className="mb-3 flex flex-wrap items-center gap-2">
+      <div className="mb-3 flex gap-2 overflow-x-auto pb-1 [-ms-overflow-style:none] [scrollbar-width:none] [&::-webkit-scrollbar]:hidden">
         <button
           type="button"
           onClick={() => setFilter("alle")}
-          className="glass-chip"
+          className="glass-chip shrink-0"
           data-active={filter === "alle"}
         >
           Alle
@@ -1564,41 +1564,47 @@ export function SpotList({
             key={option}
             type="button"
             onClick={() => setFilter(option)}
-            className="glass-chip"
+            className="glass-chip shrink-0 !px-2.5"
             data-active={filter === option}
+            aria-label={categoryLabels[option]}
+            title={categoryLabels[option]}
           >
             <CategoryIcon
               category={option}
-              size={14}
+              size={16}
               tone={filter === option ? "#ffffff" : undefined}
             />
-            {categoryLabels[option]}
           </button>
         ))}
       </div>
 
-      <div className="mb-3 flex flex-wrap items-end gap-3">
-        <label className="form-label min-w-[10rem] flex-1">
-          Sortierung
-          <select
-            value={sortMode}
-            onChange={(e) => setSortMode(e.target.value as SortMode)}
-            className="glass-field mt-1.5 px-3 py-2.5 text-[14px]"
+      <div className="mb-3 flex flex-wrap items-center gap-1.5">
+        {(
+          [
+            ["newest", "Neueste"],
+            ["favorites", "Favoriten"],
+            ["avg", "Beste Ø"],
+            ["mine", "Meine"],
+          ] as const
+        ).map(([value, label]) => (
+          <button
+            key={value}
+            type="button"
+            className="glass-chip !py-1.5 !text-[12px]"
+            data-active={sortMode === value}
+            onClick={() => setSortMode(value)}
           >
-            <option value="newest">Neueste</option>
-            <option value="favorites">Favoriten</option>
-            <option value="avg">Beste Ø</option>
-            <option value="mine">Meine Tops</option>
-          </select>
-        </label>
+            {label}
+          </button>
+        ))}
         {shelvedCount > 0 ? (
           <button
             type="button"
-            className="glass-chip mb-0.5"
+            className="glass-chip !py-1.5 !text-[12px]"
             data-active={showArchived}
             onClick={() => setShowArchived((value) => !value)}
           >
-            {showArchived ? "Archiv ausblenden" : `Archiv (${shelvedCount})`}
+            {showArchived ? "Archiv aus" : `Archiv (${shelvedCount})`}
           </button>
         ) : null}
       </div>
