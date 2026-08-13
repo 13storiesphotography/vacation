@@ -24,6 +24,12 @@ type SheetState =
   | { kind: "confirm"; memberId: string }
   | null;
 
+type InviteLinkState = {
+  url: string;
+  email: string;
+  memberId?: string;
+};
+
 function statusLabel(status: Member["status"]) {
   return status === "invited" ? "Eingeladen" : "Aktiv";
 }
@@ -32,6 +38,17 @@ function memberInviteLink(member: Member, origin: string | null): string | null 
   const token = member.invite_token?.trim();
   if (!token || member.status !== "invited" || !origin) return null;
   return `${origin}/invite/${token}`;
+}
+
+function formatInviteExpiry(value: string | null): string | null {
+  if (!value) return null;
+  const date = new Date(value);
+  if (!Number.isFinite(date.getTime())) return null;
+  return new Intl.DateTimeFormat("de-DE", {
+    day: "numeric",
+    month: "short",
+    year: "numeric",
+  }).format(date);
 }
 
 function memberDisplayName(member: Member, profiles: Profile[]): string {
@@ -47,6 +64,13 @@ function memberDisplayName(member: Member, profiles: Profile[]): string {
 function memberInitial(name: string, email: string): string {
   const source = name.trim() || email.trim();
   return (source.slice(0, 1) || "?").toUpperCase();
+}
+
+function inviteLinkMatchesMember(member: Member, link: InviteLinkState) {
+  return (
+    member.id === link.memberId ||
+    member.email.toLowerCase() === link.email.toLowerCase()
+  );
 }
 
 export function TeamPanel({
@@ -71,7 +95,7 @@ export function TeamPanel({
   const [sheet, setSheet] = useState<SheetState>(null);
   const [inviteEmail, setInviteEmail] = useState("");
   const [inviteRole, setInviteRole] = useState<Exclude<MemberRole, "custom">>("editor");
-  const [inviteLink, setInviteLink] = useState<string | null>(null);
+  const [inviteLink, setInviteLink] = useState<InviteLinkState | null>(null);
   const [inviting, setInviting] = useState(false);
   const inviteLinkInputRef = useRef<HTMLInputElement | null>(null);
 
@@ -80,18 +104,47 @@ export function TeamPanel({
     return members.find((member) => member.id === sheet.memberId) ?? null;
   }, [members, sheet]);
 
+  const inviteLinkAttached = useMemo(() => {
+    if (!inviteLink) return false;
+    return members.some((member) => inviteLinkMatchesMember(member, inviteLink));
+  }, [inviteLink, members]);
+
   useEffect(() => {
     if (!inviteLink || !inviteLinkInputRef.current) return;
     inviteLinkInputRef.current.focus();
     inviteLinkInputRef.current.select();
   }, [inviteLink]);
 
+  // After reload, bind a fresh invite to the matching member row.
+  useEffect(() => {
+    if (!inviteLink || inviteLink.memberId) return;
+    const match = members.find(
+      (member) => member.email.toLowerCase() === inviteLink.email.toLowerCase(),
+    );
+    if (!match) return;
+    setInviteLink((current) =>
+      current && !current.memberId ? { ...current, memberId: match.id } : current,
+    );
+  }, [inviteLink, members]);
+
   function closeSheet() {
     setSheet(null);
   }
 
-  async function finishInviteLinkCopy(link: string, note?: string) {
-    setInviteLink(link);
+  function clearInviteLink() {
+    setInviteLink(null);
+  }
+
+  async function finishInviteLinkCopy(
+    link: string,
+    target: { email: string; memberId?: string },
+    note?: string,
+  ) {
+    setInviteLink({
+      url: link,
+      email: target.email.trim().toLowerCase(),
+      memberId: target.memberId,
+    });
     setError(null);
     try {
       const result = await copyTextToClipboard(link);
@@ -114,6 +167,44 @@ export function TeamPanel({
     setMessage("Link bereit — Feld antippen, markieren und kopieren.");
   }
 
+  function renderInviteLinkCard(link: InviteLinkState) {
+    return (
+      <div className="glass-subpanel p-3">
+        <p className="text-[12px] font-semibold uppercase tracking-wide text-[var(--ink-faint)]">
+          Einladungslink für
+        </p>
+        <p className="mt-0.5 truncate text-[14px] font-semibold">{link.email}</p>
+        <p className="mt-1 text-[12px] text-[var(--ink-soft)]">
+          Nur an diese Person schicken — damit tritt sie dem Team bei.
+        </p>
+        <div className="mt-2 flex flex-col gap-2 sm:flex-row">
+          <input
+            ref={inviteLinkInputRef}
+            readOnly
+            className="glass-field px-3 py-3 text-[13px]"
+            value={link.url}
+            aria-label={`Einladungslink für ${link.email}`}
+            onFocus={(event) => event.currentTarget.select()}
+          />
+          <button
+            type="button"
+            className="glass-chip shrink-0"
+            onClick={() => void finishInviteLinkCopy(link.url, link)}
+          >
+            Link teilen
+          </button>
+        </div>
+        <button
+          type="button"
+          className="mt-2 text-[12px] font-semibold text-[var(--ink-faint)]"
+          onClick={clearInviteLink}
+        >
+          Link ausblenden
+        </button>
+      </div>
+    );
+  }
+
   async function onCopyInviteLink(member: Member) {
     setError(null);
     setMessage(null);
@@ -128,7 +219,7 @@ export function TeamPanel({
       (expiresAt == null || !Number.isFinite(expiresAt) || expiresAt > Date.now());
 
     if (existing && stillValid) {
-      await finishInviteLinkCopy(existing);
+      await finishInviteLinkCopy(existing, { email: member.email, memberId: member.id });
       return;
     }
 
@@ -152,7 +243,11 @@ export function TeamPanel({
         setError(payload.error ?? "Link konnte nicht erzeugt werden.");
         return;
       }
-      await finishInviteLinkCopy(payload.inviteLink, payload.note);
+      await finishInviteLinkCopy(
+        payload.inviteLink,
+        { email: member.email, memberId: member.id },
+        payload.note,
+      );
       await onChanged();
     } catch (err) {
       setError(friendlyClipboardError(err));
@@ -186,15 +281,20 @@ export function TeamPanel({
         return;
       }
       if (payload.inviteLink) {
-        setInviteLink(payload.inviteLink);
+        const target = { email: member.email, memberId: member.id };
+        setInviteLink({
+          url: payload.inviteLink,
+          email: member.email.toLowerCase(),
+          memberId: member.id,
+        });
         if (payload.emailSent === false) {
           setMessage(
             payload.note ??
-              "Link erneuert, aber die E-Mail ging nicht raus — bitte Link teilen.",
+              `Link für ${member.email} erneuert, aber die E-Mail ging nicht raus — bitte Link teilen.`,
           );
         } else {
           setMessage(payload.note ?? "Einladung erneut gesendet.");
-          await finishInviteLinkCopy(payload.inviteLink, payload.note);
+          await finishInviteLinkCopy(payload.inviteLink, target, payload.note);
         }
       } else {
         setMessage(payload.note ?? "Einladung erneut gesendet.");
@@ -210,6 +310,7 @@ export function TeamPanel({
   async function onUpdateRole(memberId: string, role: Exclude<MemberRole, "custom">) {
     setError(null);
     setMessage(null);
+    clearInviteLink();
     setBusyId(memberId);
     try {
       const response = await fetch("/api/team-members", {
@@ -234,6 +335,7 @@ export function TeamPanel({
   async function onTogglePermission(member: Member, key: PermissionKey, value: boolean) {
     setError(null);
     setMessage(null);
+    clearInviteLink();
     setBusyId(member.id);
     try {
       const response = await fetch("/api/team-members", {
@@ -259,6 +361,9 @@ export function TeamPanel({
     const isInvite = member.status === "invited";
     setError(null);
     setMessage(null);
+    if (inviteLink && inviteLinkMatchesMember(member, inviteLink)) {
+      clearInviteLink();
+    }
     setBusyId(member.id);
     closeSheet();
     const response = await fetch("/api/members", {
@@ -280,13 +385,14 @@ export function TeamPanel({
     event.preventDefault();
     setError(null);
     setMessage(null);
-    setInviteLink(null);
+    clearInviteLink();
 
     if (!isCompleteEmail(inviteEmail)) {
       setError("Bitte gib eine vollständige E-Mail-Adresse ein (z. B. name@domain.de).");
       return;
     }
 
+    const email = inviteEmail.trim().toLowerCase();
     setInviting(true);
     try {
       const response = await fetch("/api/invite", {
@@ -294,7 +400,7 @@ export function TeamPanel({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           vacationId,
-          email: inviteEmail.trim().toLowerCase(),
+          email,
           role: inviteRole,
         }),
       });
@@ -309,18 +415,19 @@ export function TeamPanel({
         return;
       }
       if (payload.inviteLink) {
-        setInviteLink(payload.inviteLink);
+        const target = { email };
+        setInviteLink({ url: payload.inviteLink, email });
         if (payload.emailSent === false) {
           setMessage(
             payload.note ??
-              "Person ist eingeladen, aber die E-Mail ging nicht raus — bitte Link teilen.",
+              `Einladung für ${email} angelegt, aber die E-Mail ging nicht raus — bitte den Link teilen.`,
           );
         } else {
-          setMessage(payload.note ?? "Einladung gesendet.");
-          await finishInviteLinkCopy(payload.inviteLink, payload.note);
+          setMessage(payload.note ?? `Einladung an ${email} gesendet.`);
+          await finishInviteLinkCopy(payload.inviteLink, target, payload.note);
         }
       } else {
-        setMessage(payload.note ?? "Einladung gesendet.");
+        setMessage(payload.note ?? `Einladung an ${email} gesendet.`);
       }
       setInviteEmail("");
       closeSheet();
@@ -360,78 +467,71 @@ export function TeamPanel({
             const canManage = canManageTeam && !isSelf;
             const name = memberDisplayName(member, profiles);
             const pending = member.status === "invited";
+            const expiry = pending ? formatInviteExpiry(member.invite_expires_at) : null;
+            const showLink =
+              inviteLink != null && inviteLinkMatchesMember(member, inviteLink);
 
             return (
-              <button
-                key={member.id}
-                type="button"
-                className="team-member-row ios-row !items-center"
-                disabled={!canManage || busy}
-                onClick={() => {
-                  if (!canManage || busy) return;
-                  setError(null);
-                  setSheet({ kind: "actions", memberId: member.id });
-                }}
-              >
-                <div
-                  className="team-avatar"
-                  data-pending={pending ? "true" : undefined}
-                  aria-hidden
+              <div key={member.id}>
+                <button
+                  type="button"
+                  className="team-member-row ios-row !items-center"
+                  disabled={!canManage || busy}
+                  onClick={() => {
+                    if (!canManage || busy) return;
+                    setError(null);
+                    setSheet({ kind: "actions", memberId: member.id });
+                  }}
                 >
-                  {memberInitial(name, member.email)}
-                </div>
-                <div className="min-w-0 flex-1">
-                  <p className="truncate text-[15px] font-semibold">
-                    {name}
-                    {isSelf ? (
-                      <span className="ml-1.5 text-[12px] font-semibold text-[var(--ink-faint)]">
-                        Du
-                      </span>
-                    ) : null}
-                  </p>
-                  <p className="truncate text-[13px] text-[var(--ink-soft)]">{member.email}</p>
-                  <p className="mt-1 text-[12px] font-semibold uppercase tracking-wide text-[var(--ink-faint)]">
-                    {roleLabel(member.role)} · {statusLabel(member.status)}
-                  </p>
-                </div>
-                {canManage ? (
-                  <span className="shrink-0 text-[18px] font-light text-[var(--ink-faint)]" aria-hidden>
-                    ›
-                  </span>
+                  <div
+                    className="team-avatar"
+                    data-pending={pending ? "true" : undefined}
+                    aria-hidden
+                  >
+                    {memberInitial(name, member.email)}
+                  </div>
+                  <div className="min-w-0 flex-1">
+                    <p className="truncate text-[15px] font-semibold">
+                      {name}
+                      {isSelf ? (
+                        <span className="ml-1.5 text-[12px] font-semibold text-[var(--ink-faint)]">
+                          Du
+                        </span>
+                      ) : null}
+                    </p>
+                    <p className="truncate text-[13px] text-[var(--ink-soft)]">{member.email}</p>
+                    <p className="mt-1 text-[12px] font-semibold uppercase tracking-wide text-[var(--ink-faint)]">
+                      {roleLabel(member.role)} · {statusLabel(member.status)}
+                      {expiry ? ` · bis ${expiry}` : ""}
+                    </p>
+                  </div>
+                  {canManage ? (
+                    <span
+                      className="shrink-0 text-[18px] font-light text-[var(--ink-faint)]"
+                      aria-hidden
+                    >
+                      ›
+                    </span>
+                  ) : null}
+                </button>
+                {showLink && inviteLink ? (
+                  <div className="border-t border-black/5 bg-[rgba(255,255,255,0.28)] px-3 py-3">
+                    {renderInviteLinkCard(inviteLink)}
+                  </div>
                 ) : null}
-              </button>
+              </div>
             );
           })
         )}
       </div>
 
-      {(message || error || inviteLink) && (
+      {(message || error || (inviteLink && !inviteLinkAttached)) && (
         <div className="mt-3 space-y-2">
-          {inviteLink ? (
-            <div className="glass-subpanel p-3">
-              <p className="text-[12px] font-semibold uppercase tracking-wide text-[var(--ink-faint)]">
-                Einladungslink
-              </p>
-              <div className="mt-2 flex flex-col gap-2 sm:flex-row">
-                <input
-                  ref={inviteLinkInputRef}
-                  readOnly
-                  className="glass-field px-3 py-3 text-[13px]"
-                  value={inviteLink}
-                  onFocus={(event) => event.currentTarget.select()}
-                />
-                <button
-                  type="button"
-                  className="glass-chip shrink-0"
-                  onClick={() => void finishInviteLinkCopy(inviteLink)}
-                >
-                  Link teilen
-                </button>
-              </div>
-            </div>
-          ) : null}
+          {inviteLink && !inviteLinkAttached ? renderInviteLinkCard(inviteLink) : null}
           {message ? <p className="text-[13px] text-[var(--pine)]">{message}</p> : null}
-          {error ? <p className="text-[13px] text-[var(--danger)]">{error}</p> : null}
+          {error && sheet?.kind !== "invite" ? (
+            <p className="text-[13px] text-[var(--danger)]">{error}</p>
+          ) : null}
         </div>
       )}
 
@@ -442,7 +542,7 @@ export function TeamPanel({
           onClick={() => {
             setError(null);
             setMessage(null);
-            setInviteLink(null);
+            clearInviteLink();
             setSheet({ kind: "invite" });
           }}
         >
@@ -573,7 +673,7 @@ export function TeamPanel({
       <GlassSheet
         open={sheet?.kind === "invite"}
         title="Person einladen"
-        subtitle="E-Mail und Rolle wählen — danach Link teilen oder Mail senden."
+        subtitle="E-Mail und Rolle wählen — danach erscheint der Link bei dieser Person."
         onClose={closeSheet}
       >
         <form
