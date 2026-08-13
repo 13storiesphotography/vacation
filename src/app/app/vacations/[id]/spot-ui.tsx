@@ -451,24 +451,61 @@ function SpotThumb({
   );
 }
 
-function ImageFocusEditor({
-  src,
+function SpotPhotoPanel({
+  vacationId,
+  previewSrc,
+  isMapPreview,
+  hasManualImage,
+  previousAutoImage,
+  imageUrl,
+  onImageUrlChange,
   focus,
-  onChange,
+  onFocusChange,
   openHref,
   openLabel,
 }: {
-  src: string;
+  vacationId: string;
+  previewSrc: string | null;
+  isMapPreview: boolean;
+  hasManualImage: boolean;
+  previousAutoImage: string | null;
+  imageUrl: string;
+  onImageUrlChange: (value: string) => void;
   focus: ImageFocus;
-  onChange: (value: ImageFocus) => void;
+  onFocusChange: (value: ImageFocus) => void;
   openHref?: string | null;
   openLabel?: string;
 }) {
+  const [uploading, setUploading] = useState(false);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [showUrl, setShowUrl] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement | null>(null);
   const dragging = useRef(false);
   const last = useRef<{ x: number; y: number } | null>(null);
   const style = imageFocusStyle(focus);
 
+  async function onPickImage(file: File | null) {
+    if (!file) return;
+    setUploadError(null);
+    setUploading(true);
+    try {
+      const result = await uploadSpotImage({ vacationId, file });
+      if ("error" in result) {
+        setUploadError(result.error);
+        return;
+      }
+      onImageUrlChange(result.url);
+      onFocusChange({ ...defaultImageFocus });
+    } catch {
+      setUploadError("Upload fehlgeschlagen.");
+    } finally {
+      setUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = "";
+    }
+  }
+
   function onPointerDown(event: ReactPointerEvent<HTMLDivElement>) {
+    if (!previewSrc) return;
     dragging.current = true;
     last.current = { x: event.clientX, y: event.clientY };
     event.currentTarget.setPointerCapture(event.pointerId);
@@ -479,8 +516,7 @@ function ImageFocusEditor({
     const dx = event.clientX - last.current.x;
     const dy = event.clientY - last.current.y;
     last.current = { x: event.clientX, y: event.clientY };
-    // Dragging the image right reveals the left side → decrease focus x.
-    onChange({
+    onFocusChange({
       ...focus,
       x: Math.min(100, Math.max(0, focus.x - dx * 0.35)),
       y: Math.min(100, Math.max(0, focus.y - dy * 0.35)),
@@ -499,81 +535,182 @@ function ImageFocusEditor({
 
   function nudgeZoom(delta: number) {
     const next = Math.round(Math.min(2.5, Math.max(1, focus.z + delta)) * 100) / 100;
-    onChange({ ...focus, z: next });
+    onFocusChange({ ...focus, z: next });
   }
 
   return (
     <div className="mt-3">
-      <div
-        className="relative h-44 w-full cursor-grab overflow-hidden rounded-[14px] active:cursor-grabbing touch-none"
-        onPointerDown={onPointerDown}
-        onPointerMove={onPointerMove}
-        onPointerUp={onPointerUp}
-        onPointerCancel={onPointerUp}
-      >
-        {/* eslint-disable-next-line @next/next/no-img-element */}
-        <img
-          src={src}
-          alt=""
-          draggable={false}
-          className="h-full w-full select-none object-cover"
-          style={{
-            objectPosition: style.objectPosition,
-            transform: style.transform,
-            transformOrigin: style.objectPosition,
-          }}
-          referrerPolicy="no-referrer"
-        />
-        {openHref ? (
-          <ImageLinkOverlay
-            href={openHref}
-            label={openLabel ?? "Link öffnen"}
-            className="absolute top-2 right-2 z-[1]"
-          />
-        ) : null}
-        <div
-          className="absolute bottom-2 right-2 flex items-center gap-1 rounded-full bg-[rgba(20,36,48,0.72)] p-1 shadow-md backdrop-blur-sm"
-          onPointerDown={(event) => event.stopPropagation()}
-        >
-          <button
-            type="button"
-            className="inline-flex h-8 w-8 items-center justify-center rounded-full text-[18px] font-semibold leading-none text-white disabled:opacity-35"
-            aria-label="Verkleinern"
-            disabled={focus.z <= 1}
-            onClick={() => nudgeZoom(-0.2)}
-          >
-            −
-          </button>
-          <span className="min-w-[2.4rem] text-center text-[11px] font-semibold tabular-nums text-white/90">
-            {Math.round(focus.z * 100)}%
+      <div className="mb-1.5 flex items-center justify-between gap-2">
+        <p className="form-label !mb-0">Foto</p>
+        {isMapPreview && !hasManualImage ? (
+          <span className="glass-chip !py-1 !text-[11px]">Karten-Vorschau</span>
+        ) : hasManualImage ? (
+          <span className="glass-chip !py-1 !text-[11px]" data-active="true">
+            Eigenes Foto
           </span>
-          <button
-            type="button"
-            className="inline-flex h-8 w-8 items-center justify-center rounded-full text-[18px] font-semibold leading-none text-white disabled:opacity-35"
-            aria-label="Vergrößern"
-            disabled={focus.z >= 2.5}
-            onClick={() => nudgeZoom(0.2)}
-          >
-            +
-          </button>
-        </div>
+        ) : previewSrc ? (
+          <span className="glass-chip !py-1 !text-[11px]">Ortsfoto</span>
+        ) : null}
       </div>
-      <div className="mt-1.5 flex items-center justify-between gap-2">
-        <p className="text-[11px] text-[var(--ink-faint)]">
-          Ziehen zum Verschieben · +/− zum Zoomen
-        </p>
+
+      {previousAutoImage ? (
+        <input type="hidden" name="previous_image_url" value={previousAutoImage} />
+      ) : null}
+      <input type="hidden" name="image_url" value={imageUrl} />
+      <input type="hidden" name="image_focus" value={serializeImageFocus(focus) ?? ""} />
+
+      {previewSrc ? (
+        <div
+          className="glass-media relative h-44 w-full cursor-grab active:cursor-grabbing touch-none"
+          onPointerDown={onPointerDown}
+          onPointerMove={onPointerMove}
+          onPointerUp={onPointerUp}
+          onPointerCancel={onPointerUp}
+        >
+          {/* eslint-disable-next-line @next/next/no-img-element */}
+          <img
+            src={previewSrc}
+            alt=""
+            draggable={false}
+            className="h-full w-full select-none object-cover"
+            style={{
+              objectPosition: style.objectPosition,
+              transform: style.transform,
+              transformOrigin: style.objectPosition,
+            }}
+            referrerPolicy="no-referrer"
+          />
+          {openHref ? (
+            <ImageLinkOverlay
+              href={openHref}
+              label={openLabel ?? "Link öffnen"}
+              className="absolute top-2 right-2 z-[1]"
+            />
+          ) : null}
+          <div
+            className="absolute bottom-2 right-2 flex items-center gap-1 rounded-full bg-[rgba(20,36,48,0.55)] p-1 shadow-md backdrop-blur-md"
+            onPointerDown={(event) => event.stopPropagation()}
+          >
+            <button
+              type="button"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-full text-[18px] font-semibold leading-none text-white disabled:opacity-35"
+              aria-label="Verkleinern"
+              disabled={focus.z <= 1}
+              onClick={() => nudgeZoom(-0.2)}
+            >
+              −
+            </button>
+            <span className="min-w-[2.4rem] text-center text-[11px] font-semibold tabular-nums text-white/90">
+              {Math.round(focus.z * 100)}%
+            </span>
+            <button
+              type="button"
+              className="inline-flex h-8 w-8 items-center justify-center rounded-full text-[18px] font-semibold leading-none text-white disabled:opacity-35"
+              aria-label="Vergrößern"
+              disabled={focus.z >= 2.5}
+              onClick={() => nudgeZoom(0.2)}
+            >
+              +
+            </button>
+          </div>
+        </div>
+      ) : (
         <button
           type="button"
-          className="text-[11px] font-semibold text-[var(--fjord)]"
-          onClick={() => onChange({ ...defaultImageFocus })}
+          className="glass-media glass-media-empty w-full"
+          disabled={uploading}
+          onClick={() => fileInputRef.current?.click()}
         >
-          Zurücksetzen
+          <span className="text-[15px] font-semibold text-[var(--ink)]">
+            {uploading ? "Foto wird geladen…" : "Foto hinzufügen"}
+          </span>
+          <span className="text-[12px] text-[var(--ink-soft)]">
+            Kamera oder Galerie — oder später automatisch aus dem Link
+          </span>
+        </button>
+      )}
+
+      <div className="mt-2 flex flex-wrap items-center gap-1.5">
+        <button
+          type="button"
+          className="glass-chip"
+          disabled={uploading}
+          onClick={() => fileInputRef.current?.click()}
+        >
+          {uploading ? "Lädt…" : previewSrc ? "Ersetzen" : "Hochladen"}
+        </button>
+        {hasManualImage ? (
+          <button
+            type="button"
+            className="glass-chip"
+            disabled={uploading}
+            onClick={() => {
+              onImageUrlChange("");
+              setUploadError(null);
+            }}
+          >
+            Entfernen
+          </button>
+        ) : null}
+        {previewSrc ? (
+          <button
+            type="button"
+            className="glass-chip"
+            onClick={() => onFocusChange({ ...defaultImageFocus })}
+          >
+            Ausschnitt zurück
+          </button>
+        ) : null}
+        <button
+          type="button"
+          className="glass-chip"
+          data-active={showUrl}
+          onClick={() => setShowUrl((value) => !value)}
+        >
+          URL
         </button>
       </div>
-      <input type="hidden" name="image_focus" value={serializeImageFocus(focus) ?? ""} />
+
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/jpeg,image/png,image/webp,image/heic,image/heif,image/*"
+        capture="environment"
+        className="hidden"
+        onChange={(event) => {
+          const file = event.target.files?.[0] ?? null;
+          void onPickImage(file);
+        }}
+      />
+
+      {uploadError ? (
+        <p className="mt-2 text-[12px] text-[var(--danger)]">{uploadError}</p>
+      ) : previewSrc ? (
+        <p className="mt-1.5 text-[11px] text-[var(--ink-faint)]">
+          Ziehen zum Verschieben · +/− zum Zoomen
+        </p>
+      ) : null}
+
+      {showUrl ? (
+        <div className="glass-disclosure mt-2 !block">
+          <label className="form-label py-2">
+            Bild-URL
+            <input
+              type="url"
+              inputMode="url"
+              autoComplete="off"
+              value={imageUrl}
+              onChange={(e) => onImageUrlChange(e.target.value)}
+              className="glass-field mt-1.5 mb-2 px-3 py-2.5"
+              placeholder="https://…"
+            />
+          </label>
+        </div>
+      ) : null}
     </div>
   );
 }
+
 
 function SpotFormFields({
   vacationId,
@@ -650,30 +787,6 @@ function SpotFormFields({
   const explicitNights = stayNights
     ? Number.parseInt(stayNights, 10) || null
     : null;
-  const [uploading, setUploading] = useState(false);
-  const [uploadError, setUploadError] = useState<string | null>(null);
-  const fileInputRef = useRef<HTMLInputElement | null>(null);
-
-  async function onPickImage(file: File | null) {
-    if (!file) return;
-    setUploadError(null);
-    setUploading(true);
-    try {
-      const result = await uploadSpotImage({ vacationId, file });
-      if ("error" in result) {
-        setUploadError(result.error);
-        return;
-      }
-      onImageUrlChange(result.url);
-      onImageFocusChange({ ...defaultImageFocus });
-    } catch {
-      setUploadError("Upload fehlgeschlagen.");
-    } finally {
-      setUploading(false);
-      if (fileInputRef.current) fileInputRef.current.value = "";
-    }
-  }
-
   // While editing: do not imply nights from dates when the nights field is empty.
   const staySummary = explicitNights
     ? formatStaySummary({
@@ -926,22 +1039,24 @@ function SpotFormFields({
         </div>
       )}
 
-      {previewSrc ? (
-        <ImageFocusEditor
-          src={previewSrc}
-          focus={imageFocus}
-          onChange={onImageFocusChange}
-          openHref={previewLink?.href}
-          openLabel={previewLink?.label}
-        />
-      ) : (
-        <input type="hidden" name="image_focus" value="" />
-      )}
-      {autoImage && isAppMapPreviewUrl(autoImage) && !imageUrl ? (
-        <p className="mt-2 text-[12px] text-[var(--ink-faint)]">
-          Automatische Karten-Vorschau — lade unten ein echtes Foto hoch.
-        </p>
-      ) : null}
+      <SpotPhotoPanel
+        vacationId={vacationId}
+        previewSrc={previewSrc}
+        isMapPreview={Boolean(
+          (imageUrl && isAppMapPreviewUrl(imageUrl)) ||
+            (autoImage && isAppMapPreviewUrl(autoImage) && !imageUrl),
+        )}
+        hasManualImage={Boolean(imageUrl)}
+        previousAutoImage={
+          spot?.image_url && !spot.image_manual && !imageUrl ? spot.image_url : null
+        }
+        imageUrl={imageUrl}
+        onImageUrlChange={onImageUrlChange}
+        focus={imageFocus}
+        onFocusChange={onImageFocusChange}
+        openHref={previewLink?.href}
+        openLabel={previewLink?.label}
+      />
 
       <label className="form-label mt-3">
         Beschreibung
@@ -998,69 +1113,6 @@ function SpotFormFields({
           ) : null}
         </div>
       </label>
-
-      <div className="mt-3">
-        <p className="form-label">Foto</p>
-        {spot?.image_url && !spot.image_manual && !imageUrl ? (
-          <input type="hidden" name="previous_image_url" value={spot.image_url} />
-        ) : null}
-        <input type="hidden" name="image_url" value={imageUrl} />
-        <div className="mt-1.5 flex flex-wrap items-center gap-2">
-          <button
-            type="button"
-            className="cta !px-3 !py-2 text-[13px]"
-            disabled={uploading}
-            onClick={() => fileInputRef.current?.click()}
-          >
-            {uploading ? "Lädt…" : imageUrl ? "Foto ersetzen" : "Foto hochladen"}
-          </button>
-          {imageUrl ? (
-            <button
-              type="button"
-              className="glass-chip"
-              disabled={uploading}
-              onClick={() => {
-                onImageUrlChange("");
-                setUploadError(null);
-              }}
-            >
-              Entfernen
-            </button>
-          ) : null}
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/jpeg,image/png,image/webp,image/heic,image/heif,image/*"
-            capture="environment"
-            className="hidden"
-            onChange={(event) => {
-              const file = event.target.files?.[0] ?? null;
-              void onPickImage(file);
-            }}
-          />
-        </div>
-        {uploadError ? (
-          <p className="mt-2 text-[12px] text-[var(--danger)]">{uploadError}</p>
-        ) : (
-          <p className="mt-2 text-[11px] text-[var(--ink-faint)]">
-            Eigenes Foto aus Kamera oder Galerie · sonst Ortsfoto/Karten-Vorschau automatisch.
-          </p>
-        )}
-        <details className="mt-2">
-          <summary className="cursor-pointer text-[12px] font-semibold text-[var(--fjord)]">
-            Stattdessen Bild-URL
-          </summary>
-          <input
-            type="url"
-            inputMode="url"
-            autoComplete="off"
-            value={imageUrl}
-            onChange={(e) => onImageUrlChange(e.target.value)}
-            className="glass-field mt-2 px-3 py-3"
-            placeholder="https://… · leer = automatisch"
-          />
-        </details>
-      </div>
 
       {showOvernight ? (
         <>

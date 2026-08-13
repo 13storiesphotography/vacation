@@ -375,10 +375,10 @@ export default function VacationDetailPage() {
               </p>
             </div>
             <div className="flex flex-wrap items-center gap-2">
-              <div className="flex items-center gap-1 rounded-full border border-[var(--separator)] bg-[rgba(255,255,255,0.35)] p-1">
+              <div className="glass-segment">
                 <button
                   type="button"
-                  className="glass-chip !py-1.5"
+                  className="glass-chip"
                   data-active={sammelnView === "galerie"}
                   onClick={() => changeSammelnView("galerie")}
                 >
@@ -386,7 +386,7 @@ export default function VacationDetailPage() {
                 </button>
                 <button
                   type="button"
-                  className="glass-chip !py-1.5"
+                  className="glass-chip"
                   data-active={sammelnView === "karte"}
                   onClick={() => changeSammelnView("karte")}
                 >
@@ -467,10 +467,10 @@ export default function VacationDetailPage() {
               <h1 className="display text-2xl">Mehr</h1>
               <p className="tab-subtitle">Team und Kosten</p>
             </div>
-            <div className="flex items-center gap-1 rounded-full border border-[var(--separator)] bg-[rgba(255,255,255,0.35)] p-1">
+            <div className="glass-segment">
               <button
                 type="button"
-                className="glass-chip !py-1.5"
+                className="glass-chip"
                 data-active={mehrSection === "team"}
                 onClick={() => changeMehrSection("team")}
               >
@@ -478,7 +478,7 @@ export default function VacationDetailPage() {
               </button>
               <button
                 type="button"
-                className="glass-chip !py-1.5"
+                className="glass-chip"
                 data-active={mehrSection === "kosten"}
                 onClick={() => changeMehrSection("kosten")}
               >
