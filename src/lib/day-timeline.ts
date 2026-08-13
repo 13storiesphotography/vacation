@@ -142,15 +142,8 @@ export function buildDayTimeline(input: {
   return entries;
 }
 
-/** Previous day's overnight spot id, if any. */
-export function previousOvernightSpotId(
-  days: DayPlanWithStops[],
-  dayId: string,
-): string | null {
-  const index = days.findIndex((day) => day.id === dayId);
-  if (index <= 0) return null;
-  for (let i = index - 1; i >= 0; i -= 1) {
-    if (days[i].overnight_spot_id) return days[i].overnight_spot_id;
-  }
-  return null;
-}
+export {
+  previousMorningOriginMeta,
+  previousMorningOriginSpotId,
+  previousOvernightSpotId,
+} from "@/lib/day-plans";
