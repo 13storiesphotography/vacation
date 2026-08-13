@@ -555,7 +555,6 @@ textarea {
   pointer-events: auto;
   border-radius: 30px;
   overflow: hidden;
-  isolation: isolate;
   background: var(--tabbar-glass-fill);
   backdrop-filter: var(--tabbar-glass-blur);
   -webkit-backdrop-filter: var(--tabbar-glass-blur);

@@ -29,10 +29,10 @@ type Member = Database["public"]["Tables"]["vacation_members"]["Row"];
 type Spot = Database["public"]["Tables"]["spots"]["Row"];
 type Profile = Database["public"]["Tables"]["profiles"]["Row"];
 type SammelnView = "galerie" | "karte";
-type MehrSection = "ueberblick" | "kosten";
+type MehrSection = "team" | "kosten";
 
 function readInitialTab(): VacationTabId {
-  if (typeof window === "undefined") return "sammeln";
+  if (typeof window === "undefined") return "ueberblick";
   return normalizeVacationTab(new URLSearchParams(window.location.search).get("tab"));
 }
 
@@ -44,12 +44,12 @@ function readInitialSammelnView(): SammelnView {
 }
 
 function readInitialMehrSection(): MehrSection {
-  if (typeof window === "undefined") return "ueberblick";
+  if (typeof window === "undefined") return "team";
   const params = new URLSearchParams(window.location.search);
   if (params.get("tab") === "kosten" || params.get("section") === "kosten") {
     return "kosten";
   }
-  return "ueberblick";
+  return "team";
 }
 
 export default function VacationDetailPage() {
@@ -106,7 +106,7 @@ export default function VacationDetailPage() {
       return nextVisited;
     });
     if (next !== "sammeln") setShowSpotForm(false);
-    if (next !== "mehr") setEditingVacation(false);
+    if (next !== "ueberblick") setEditingVacation(false);
     writeUrl(next);
   }
 
@@ -117,7 +117,6 @@ export default function VacationDetailPage() {
 
   function changeMehrSection(next: MehrSection) {
     setMehrSection(next);
-    if (next !== "ueberblick") setEditingVacation(false);
     writeUrl("mehr", sammelnView, next);
   }
 
@@ -326,7 +325,7 @@ export default function VacationDetailPage() {
           <Link href="/app" className="text-[13px] font-semibold text-[var(--fjord)]">
             ← Urlaube
           </Link>
-          {tab !== "mehr" || mehrSection !== "ueberblick" || editingVacation ? (
+          {tab !== "ueberblick" || editingVacation ? (
             <p className="truncate text-[13px] font-semibold text-[var(--ink-soft)]">
               {vacation.title}
             </p>
@@ -340,6 +339,28 @@ export default function VacationDetailPage() {
       {error ? (
         <p className="mb-3 text-[13px] text-[var(--danger)]">{error}</p>
       ) : null}
+
+      {visitedTabs.has("ueberblick") && (
+        <VacationTabPanel id="ueberblick" active={tab === "ueberblick"}>
+          {!editingVacation ? (
+            <VacationUrlaubDashboard
+              vacation={vacation}
+              spots={spots}
+              canEdit={canEditVacation}
+              onEdit={() => setEditingVacation(true)}
+              onOpenTab={changeTab}
+            />
+          ) : (
+            <EditVacationForm
+              vacation={vacation}
+              onDone={async () => {
+                setEditingVacation(false);
+                await load();
+              }}
+            />
+          )}
+        </VacationTabPanel>
+      )}
 
       {visitedTabs.has("sammeln") && (
         <VacationTabPanel id="sammeln" active={tab === "sammeln"}>
@@ -439,34 +460,21 @@ export default function VacationDetailPage() {
         </VacationTabPanel>
       )}
 
-      {visitedTabs.has("team") && (
-        <VacationTabPanel id="team" active={tab === "team"}>
-          <TeamPanel
-            vacationId={vacationId}
-            members={members}
-            profiles={profiles}
-            currentUserId={currentUserId}
-            canManageTeam={canManageTeam}
-            onChanged={load}
-          />
-        </VacationTabPanel>
-      )}
-
       {visitedTabs.has("mehr") && vacation && (
         <VacationTabPanel id="mehr" active={tab === "mehr"}>
           <div className="flex flex-wrap items-center justify-between gap-3">
             <div>
               <h1 className="display text-2xl">Mehr</h1>
-              <p className="tab-subtitle">Überblick, Kosten und Urlaubsdaten</p>
+              <p className="tab-subtitle">Team und Kosten</p>
             </div>
             <div className="flex items-center gap-1 rounded-full border border-[var(--separator)] bg-[rgba(255,255,255,0.35)] p-1">
               <button
                 type="button"
                 className="glass-chip !py-1.5"
-                data-active={mehrSection === "ueberblick"}
-                onClick={() => changeMehrSection("ueberblick")}
+                data-active={mehrSection === "team"}
+                onClick={() => changeMehrSection("team")}
               >
-                Überblick
+                Team
               </button>
               <button
                 type="button"
@@ -479,24 +487,15 @@ export default function VacationDetailPage() {
             </div>
           </div>
 
-          <div hidden={mehrSection !== "ueberblick"} className="mt-3">
-            {!editingVacation ? (
-              <VacationUrlaubDashboard
-                vacation={vacation}
-                spots={spots}
-                canEdit={canEditVacation}
-                onEdit={() => setEditingVacation(true)}
-                onOpenTab={changeTab}
-              />
-            ) : (
-              <EditVacationForm
-                vacation={vacation}
-                onDone={async () => {
-                  setEditingVacation(false);
-                  await load();
-                }}
-              />
-            )}
+          <div hidden={mehrSection !== "team"} className="mt-3">
+            <TeamPanel
+              vacationId={vacationId}
+              members={members}
+              profiles={profiles}
+              currentUserId={currentUserId}
+              canManageTeam={canManageTeam}
+              onChanged={load}
+            />
           </div>
 
           <div hidden={mehrSection !== "kosten"} className="mt-3">
